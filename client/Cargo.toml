@@ -15,7 +15,7 @@ reqwest = { version = "0.12", default-features = false, features = [
     "http2",
 ] }
 thiserror.workspace = true
-ic-agent = { version = "0.38.1", default-features = false }
+ic-agent = { version = "0.39.2", default-features = false }
 
 [features]
 native-tls = ["reqwest/native-tls"]
