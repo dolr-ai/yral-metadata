@@ -5,6 +5,6 @@ resolver = "2"
 [workspace.dependencies]
 serde = { version = "1.0.197", features = ["derive"] }
 thiserror = "1.0.58"
-candid = "0.10.6"
+candid = "0.10.11"
 log = "0.4.21"
-yral-identity = { git = "https://github.com/yral-dapp/yral-identity.git", default-features = false, rev = "156bc0e7a4bc3d9a3b4faab4b9b3048e88a0c701" }
+yral-identity = { git = "https://github.com/yral-dapp/yral-identity.git", default-features = false, rev = "7e7a97826a34bdf44415232167b9f896da6ba4e2" }
