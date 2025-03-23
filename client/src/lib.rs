@@ -15,6 +15,9 @@ use types::{
 };
 use yral_identity::ic_agent::sign_message;
 
+// Re-export the DeviceRegistrationToken
+pub use types::{DeviceRegistrationToken, NotificationKey};
+
 #[derive(Clone, Debug)]
 pub struct MetadataClient<const AUTH: bool> {
     base_url: Url,

@@ -7,9 +7,24 @@ use yral_identity::{msg_builder::Message, Signature};
 pub type ApiResult<T> = Result<T, ApiError>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DeviceRegistrationToken {
+    pub token: String,
+    pub device_fingerprint: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct NotificationKey {
+    pub key: String,
+    pub registration_tokens: Vec<DeviceRegistrationToken>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UserMetadata {
     pub user_canister_id: Principal,
     pub user_name: String,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notification_key: Option<NotificationKey>,
 }
 
 impl From<UserMetadata> for Message {
