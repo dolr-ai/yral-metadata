@@ -12,6 +12,16 @@ pub struct DeviceRegistrationToken {
     pub device_fingerprint: String,
 }
 
+impl From<DeviceRegistrationToken> for Message {
+    fn from(value: DeviceRegistrationToken) -> Self {
+        Message::default()
+            .method_name("register_device".into())
+            .args((value.token, value.device_fingerprint))
+            // unwrap is safe here because (String, String) serialization can't fail
+            .unwrap()
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NotificationKey {
     pub key: String,
@@ -53,3 +63,19 @@ pub struct BulkUsers {
 }
 
 pub type DeleteMetadataBulkRes = ();
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct RegisterDeviceReq {
+    pub registration_token: DeviceRegistrationToken,
+    pub signature: Signature,
+}
+
+pub type RegisterDeviceRes = ();
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub struct UnregisterDeviceReq {
+    pub registration_token: DeviceRegistrationToken,
+    pub signature: Signature,
+}
+
+pub type UnregisterDeviceRes = ();
