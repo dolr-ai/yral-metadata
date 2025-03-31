@@ -5,7 +5,6 @@ mod consts;
 mod error;
 mod notifications;
 mod state;
-use auth::init_jwt;
 use config::AppConfig;
 use ntex::web;
 
@@ -13,23 +12,14 @@ use api::*;
 use error::*;
 use notifications::*;
 use ntex_cors::Cors;
-use state::{AppState, RedisPool};
-
-pub async fn init_redis(conf: &AppConfig) -> RedisPool {
-    let manager = bb8_redis::RedisConnectionManager::new(conf.redis_url.clone())
-        .expect("failed to open connection to redis");
-    RedisPool::builder().build(manager).await.unwrap()
-}
+use state::AppState;
 
 #[ntex::main]
 async fn main() -> Result<()> {
     let conf = AppConfig::load()?;
     env_logger::init();
 
-    let state = AppState {
-        redis: init_redis(&conf).await,
-        jwt_details: init_jwt(&conf),
-    };
+    let state = AppState::new(&conf).await;
 
     web::HttpServer::new(move || {
         web::App::new()

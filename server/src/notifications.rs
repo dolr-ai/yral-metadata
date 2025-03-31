@@ -63,7 +63,9 @@ async fn register_device(
     };
 
     // TODO: get the token from the app state
-    let firebase_token = "temp_token";
+    let firebase_token = state
+        .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
+        .await;
     let response = client
         .post(url)
         .header("Authorization", format!("Bearer {}", firebase_token))
@@ -87,7 +89,7 @@ async fn register_device(
         Err(err) => {
             return Ok(Json(Err(ApiError::FirebaseApiError(format!(
                 "error parsing json: {}",
-                err.to_string()
+                err
             )))));
         }
     };
@@ -182,7 +184,9 @@ async fn unregister_device(
     );
 
     // TODO: get the token from the app state
-    let firebase_token = "temp_token";
+    let firebase_token = state
+        .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
+        .await;
     let response = client
         .post(url)
         .header("Authorization", format!("Bearer {}", firebase_token))
