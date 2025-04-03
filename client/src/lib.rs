@@ -12,7 +12,8 @@ use reqwest::{
 };
 use types::{
     ApiResult, BulkUsers, GetUserMetadataRes, RegisterDeviceReq, RegisterDeviceRes,
-    SetUserMetadataReq, SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes, UserMetadata,
+    SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq,
+    UnregisterDeviceRes,
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -48,7 +49,7 @@ impl<const A: bool> MetadataClient<A> {
     pub async fn set_user_metadata(
         &self,
         identity: &impl Identity,
-        metadata: UserMetadata,
+        metadata: SetUserMetadataReqMetadata,
     ) -> Result<SetUserMetadataRes> {
         let signature = sign_message(identity, metadata.clone().into())?;
         // unwrap safety: we know the sender is present because we just signed the message
