@@ -1,18 +1,15 @@
-use std::collections::HashMap;
-
 use candid::Principal;
 use ntex::web::{
     self,
     types::{Json, Path, State},
 };
 use redis::AsyncCommands;
-use reqwest::Client;
 use types::{
     error::ApiError, ApiResult, DeviceRegistrationToken, NotificationKey, RegisterDeviceReq,
     RegisterDeviceRes, UnregisterDeviceReq, UnregisterDeviceRes, UserMetadata,
 };
 
-use crate::{api::METADATA_FIELD, state::AppState, Error, Result};
+use crate::{api::METADATA_FIELD, firebase, state::AppState, Error, Result};
 
 #[web::post("/notifications/{user_principal}")]
 async fn register_device(
@@ -36,10 +33,8 @@ async fn register_device(
         serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
 
     // Register the device with Firebase
-    let client = Client::new();
-    let url = "https://fcm.googleapis.com/fcm/notification";
-
-    let notification_key_name = format!("notification_key_{}", user);
+    let notification_key_name =
+        firebase::notifications::utils::get_notification_key_name_from_principal(&user);
 
     let data = if let Some(notification_key) = user_metadata.notification_key.as_ref() {
         let old_registration_token = notification_key
@@ -47,92 +42,37 @@ async fn register_device(
             .iter()
             .find(|token| token.device_fingerprint == registration_token.device_fingerprint)
             .map(|token| token.token.clone());
+
         // if the device is already registered, remove it
-        if let Some(old_registration_token) = old_registration_token {
-            let data = format!(
-                r#"{{
-                    "operation": "remove",
-                    "notification_key_name": "{}",
-                    "notification_key": "{}",
-                    "registration_ids": ["{}"]
-                }}"#,
-                notification_key_name, notification_key.key, old_registration_token
+        if old_registration_token.is_some() {
+            let data = firebase::notifications::utils::get_remove_request_body(
+                notification_key_name.clone(),
+                notification_key.key.clone(),
+                old_registration_token.unwrap(),
             );
 
-            let firebase_token = state
-                .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
-                .await;
-            let response = client
-                .post(url)
-                .header("Authorization", format!("Bearer {}", firebase_token))
-                .header("Content-Type", "application/json")
-                .header("project_id", "hot-or-not-feed-intelligence")
-                .header("access_token_auth", "true")
-                .body(data)
-                .send()
-                .await;
-
-            if response.is_err() || !response.as_ref().unwrap().status().is_success() {
-                log::error!("Error deregistering device: {:?}", response);
-                return Ok(Json(Err(ApiError::Unknown(
-                    "Error deregistering device".to_string(),
-                ))));
-            }
+            state.firebase.update_notification_devices(data).await?;
         }
 
         // Now add the new token
-        format!(
-            r#"{{
-                "operation": "add",
-                "notification_key_name": "{}",
-                "notification_key": "{}",
-                "registration_ids": ["{}"]
-            }}"#,
-            notification_key_name, notification_key.key, registration_token.token
+        firebase::notifications::utils::get_add_request_body(
+            notification_key_name,
+            notification_key.key.clone(),
+            registration_token.token.clone(),
         )
     } else {
-        format!(
-            r#"{{
-                "operation": "create",
-                "notification_key_name": "{}",
-                "registration_ids": ["{}"]
-            }}"#,
-            notification_key_name, registration_token.token
+        firebase::notifications::utils::get_create_request_body(
+            notification_key_name,
+            registration_token.token.clone(),
         )
     };
 
-    let firebase_token = state
-        .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
-        .await;
-    let response = client
-        .post(url)
-        .header("Authorization", format!("Bearer {}", firebase_token))
-        .header("Content-Type", "application/json")
-        .header("project_id", "hot-or-not-feed-intelligence")
-        .header("access_token_auth", "true")
-        .body(data)
-        .send()
-        .await;
-
-    if response.is_err() || !response.as_ref().unwrap().status().is_success() {
-        log::error!("Error registering device: {:?}", response);
-        return Ok(Json(Err(ApiError::FirebaseApiError(
-            response.unwrap().text().await.unwrap(),
-        ))));
-    }
-
-    let response = response.unwrap();
-    let response = match response.json::<HashMap<String, String>>().await {
-        Ok(response) => response,
-        Err(err) => {
-            return Ok(Json(Err(ApiError::FirebaseApiError(format!(
-                "error parsing json: {}",
-                err
-            )))));
-        }
-    };
-
-    let notification_key = response["notification_key"].clone();
+    let notification_key = state
+        .firebase
+        .update_notification_devices(data)
+        .await?
+        // It is safe to unwrap because we know that the operation is not a remove operation
+        .unwrap();
 
     if user_metadata.notification_key.as_ref().is_none() {
         user_metadata.notification_key = Some(NotificationKey {
@@ -193,10 +133,8 @@ async fn unregister_device(
         serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
 
     // Unregister the device with Firebase
-    let client = Client::new();
-    let url = "https://fcm.googleapis.com/fcm/notification";
-
-    let notification_key_name = format!("notification_key_{}", user);
+    let notification_key_name =
+        firebase::notifications::utils::get_notification_key_name_from_principal(&user);
     let notification_key = match user_metadata.notification_key.as_ref() {
         Some(notification_key) => notification_key,
         None => {
@@ -220,35 +158,13 @@ async fn unregister_device(
         }
     };
 
-    let data = format!(
-        r#"{{
-            "operation": "remove",
-            "notification_key_name": "{}",
-            "notification_key": "{}",
-            "registration_ids": ["{}"]
-        }}"#,
-        notification_key_name, notification_key.key, token_to_delete
+    let data = firebase::notifications::utils::get_remove_request_body(
+        notification_key_name,
+        notification_key.key.clone(),
+        token_to_delete,
     );
 
-    let firebase_token = state
-        .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
-        .await;
-    let response = client
-        .post(url)
-        .header("Authorization", format!("Bearer {}", firebase_token))
-        .header("Content-Type", "application/json")
-        .header("project_id", "hot-or-not-feed-intelligence")
-        .header("access_token_auth", "true")
-        .body(data)
-        .send()
-        .await;
-
-    if response.is_err() || !response.as_ref().unwrap().status().is_success() {
-        log::error!("Error deregistering device: {:?}", response);
-        return Ok(Json(Err(ApiError::Unknown(
-            "Error deregistering device".to_string(),
-        ))));
-    }
+    state.firebase.update_notification_devices(data).await?;
 
     user_metadata
         .notification_key
