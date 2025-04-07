@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env;
 
 use reqwest::Client;
 
@@ -72,7 +73,10 @@ impl Firebase {
             .post(url)
             .header("Authorization", format!("Bearer {}", firebase_token))
             .header("Content-Type", "application/json")
-            .header("project_id", "hot-or-not-feed-intelligence")
+            .header(
+                "project_id",
+                env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").unwrap(),
+            )
             .header("access_token_auth", "true")
             .body(data)
             .send()
