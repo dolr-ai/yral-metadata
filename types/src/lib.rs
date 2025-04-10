@@ -37,14 +37,8 @@ pub struct UserMetadata {
     pub notification_key: Option<NotificationKey>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SetUserMetadataReqMetadata {
-    pub user_canister_id: Principal,
-    pub user_name: String,
-}
-
-impl From<SetUserMetadataReqMetadata> for Message {
-    fn from(value: SetUserMetadataReqMetadata) -> Self {
+impl From<UserMetadata> for Message {
+    fn from(value: UserMetadata) -> Self {
         Message::default()
             .method_name("set_user_metadata".into())
             .args((value.user_canister_id, value.user_name))
@@ -55,7 +49,7 @@ impl From<SetUserMetadataReqMetadata> for Message {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct SetUserMetadataReq {
-    pub metadata: SetUserMetadataReqMetadata,
+    pub metadata: UserMetadata,
     pub signature: Signature,
 }
 
