@@ -1,8 +1,11 @@
 use std::env;
 
+use hyper_rustls::{self, HttpsConnector};
 use hyper_util::client::legacy::connect::HttpConnector;
-use yup_oauth2::hyper_rustls::HttpsConnector;
-use yup_oauth2::{authenticator::Authenticator, ServiceAccountAuthenticator};
+use hyper_util::client::legacy::Client;
+use yup_oauth2::{
+    authenticator::Authenticator, CustomHyperClientBuilder, ServiceAccountAuthenticator,
+};
 
 pub mod notifications;
 
@@ -18,10 +21,22 @@ pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
     // Load your service account key
     let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
 
-    ServiceAccountAuthenticator::builder(sa_key)
+    let connector = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_webpki_roots()
+        .https_or_http()
+        .enable_all_versions()
+        .build();
+    let client = Client::builder(hyper_util::rt::TokioExecutor::new())
+        .pool_max_idle_per_host(0)
+        .build::<_, String>(connector);
+
+    let client_builder = CustomHyperClientBuilder::from(client);
+    let authenticator = ServiceAccountAuthenticator::with_client(sa_key, client_builder)
         .build()
         .await
-        .unwrap()
+        .unwrap();
+
+    authenticator
 }
 
 impl Firebase {
