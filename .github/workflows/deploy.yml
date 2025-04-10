@@ -25,17 +25,12 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Set secret tokens
         run: |
-          flyctl secrets set REDIS_URL=$REDIS_URL --app "$APP_NAME" --stage
-          flyctl secrets set JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY="$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID="$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID" --app "$APP_NAME" --stage
+          flyctl secrets set REDIS_URL=$REDIS_URL --app "yral-metadata" --stage
+          flyctl secrets set JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" --app "yral-metadata" --stage
         env:
-          APP_NAME: yral-metadata
           REDIS_URL: ${{ secrets.AUTH_FLY_IO_UPSTASH_REDIS_DATABASE_CONNECTION_STRING }}
           FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
           JWT_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_PUBLIC_KEY }}
-          GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID }}
-          CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
       - name: Deploy a docker container to Fly.io
         run: flyctl deploy --remote-only
         env:
