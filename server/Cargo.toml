@@ -32,3 +32,9 @@ yral-identity = { workspace = true, default-features = false, features = [
 jsonwebtoken = { version = "9.3.0", features = ["use_pem"] }
 futures = "0.3.30"
 once_cell = "1.19.0"
+reqwest = { workspace = true, default-features = false, features = [
+    "json",
+    "http2",
+] }
+yup-oauth2 = "12.1.0"
+hyper-util = { version = "0.1.10", features = ["client", "client-legacy"] }

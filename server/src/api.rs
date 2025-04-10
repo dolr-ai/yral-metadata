@@ -12,7 +12,7 @@ use types::{
 
 use crate::{auth::verify_token, state::AppState, Error, Result};
 
-const METADATA_FIELD: &str = "metadata";
+pub const METADATA_FIELD: &str = "metadata";
 
 #[web::post("/metadata/{user_principal}")]
 async fn set_user_metadata(
