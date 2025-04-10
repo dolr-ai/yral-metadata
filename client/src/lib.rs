@@ -11,8 +11,7 @@ use reqwest::{
     Url,
 };
 use types::{
-    ApiResult, BulkUsers, GetUserMetadataRes, RegisterDeviceReq, RegisterDeviceRes,
-    SetUserMetadataReq, SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes, UserMetadata,
+    ApiResult, BulkUsers, GetUserMetadataRes, SetUserMetadataReq, SetUserMetadataRes, UserMetadata,
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -85,64 +84,6 @@ impl<const A: bool> MetadataClient<A> {
         let res = self.client.get(api_url).send().await?;
 
         let res: ApiResult<GetUserMetadataRes> = res.json().await?;
-        Ok(res?)
-    }
-
-    pub async fn register_device(
-        &self,
-        identity: &impl Identity,
-        registration_token: DeviceRegistrationToken,
-    ) -> Result<RegisterDeviceRes> {
-        let signature = sign_message(identity, registration_token.clone().into())?;
-        // unwrap safety: we know the sender is present because we just signed the message
-        let sender = identity.sender().unwrap();
-        let api_url = self
-            .base_url
-            .join("notifications/")
-            .unwrap()
-            .join(&sender.to_text())
-            .unwrap();
-
-        let res = self
-            .client
-            .post(api_url)
-            .json(&RegisterDeviceReq {
-                registration_token,
-                signature,
-            })
-            .send()
-            .await?;
-
-        let res: ApiResult<RegisterDeviceRes> = res.json().await?;
-        Ok(res?)
-    }
-
-    pub async fn unregister_device(
-        &self,
-        identity: &impl Identity,
-        registration_token: DeviceRegistrationToken,
-    ) -> Result<UnregisterDeviceRes> {
-        let signature = sign_message(identity, registration_token.clone().into())?;
-        // unwrap safety: we know the sender is present because we just signed the message
-        let sender = identity.sender().unwrap();
-        let api_url = self
-            .base_url
-            .join("notifications/")
-            .unwrap()
-            .join(&sender.to_text())
-            .unwrap();
-
-        let res = self
-            .client
-            .delete(api_url)
-            .json(&UnregisterDeviceReq {
-                registration_token,
-                signature,
-            })
-            .send()
-            .await?;
-
-        let res: ApiResult<UnregisterDeviceRes> = res.json().await?;
         Ok(res?)
     }
 }

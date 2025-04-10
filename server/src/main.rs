@@ -3,7 +3,6 @@ mod auth;
 mod config;
 mod consts;
 mod error;
-mod notifications;
 mod state;
 use auth::init_jwt;
 use config::AppConfig;
@@ -11,7 +10,6 @@ use ntex::web;
 
 use api::*;
 use error::*;
-use notifications::*;
 use ntex_cors::Cors;
 use state::{AppState, RedisPool};
 
@@ -38,8 +36,6 @@ async fn main() -> Result<()> {
             .service(set_user_metadata)
             .service(get_user_metadata)
             .service(delete_metadata_bulk)
-            .service(register_device)
-            .service(unregister_device)
     })
     .bind(conf.bind_address)?
     .run()
