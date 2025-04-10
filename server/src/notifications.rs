@@ -42,45 +42,6 @@ async fn register_device(
     let notification_key_name = format!("notification_key_{}", user);
 
     let data = if let Some(notification_key) = user_metadata.notification_key.as_ref() {
-        let old_registration_token = notification_key
-            .registration_tokens
-            .iter()
-            .find(|token| token.device_fingerprint == registration_token.device_fingerprint)
-            .map(|token| token.token.clone());
-        // if the device is already registered, remove it
-        if let Some(old_registration_token) = old_registration_token {
-            let data = format!(
-                r#"{{
-                    "operation": "remove",
-                    "notification_key_name": "{}",
-                    "notification_key": "{}",
-                    "registration_ids": ["{}"]
-                }}"#,
-                notification_key_name, notification_key.key, old_registration_token
-            );
-
-            let firebase_token = state
-                .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
-                .await;
-            let response = client
-                .post(url)
-                .header("Authorization", format!("Bearer {}", firebase_token))
-                .header("Content-Type", "application/json")
-                .header("project_id", "hot-or-not-feed-intelligence")
-                .header("access_token_auth", "true")
-                .body(data)
-                .send()
-                .await;
-
-            if response.is_err() || !response.as_ref().unwrap().status().is_success() {
-                log::error!("Error deregistering device: {:?}", response);
-                return Ok(Json(Err(ApiError::Unknown(
-                    "Error deregistering device".to_string(),
-                ))));
-            }
-        }
-
-        // Now add the new token
         format!(
             r#"{{
                 "operation": "add",
@@ -93,14 +54,15 @@ async fn register_device(
     } else {
         format!(
             r#"{{
-                "operation": "create",
-                "notification_key_name": "{}",
-                "registration_ids": ["{}"]
-            }}"#,
+            "operation": "create",
+            "notification_key_name": "{}",
+            "registration_ids": ["{}"]
+        }}"#,
             notification_key_name, registration_token.token
         )
     };
 
+    // TODO: get the token from the app state
     let firebase_token = state
         .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
         .await;
@@ -143,15 +105,6 @@ async fn register_device(
             }],
         });
     } else {
-        // Remove the old token from the user metadata
-        user_metadata
-            .notification_key
-            .as_mut()
-            .unwrap()
-            .registration_tokens
-            .retain(|token| token.device_fingerprint != registration_token.device_fingerprint);
-
-        // Add the new token to the user metadata
         user_metadata
             .notification_key
             .as_mut()
@@ -230,6 +183,7 @@ async fn unregister_device(
         notification_key_name, notification_key.key, token_to_delete
     );
 
+    // TODO: get the token from the app state
     let firebase_token = state
         .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
         .await;
