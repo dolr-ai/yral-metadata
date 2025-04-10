@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
   pull_request:
     branches:
-      - master 
+      - master
 
 jobs:
   build_check:
@@ -33,8 +33,8 @@ jobs:
 
       - name: Build the project to `musl` output
         working-directory: ./server
-        run: 'cargo build --release --target x86_64-unknown-linux-musl'
- 
+        run: "cargo build --release --target x86_64-unknown-linux-musl"
+
       - run: touch config.toml
 
       - name: Archive production artifacts

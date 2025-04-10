@@ -26,10 +26,6 @@ pub enum Error {
     AuthTokenMissing,
     #[error("auth token invalid")]
     AuthTokenInvalid,
-    #[error("firebase api error {0}")]
-    FirebaseApiError(String),
-    #[error("unknown error {0}")]
-    Unknown(String),
 }
 
 impl From<&Error> for ApiResult<()> {
@@ -55,8 +51,6 @@ impl From<&Error> for ApiResult<()> {
             Error::Jwt(_) => ApiError::Jwt,
             Error::AuthTokenMissing => ApiError::AuthTokenMissing,
             Error::AuthTokenInvalid => ApiError::AuthToken,
-            Error::FirebaseApiError(e) => ApiError::FirebaseApiError(e.clone()),
-            Error::Unknown(e) => ApiError::Unknown(e.clone()),
         };
         ApiResult::Err(err)
     }
@@ -72,13 +66,9 @@ impl web::error::WebResponseError for Error {
 
     fn status_code(&self) -> StatusCode {
         match self {
-            Error::IO(_)
-            | Error::Config(_)
-            | Error::Redis(_)
-            | Error::Deser(_)
-            | Error::Bb8(_)
-            | Error::FirebaseApiError(_)
-            | Error::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::IO(_) | Error::Config(_) | Error::Redis(_) | Error::Deser(_) | Error::Bb8(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
             Error::Identity(_)
             | Error::Jwt(_)
             | Error::AuthTokenInvalid

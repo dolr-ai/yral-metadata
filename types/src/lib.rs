@@ -7,44 +7,13 @@ use yral_identity::{msg_builder::Message, Signature};
 pub type ApiResult<T> = Result<T, ApiError>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct DeviceRegistrationToken {
-    pub token: String,
-    pub device_fingerprint: String,
-}
-
-impl From<DeviceRegistrationToken> for Message {
-    fn from(value: DeviceRegistrationToken) -> Self {
-        Message::default()
-            .method_name("register_device".into())
-            .args((value.token, value.device_fingerprint))
-            // unwrap is safe here because (String, String) serialization can't fail
-            .unwrap()
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct NotificationKey {
-    pub key: String,
-    pub registration_tokens: Vec<DeviceRegistrationToken>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UserMetadata {
     pub user_canister_id: Principal,
     pub user_name: String,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub notification_key: Option<NotificationKey>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SetUserMetadataReqMetadata {
-    pub user_canister_id: Principal,
-    pub user_name: String,
-}
-
-impl From<SetUserMetadataReqMetadata> for Message {
-    fn from(value: SetUserMetadataReqMetadata) -> Self {
+impl From<UserMetadata> for Message {
+    fn from(value: UserMetadata) -> Self {
         Message::default()
             .method_name("set_user_metadata".into())
             .args((value.user_canister_id, value.user_name))
@@ -55,7 +24,7 @@ impl From<SetUserMetadataReqMetadata> for Message {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct SetUserMetadataReq {
-    pub metadata: SetUserMetadataReqMetadata,
+    pub metadata: UserMetadata,
     pub signature: Signature,
 }
 
@@ -69,19 +38,3 @@ pub struct BulkUsers {
 }
 
 pub type DeleteMetadataBulkRes = ();
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-pub struct RegisterDeviceReq {
-    pub registration_token: DeviceRegistrationToken,
-    pub signature: Signature,
-}
-
-pub type RegisterDeviceRes = ();
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-pub struct UnregisterDeviceReq {
-    pub registration_token: DeviceRegistrationToken,
-    pub signature: Signature,
-}
-
-pub type UnregisterDeviceRes = ();
