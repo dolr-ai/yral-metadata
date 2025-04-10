@@ -3,7 +3,6 @@ mod auth;
 mod config;
 mod consts;
 mod error;
-mod firebase;
 mod notifications;
 mod state;
 use config::AppConfig;
