@@ -43,9 +43,9 @@ jobs:
       - name: Set secret tokens
         if: ${{ github.event.pull_request.merged == false}}
         run: |
-          APP_NAME="pr-${{github.event.number}}-yral-metadata-server"
-          flyctl secrets set REDIS_URL=$REDIS_URL --app "yral-metadata" --stage
-          flyctl secrets set JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" --app "yral-metadata" --stage
+          APP_NAME="pr-${{github.event.number}}-yral-dapp-yral-metadata"
+          flyctl secrets set REDIS_URL=$REDIS_URL --app "$APP_NAME" --stage
+          flyctl secrets set JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" --app "$APP_NAME" --stage
         env:
           REDIS_URL: ${{ secrets.AUTH_FLY_IO_UPSTASH_REDIS_DATABASE_CONNECTION_STRING }}
           FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
