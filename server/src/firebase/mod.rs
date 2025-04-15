@@ -21,6 +21,8 @@ pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
     // Load your service account key
     let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
 
+    // Make sure the crypto provider is installed (see https://github.com/rustls/rustls/issues/1938)
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let connector = hyper_rustls::HttpsConnectorBuilder::new()
         .with_webpki_roots()
         .https_or_http()
