@@ -3,6 +3,9 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, closed]
 
+permissions:
+  deployments: write
+
 env:
   FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
   FLY_ORG: gobazzinga-inc-584
