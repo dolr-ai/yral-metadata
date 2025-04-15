@@ -47,9 +47,25 @@ impl From<UserMetadata> for Message {
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SetUserMetadataReqMetadata {
+    pub user_canister_id: Principal,
+    pub user_name: String,
+}
+
+impl From<SetUserMetadataReqMetadata> for Message {
+    fn from(value: SetUserMetadataReqMetadata) -> Self {
+        Message::default()
+            .method_name("set_user_metadata".into())
+            .args((value.user_canister_id, value.user_name))
+            // unwrap is safe here because (Principal, String) serialization can't fail
+            .unwrap()
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub struct SetUserMetadataReq {
-    pub metadata: UserMetadata,
+    pub metadata: SetUserMetadataReqMetadata,
     pub signature: Signature,
 }
 

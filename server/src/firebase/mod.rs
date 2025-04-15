@@ -15,7 +15,8 @@ pub struct Firebase {
 }
 
 pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
-    let sa_key_file = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is required");
+    let sa_key_file = env::var("CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY")
+        .expect("CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY is required");
 
     // Load your service account key
     let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
