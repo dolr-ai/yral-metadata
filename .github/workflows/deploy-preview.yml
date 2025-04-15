@@ -46,7 +46,7 @@ jobs:
       - name: Set secret tokens
         if: ${{ github.event.pull_request.merged == false}}
         run: |
-          APP_NAME="pr-${{github.event.number}}-yral-dapp-yral-metadata"
+          APP_NAME="pr-${{github.event.number}}-dolr-ai-yral-metadata"
           flyctl secrets set REDIS_URL=$REDIS_URL --app "$APP_NAME" --stage
           flyctl secrets set JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" --app "$APP_NAME" --stage
           flyctl secrets set CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY="$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY" --app "$APP_NAME" --stage
