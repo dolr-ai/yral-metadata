@@ -75,35 +75,37 @@ impl Firebase {
             .header("Content-Type", "application/json")
             .header(
                 "project_id",
-                env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").unwrap(),
+                env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID")
+                    .expect("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID is not set"),
             )
             .header("access_token_auth", "true")
             .body(data)
             .send()
             .await;
 
-        if response.is_err() || !response.as_ref().unwrap().status().is_success() {
-            log::error!("Error updating notification devices: {:?}", response);
-            return Err(Error::FirebaseApiError(
-                response.unwrap().text().await.unwrap(),
-            ));
-        }
+        match response {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    log::error!("Error updating notification devices: {:?}", response);
+                    return Err(Error::FirebaseApiError(response.text().await.unwrap()));
+                }
 
-        if is_remove_operation {
-            return Ok(None);
-        }
+                if is_remove_operation {
+                    return Ok(None);
+                }
 
-        let response = response.unwrap();
-        let response = match response.json::<HashMap<String, String>>().await {
-            Ok(response) => response,
-            Err(err) => {
-                return Err(Error::FirebaseApiError(format!(
-                    "error parsing json: {}",
-                    err
-                )));
+                match response.json::<HashMap<String, String>>().await {
+                    Ok(response) => Ok(Some(response["notification_key"].clone())),
+                    Err(err) => Err(Error::FirebaseApiError(format!(
+                        "error parsing json: {}",
+                        err
+                    ))),
+                }
             }
-        };
-
-        Ok(Some(response["notification_key"].clone()))
+            Err(err) => {
+                log::error!("Error updating notification devices: {:?}", err);
+                Err(Error::FirebaseApiError(err.to_string()))
+            }
+        }
     }
 }

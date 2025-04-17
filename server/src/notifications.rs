@@ -36,71 +36,74 @@ async fn register_device(
     let notification_key_name =
         firebase::notifications::utils::get_notification_key_name_from_principal(&user);
 
-    let data = if let Some(notification_key) = user_metadata.notification_key.as_ref() {
-        let old_registration_token = notification_key
-            .registration_tokens
-            .iter()
-            .find(|token| token.device_fingerprint == registration_token.device_fingerprint)
-            .map(|token| token.token.clone());
+    let data = match user_metadata.notification_key.as_ref() {
+        Some(notification_key) => {
+            let old_registration_token = notification_key
+                .registration_tokens
+                .iter()
+                .find(|token| token.device_fingerprint == registration_token.device_fingerprint)
+                .map(|token| token.token.clone());
 
-        // if the device is already registered, remove it
-        if old_registration_token.is_some() {
-            let data = firebase::notifications::utils::get_remove_request_body(
-                notification_key_name.clone(),
+            // if the device is already registered, remove it
+            if old_registration_token.is_some() {
+                let data = firebase::notifications::utils::get_remove_request_body(
+                    notification_key_name.clone(),
+                    notification_key.key.clone(),
+                    old_registration_token.unwrap(),
+                );
+
+                state.firebase.update_notification_devices(data).await?;
+            }
+
+            // Now add the new token
+            firebase::notifications::utils::get_add_request_body(
+                notification_key_name,
                 notification_key.key.clone(),
-                old_registration_token.unwrap(),
-            );
-
-            state.firebase.update_notification_devices(data).await?;
+                registration_token.token.clone(),
+            )
         }
-
-        // Now add the new token
-        firebase::notifications::utils::get_add_request_body(
-            notification_key_name,
-            notification_key.key.clone(),
-            registration_token.token.clone(),
-        )
-    } else {
-        firebase::notifications::utils::get_create_request_body(
+        None => firebase::notifications::utils::get_create_request_body(
             notification_key_name,
             registration_token.token.clone(),
-        )
+        ),
     };
 
     let notification_key = state
         .firebase
         .update_notification_devices(data)
         .await?
-        // It is safe to unwrap because we know that the operation is not a remove operation
-        .unwrap();
+        .expect("create/add notification key did not return a notification key");
 
-    if user_metadata.notification_key.as_ref().is_none() {
-        user_metadata.notification_key = Some(NotificationKey {
-            key: notification_key,
-            registration_tokens: vec![DeviceRegistrationToken {
-                token: registration_token.token.clone(),
-                device_fingerprint: registration_token.device_fingerprint.clone(),
-            }],
-        });
-    } else {
-        // Remove the old token from the user metadata
-        user_metadata
-            .notification_key
-            .as_mut()
-            .unwrap()
-            .registration_tokens
-            .retain(|token| token.device_fingerprint != registration_token.device_fingerprint);
+    match user_metadata.notification_key.as_ref() {
+        Some(_) => {
+            // Remove the old token from the user metadata
+            user_metadata
+                .notification_key
+                .as_mut()
+                .unwrap()
+                .registration_tokens
+                .retain(|token| token.device_fingerprint != registration_token.device_fingerprint);
 
-        // Add the new token to the user metadata
-        user_metadata
-            .notification_key
-            .as_mut()
-            .unwrap()
-            .registration_tokens
-            .push(DeviceRegistrationToken {
-                token: registration_token.token.clone(),
-                device_fingerprint: registration_token.device_fingerprint.clone(),
+            // Add the new token to the user metadata
+            user_metadata
+                .notification_key
+                .as_mut()
+                .unwrap()
+                .registration_tokens
+                .push(DeviceRegistrationToken {
+                    token: registration_token.token.clone(),
+                    device_fingerprint: registration_token.device_fingerprint.clone(),
+                });
+        }
+        None => {
+            user_metadata.notification_key = Some(NotificationKey {
+                key: notification_key,
+                registration_tokens: vec![DeviceRegistrationToken {
+                    token: registration_token.token.clone(),
+                    device_fingerprint: registration_token.device_fingerprint.clone(),
+                }],
             });
+        }
     }
 
     let meta_raw = serde_json::to_vec(&user_metadata).expect("failed to serialize user metadata?!");
