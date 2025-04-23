@@ -2,7 +2,7 @@ pub mod error;
 use candid::Principal;
 use error::ApiError;
 use serde::{Deserialize, Serialize};
-use yral_identity::{msg_builder::Message, Signature};
+use yral_identity::{msg_builder::Message, Error, Signature};
 
 pub type ApiResult<T> = Result<T, ApiError>;
 
@@ -12,13 +12,13 @@ pub struct DeviceRegistrationToken {
     pub device_fingerprint: String,
 }
 
-impl From<DeviceRegistrationToken> for Message {
-    fn from(value: DeviceRegistrationToken) -> Self {
+impl TryFrom<DeviceRegistrationToken> for Message {
+    type Error = Error;
+    fn try_from(value: DeviceRegistrationToken) -> Result<Self, Self::Error> {
         Message::default()
             .method_name("register_device".into())
             .args((value.token, value.device_fingerprint))
-            // unwrap is safe here because (String, String) serialization can't fail
-            .unwrap()
+            .map_err(|_| Error::InvalidMessage("Failed to serialize arguments".to_string()))
     }
 }
 
@@ -37,13 +37,13 @@ pub struct UserMetadata {
     pub notification_key: Option<NotificationKey>,
 }
 
-impl From<UserMetadata> for Message {
-    fn from(value: UserMetadata) -> Self {
+impl TryFrom<UserMetadata> for Message {
+    type Error = Error;
+    fn try_from(value: UserMetadata) -> Result<Self, Self::Error> {
         Message::default()
             .method_name("set_user_metadata".into())
             .args((value.user_canister_id, value.user_name))
-            // unwrap is safe here because (Principal, String) serialization can't fail
-            .unwrap()
+            .map_err(|_| Error::InvalidMessage("Failed to serialize arguments".to_string()))
     }
 }
 
@@ -53,13 +53,13 @@ pub struct SetUserMetadataReqMetadata {
     pub user_name: String,
 }
 
-impl From<SetUserMetadataReqMetadata> for Message {
-    fn from(value: SetUserMetadataReqMetadata) -> Self {
+impl TryFrom<SetUserMetadataReqMetadata> for Message {
+    type Error = Error;
+    fn try_from(value: SetUserMetadataReqMetadata) -> Result<Self, Self::Error> {
         Message::default()
             .method_name("set_user_metadata".into())
             .args((value.user_canister_id, value.user_name))
-            // unwrap is safe here because (Principal, String) serialization can't fail
-            .unwrap()
+            .map_err(|_| Error::InvalidMessage("Failed to serialize arguments".to_string()))
     }
 }
 

@@ -3,9 +3,12 @@ use std::env;
 use hyper_rustls::{self, HttpsConnector};
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
+use yral_identity::Result;
 use yup_oauth2::{
     authenticator::Authenticator, CustomHyperClientBuilder, ServiceAccountAuthenticator,
 };
+
+use crate::error::Error;
 
 pub mod notifications;
 
@@ -14,12 +17,13 @@ pub struct Firebase {
     auth: Authenticator<HttpsConnector<HttpConnector>>,
 }
 
-pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
+pub async fn init_auth() -> Result<Authenticator<HttpsConnector<HttpConnector>>, Error> {
     let sa_key_file = env::var("CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY")
-        .expect("CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY is required");
+        .map_err(|e| Error::Unknown(e.to_string()))?;
 
     // Load your service account key
-    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file).expect("GOOGLE_SA_KEY.json");
+    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file)
+        .map_err(|e| Error::Unknown(e.to_string()))?;
 
     // Make sure the crypto provider is installed (see https://github.com/rustls/rustls/issues/1938)
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -36,24 +40,27 @@ pub async fn init_auth() -> Authenticator<HttpsConnector<HttpConnector>> {
     let authenticator = ServiceAccountAuthenticator::with_client(sa_key, client_builder)
         .build()
         .await
-        .unwrap();
+        .map_err(|e| Error::Unknown(e.to_string()))?;
 
-    authenticator
+    Ok(authenticator)
 }
 
 impl Firebase {
-    pub async fn new() -> Self {
-        let auth = init_auth().await;
-        Self { auth }
+    pub async fn new() -> Result<Self, Error> {
+        let auth = init_auth().await?;
+        Ok(Self { auth })
     }
 
-    async fn get_access_token(&self, scopes: &[&str]) -> String {
+    async fn get_access_token(&self, scopes: &[&str]) -> Result<String, Error> {
         let auth = &self.auth;
-        let token = auth.token(scopes).await.unwrap();
+        let token = auth
+            .token(scopes)
+            .await
+            .map_err(|_| Error::AuthTokenInvalid)?;
 
         match token.token() {
-            Some(t) => t.to_string(),
-            _ => panic!("No access token found"),
+            Some(t) => Ok(t.to_string()),
+            _ => Err(Error::AuthTokenMissing),
         }
     }
 }

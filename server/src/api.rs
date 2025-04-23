@@ -22,11 +22,17 @@ async fn set_user_metadata(
 ) -> Result<Json<ApiResult<SetUserMetadataRes>>> {
     let signature = req.0.signature;
     let metadata = req.0.metadata;
-    signature.verify_identity(*user_principal.as_ref(), metadata.clone().into())?;
+    signature.verify_identity(
+        *user_principal,
+        metadata
+            .clone()
+            .try_into()
+            .map_err(|_| Error::AuthTokenMissing)?,
+    )?;
 
     let user = user_principal.to_text();
     let mut conn = state.redis.get().await?;
-    let meta_raw = serde_json::to_vec(&metadata).expect("failed to serialize user metadata?!");
+    let meta_raw = serde_json::to_vec(&metadata).map_err(Error::Deser)?;
     let _replaced: bool = conn.hset(user, METADATA_FIELD, &meta_raw).await?;
 
     Ok(Json(Ok(())))
@@ -55,7 +61,6 @@ async fn delete_metadata_bulk(
     req: Json<BulkUsers>,
     http_req: web::HttpRequest,
 ) -> Result<Json<ApiResult<()>>> {
-    // verify token
     let token = http_req
         .headers()
         .get("Authorization")

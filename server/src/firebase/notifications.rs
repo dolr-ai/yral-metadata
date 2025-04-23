@@ -8,6 +8,26 @@ use crate::Error;
 use crate::Result;
 
 pub mod utils {
+    use serde::{Deserialize, Serialize};
+
+    use crate::error::{Error, Result};
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum Operation {
+        Create,
+        Add,
+        Remove,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct Request {
+        pub operation: Operation,
+        pub notification_key_name: String,
+        pub notification_key: String,
+        pub registration_ids: Vec<String>,
+    }
+
     pub fn get_notification_key_name_from_principal(principal_id: &String) -> String {
         format!("notification_key_{}", principal_id)
     }
@@ -15,47 +35,70 @@ pub mod utils {
     pub fn get_create_request_body(
         notification_key_name: String,
         notification_key: String,
-    ) -> String {
-        format!(
-            r#"{{
-                "operation": "create",
-                "notification_key_name": "{}",
-                "notification_key": "{}"
-            }}"#,
-            notification_key_name, notification_key
-        )
+    ) -> Result<String> {
+        // format!(
+        //     r#"{{
+        //         "operation": "create",
+        //         "notification_key_name": "{}",
+        //         "notification_key": "{}"
+        //     }}"#,
+        //     notification_key_name, notification_key
+        // )
+
+        serde_json::to_string(&Request {
+            operation: Operation::Create,
+            notification_key_name,
+            notification_key,
+            registration_ids: Vec::new(),
+        })
+        .map_err(|e| Error::Unknown(e.to_string()))
     }
 
     pub fn get_add_request_body(
         notification_key_name: String,
         notification_key: String,
         registration_token: String,
-    ) -> String {
-        format!(
-            r#"{{
-                "operation": "add",
-                "notification_key_name": "{}",
-                "notification_key": "{}",
-                "registration_ids": ["{}"]
-            }}"#,
-            notification_key_name, notification_key, registration_token
-        )
+    ) -> Result<String> {
+        // format!(
+        //     r#"{{
+        //         "operation": "create",
+        //         "notification_key_name": "{}",
+        //         "notification_key": "{}"
+        //     }}"#,
+        //     notification_key_name, notification_key
+        // )
+
+        serde_json::to_string(&Request {
+            operation: Operation::Add,
+            notification_key_name,
+            notification_key,
+            registration_ids: vec![registration_token],
+        })
+        .map_err(|e| Error::Unknown(e.to_string()))
     }
 
     pub fn get_remove_request_body(
         notification_key_name: String,
         notification_key: String,
         registration_token: String,
-    ) -> String {
-        format!(
-            r#"{{
-                "operation": "remove",
-                "notification_key_name": "{}",
-                "notification_key": "{}",
-                "registration_ids": ["{}"]
-            }}"#,
-            notification_key_name, notification_key, registration_token
-        )
+    ) -> Result<String> {
+        // format!(
+        //     r#"{{
+        //         "operation": "remove",
+        //         "notification_key_name": "{}",
+        //         "notification_key": "{}",
+        //         "registration_ids": ["{}"]
+        //     }}"#,
+        //     notification_key_name, notification_key, registration_token
+        // )
+
+        serde_json::to_string(&Request {
+            operation: Operation::Remove,
+            notification_key_name,
+            notification_key,
+            registration_ids: vec![registration_token],
+        })
+        .map_err(|e| Error::Unknown(e.to_string()))
     }
 }
 
@@ -68,7 +111,7 @@ impl Firebase {
 
         let firebase_token = self
             .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
-            .await;
+            .await?;
         let response = client
             .post(url)
             .header("Authorization", format!("Bearer {}", firebase_token))
@@ -76,7 +119,7 @@ impl Firebase {
             .header(
                 "project_id",
                 env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID")
-                    .expect("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID is not set"),
+                    .map_err(|e| Error::Unknown(e.to_string()))?,
             )
             .header("access_token_auth", "true")
             .body(data)
@@ -87,7 +130,12 @@ impl Firebase {
             Ok(response) => {
                 if !response.status().is_success() {
                     log::error!("Error updating notification devices: {:?}", response);
-                    return Err(Error::FirebaseApiError(response.text().await.unwrap()));
+                    return Err(Error::FirebaseApiErr(
+                        response
+                            .text()
+                            .await
+                            .map_err(|e| Error::Unknown(e.to_string()))?,
+                    ));
                 }
 
                 if is_remove_operation {
@@ -96,7 +144,7 @@ impl Firebase {
 
                 match response.json::<HashMap<String, String>>().await {
                     Ok(response) => Ok(Some(response["notification_key"].clone())),
-                    Err(err) => Err(Error::FirebaseApiError(format!(
+                    Err(err) => Err(Error::FirebaseApiErr(format!(
                         "error parsing json: {}",
                         err
                     ))),
@@ -104,7 +152,7 @@ impl Firebase {
             }
             Err(err) => {
                 log::error!("Error updating notification devices: {:?}", err);
-                Err(Error::FirebaseApiError(err.to_string()))
+                Err(Error::FirebaseApiErr(err.to_string()))
             }
         }
     }
