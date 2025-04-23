@@ -13,15 +13,7 @@ use api::*;
 use error::*;
 use notifications::*;
 use ntex_cors::Cors;
-use state::{AppState, RedisPool};
-
-pub async fn init_redis(conf: &AppConfig) -> Result<RedisPool> {
-    let manager = bb8_redis::RedisConnectionManager::new(conf.redis_url.clone())?;
-    RedisPool::builder()
-        .build(manager)
-        .await
-        .map_err(Error::Redis)
-}
+use state::AppState;
 
 #[ntex::main]
 async fn main() -> Result<()> {

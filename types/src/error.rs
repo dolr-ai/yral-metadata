@@ -28,4 +28,6 @@ pub enum ApiError {
     FirebaseApiError(String),
     #[error("unknown: {0}")]
     Unknown(String),
+    #[error("device already registered")]
+    DeviceAlreadyRegistered,
 }

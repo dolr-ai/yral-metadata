@@ -46,13 +46,7 @@ async fn register_device(
                 .map(|token| token.token.clone());
 
             if old_registration_token.is_some() {
-                let data = firebase::notifications::utils::get_remove_request_body(
-                    notification_key_name.clone(),
-                    notification_key.key.clone(),
-                    old_registration_token.ok_or(Error::AuthTokenMissing)?,
-                )?;
-
-                state.firebase.update_notification_devices(data).await?;
+                return Ok(Json(Err(ApiError::DeviceAlreadyRegistered)));
             }
 
             firebase::notifications::utils::get_add_request_body(
@@ -133,14 +127,12 @@ async fn unregister_device(
     // Unregister the device with Firebase
     let notification_key_name =
         firebase::notifications::utils::get_notification_key_name_from_principal(&user);
-    let notification_key = match user_metadata.notification_key.as_ref() {
-        Some(notification_key) => notification_key,
-        None => {
-            return Ok(Json(Err(ApiError::NotificationKeyNotFound)));
-        }
+
+    let Some(notification_key) = &user_metadata.notification_key else {
+        return Ok(Json(Err(ApiError::NotificationKeyNotFound)));
     };
 
-    let token_to_delete = match notification_key
+    let Some(token_to_delete) = notification_key
         .registration_tokens
         .iter()
         .filter(|token| {
@@ -149,11 +141,8 @@ async fn unregister_device(
         })
         .map(|token| token.token.clone())
         .next()
-    {
-        Some(token) => token,
-        None => {
-            return Ok(Json(Err(ApiError::DeviceNotFound)));
-        }
+    else {
+        return Ok(Json(Err(ApiError::DeviceNotFound)));
     };
 
     let data = firebase::notifications::utils::get_remove_request_body(
