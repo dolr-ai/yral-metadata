@@ -16,16 +16,15 @@ pub struct JwtDetails {
     pub validation: Validation,
 }
 
-pub fn init_jwt(conf: &AppConfig) -> JwtDetails {
-    let decoding_key = DecodingKey::from_ed_pem(conf.jwt_public_key.as_bytes())
-        .expect("failed to create decoding key");
+pub fn init_jwt(conf: &AppConfig) -> Result<JwtDetails, Error> {
+    let decoding_key = DecodingKey::from_ed_pem(conf.jwt_public_key.as_bytes())?;
 
     let validation = Validation::new(Algorithm::EdDSA);
 
-    JwtDetails {
+    Ok(JwtDetails {
         decoding_key,
         validation,
-    }
+    })
 }
 
 pub fn verify_token(token: &str, jwt_details: &JwtDetails) -> Result<(), Error> {

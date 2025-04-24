@@ -11,9 +11,13 @@ use reqwest::{
     Url,
 };
 use types::{
-    ApiResult, BulkUsers, GetUserMetadataRes, SetUserMetadataReq, SetUserMetadataRes, UserMetadata,
+    ApiResult, BulkUsers, GetUserMetadataRes, RegisterDeviceReq, RegisterDeviceRes,
+    SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq,
+    UnregisterDeviceRes,
 };
 use yral_identity::ic_agent::sign_message;
+
+pub use types::{DeviceRegistrationToken, NotificationKey};
 
 #[derive(Clone, Debug)]
 pub struct MetadataClient<const AUTH: bool> {
@@ -44,17 +48,24 @@ impl<const A: bool> MetadataClient<A> {
     pub async fn set_user_metadata(
         &self,
         identity: &impl Identity,
-        metadata: UserMetadata,
+        metadata: SetUserMetadataReqMetadata,
     ) -> Result<SetUserMetadataRes> {
-        let signature = sign_message(identity, metadata.clone().into())?;
-        // unwrap safety: we know the sender is present because we just signed the message
-        let sender = identity.sender().unwrap();
+        let signature = sign_message(
+            identity,
+            metadata
+                .clone()
+                .try_into()
+                .map_err(|_| Error::Api(types::error::ApiError::MetadataNotFound))?,
+        )?;
+        let sender = identity
+            .sender()
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
         let api_url = self
             .base_url
             .join("metadata/")
-            .unwrap()
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
             .join(&sender.to_text())
-            .unwrap();
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
 
         let res = self
             .client
@@ -74,13 +85,85 @@ impl<const A: bool> MetadataClient<A> {
         let api_url = self
             .base_url
             .join("metadata/")
-            .unwrap()
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
             .join(&user_principal.to_text())
-            .unwrap();
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
 
         let res = self.client.get(api_url).send().await?;
 
         let res: ApiResult<GetUserMetadataRes> = res.json().await?;
+        Ok(res?)
+    }
+
+    pub async fn register_device(
+        &self,
+        identity: &impl Identity,
+        registration_token: DeviceRegistrationToken,
+    ) -> Result<RegisterDeviceRes> {
+        let signature = sign_message(
+            identity,
+            registration_token
+                .clone()
+                .try_into()
+                .map_err(|_| Error::Api(types::error::ApiError::AuthTokenMissing))?,
+        )?;
+        let sender = identity
+            .sender()
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+        let api_url = self
+            .base_url
+            .join("notifications/")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
+            .join(&sender.to_text())
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
+        let res = self
+            .client
+            .post(api_url)
+            .json(&RegisterDeviceReq {
+                registration_token,
+                signature,
+            })
+            .send()
+            .await?;
+
+        let res: ApiResult<RegisterDeviceRes> = res.json().await?;
+        Ok(res?)
+    }
+
+    pub async fn unregister_device(
+        &self,
+        identity: &impl Identity,
+        registration_token: DeviceRegistrationToken,
+    ) -> Result<UnregisterDeviceRes> {
+        let signature = sign_message(
+            identity,
+            registration_token
+                .clone()
+                .try_into()
+                .map_err(|_| Error::Api(types::error::ApiError::AuthTokenMissing))?,
+        )?;
+        let sender = identity
+            .sender()
+            .map_err(|_| Error::Identity(yral_identity::Error::SenderNotFound))?;
+        let api_url = self
+            .base_url
+            .join("notifications/")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
+            .join(&sender.to_text())
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
+        let res = self
+            .client
+            .delete(api_url)
+            .json(&UnregisterDeviceReq {
+                registration_token,
+                signature,
+            })
+            .send()
+            .await?;
+
+        let res: ApiResult<UnregisterDeviceRes> = res.json().await?;
         Ok(res?)
     }
 }
@@ -94,11 +177,21 @@ impl MetadataClient<true> {
     }
 
     pub async fn delete_metadata_bulk(&self, users: Vec<Principal>) -> Result<()> {
-        let api_url = self.base_url.join("metadata/bulk").unwrap();
+        let api_url = self
+            .base_url
+            .join("metadata/bulk")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
 
-        let jwt_token = self.jwt_token.as_ref().expect("jwt token not set");
+        let jwt_token = self
+            .jwt_token
+            .as_ref()
+            .ok_or(Error::Api(types::error::ApiError::Jwt))?;
         let mut headers = HeaderMap::new();
-        headers.insert(AUTHORIZATION, HeaderValue::from_str(jwt_token).unwrap());
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(jwt_token)
+                .map_err(|_| Error::Api(types::error::ApiError::Jwt))?,
+        );
 
         let body = BulkUsers { users };
 
