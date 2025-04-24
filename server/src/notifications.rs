@@ -45,14 +45,8 @@ async fn register_device(
                 .find(|token| token.device_fingerprint == registration_token.device_fingerprint)
                 .map(|token| token.token.clone());
 
-            if let Some(old_registration_token) = old_registration_token {
-                let data = firebase::notifications::utils::get_remove_request_body(
-                    notification_key_name.clone(),
-                    notification_key.key.clone(),
-                    old_registration_token,
-                )?;
-
-                state.firebase.update_notification_devices(data).await?;
+            if old_registration_token.is_some() {
+                return Ok(Json(Err(ApiError::DeviceAlreadyRegistered)));
             }
 
             firebase::notifications::utils::get_add_request_body(
