@@ -31,6 +31,7 @@ async fn main() -> Result<()> {
             .service(delete_metadata_bulk)
             .service(register_device)
             .service(unregister_device)
+            .service(send_notification)
     })
     .bind(conf.bind_address)?
     .run()
