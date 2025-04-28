@@ -2,11 +2,14 @@ use candid::Principal;
 use ntex::web::{
     self,
     types::{Json, Path, State},
+    HttpRequest,
 };
 use redis::AsyncCommands;
+use std::env;
 use types::{
     error::ApiError, ApiResult, DeviceRegistrationToken, NotificationKey, RegisterDeviceReq,
-    RegisterDeviceRes, UnregisterDeviceReq, UnregisterDeviceRes, UserMetadata,
+    RegisterDeviceRes, SendNotificationReq, SendNotificationRes, UnregisterDeviceReq,
+    UnregisterDeviceRes, UserMetadata,
 };
 use yral_identity::msg_builder::Message;
 
@@ -174,4 +177,52 @@ async fn unregister_device(
     }
 
     Ok(Json(Err(ApiError::NotificationKeyNotFound)))
+}
+
+#[web::post("/notifications/{user_principal}/send")]
+async fn send_notification(
+    http_req: HttpRequest,
+    state: State<AppState>,
+    user_principal: Path<Principal>,
+    req: Json<SendNotificationReq>,
+) -> Result<Json<ApiResult<SendNotificationRes>>> {
+    // --- Authentication Check ---
+    let expected_api_key = env::var("YRAL_METADATA_USER_NOTIFICATION_API_KEY")
+        .map_err(|_| Error::EnvironmentVariableMissing("YRAL_METADATA_USER_NOTIFICATION_API_KEY not set".to_string()))?;
+
+    let auth_header = http_req
+        .headers()
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok());
+
+    let provided_token = match auth_header {
+        Some(header) if header.starts_with("Bearer ") => &header[7..],
+        _ => return Ok(Json(Err(ApiError::Unauthorized))), // Or Missing Authorization Header
+    };
+
+    if provided_token != expected_api_key {
+        return Ok(Json(Err(ApiError::Unauthorized))); // Invalid Token
+    }
+    // --- End Authentication Check ---
+
+    let mut conn = state.redis.get().await?;
+    let user = user_principal.to_text();
+    let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
+    let Some(meta_raw) = meta_raw else {
+        return Ok(Json(Err(ApiError::MetadataNotFound)));
+    };
+
+    let user_metadata: UserMetadata = serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
+
+    let Some(notification_key) = user_metadata.notification_key else {
+        return Ok(Json(Err(ApiError::NotificationKeyNotFound)));
+    };
+
+    let data = req.0.data;
+
+    state
+        .firebase
+        .send_message_to_group(notification_key, data)
+        .await?;
+    Ok(Json(Ok(())))
 }

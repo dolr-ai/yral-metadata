@@ -30,4 +30,10 @@ pub enum ApiError {
     Unknown(String),
     #[error("device already registered")]
     DeviceAlreadyRegistered,
+    #[error("unauthorized")]
+    Unauthorized,
+    #[error("environment variable not found")]
+    EnvironmentVariable,
+    #[error("environment variable missing")]
+    EnvironmentVariableMissing,
 }
