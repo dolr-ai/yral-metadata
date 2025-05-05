@@ -4845,6 +4845,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "serde",
+ "serde_json",
  "thiserror 1.0.61",
  "yral-identity",
 ]

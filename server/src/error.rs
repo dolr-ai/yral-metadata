@@ -5,6 +5,8 @@ use ntex::{
 use redis::RedisError;
 use thiserror::Error;
 use types::{error::ApiError, ApiResult};
+use std::env::VarError;
+
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -30,6 +32,10 @@ pub enum Error {
     FirebaseApiErr(String),
     #[error("unknown error {0}")]
     Unknown(String),
+    #[error("Environment variable error: {0}")]
+    EnvironmentVariable(#[from] VarError),
+    #[error("Environment variable missing: {0}")]
+    EnvironmentVariableMissing(String),
 }
 
 impl From<&Error> for ApiResult<()> {
@@ -57,6 +63,8 @@ impl From<&Error> for ApiResult<()> {
             Error::AuthTokenInvalid => ApiError::AuthToken,
             Error::FirebaseApiErr(e) => ApiError::FirebaseApiError(e.clone()),
             Error::Unknown(e) => ApiError::Unknown(e.clone()),
+            Error::EnvironmentVariable(_) => ApiError::EnvironmentVariable,
+            Error::EnvironmentVariableMissing(_) => ApiError::EnvironmentVariableMissing,
         };
         ApiResult::Err(err)
     }
@@ -83,6 +91,8 @@ impl web::error::WebResponseError for Error {
             | Error::Jwt(_)
             | Error::AuthTokenInvalid
             | Error::AuthTokenMissing => StatusCode::UNAUTHORIZED,
+            Error::EnvironmentVariable(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::EnvironmentVariableMissing(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

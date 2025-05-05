@@ -1,4 +1,5 @@
 pub mod error;
+
 use candid::Principal;
 use error::ApiError;
 use serde::{Deserialize, Serialize};
@@ -95,3 +96,10 @@ pub struct UnregisterDeviceReq {
 }
 
 pub type UnregisterDeviceRes = ();
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct SendNotificationReq {
+    pub data: serde_json::Value,
+}
+
+pub type SendNotificationRes = ();

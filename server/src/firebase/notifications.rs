@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::env;
 
 use reqwest::Client;
+use serde_json::json;
+use types::NotificationKey;
 
 use crate::firebase::Firebase;
 use crate::Error;
@@ -152,6 +154,78 @@ impl Firebase {
             }
             Err(err) => {
                 log::error!("Error updating notification devices: {:?}", err);
+                Err(Error::FirebaseApiErr(err.to_string()))
+            }
+        }
+    }
+
+    pub async fn send_message_to_group(
+        &self,
+        notification_key: NotificationKey,
+        data_payload: serde_json::Value,
+    ) -> Result<()> {
+        let client = Client::new();
+        let project_id = env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").map_err(|e| {
+            Error::Unknown(format!(
+                "Missing GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: {}",
+                e
+            ))
+        })?;
+        let url = format!(
+            "https://fcm.googleapis.com/v1/projects/{}/messages:send",
+            project_id
+        );
+
+        let firebase_token = self
+            .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
+            .await?;
+
+        let message_body = json!({
+            "message": {
+                "token": notification_key,
+                "data": data_payload
+            }
+        });
+
+        let response = client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", firebase_token))
+            .header("Content-Type", "application/json")
+            .json(&message_body) // Send the JSON payload
+            .send()
+            .await;
+
+        match response {
+            Ok(response) => {
+                let status = response.status(); // Clone status before consuming body
+                if !status.is_success() {
+                    let error_text = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Failed to read error body".to_string());
+                    log::error!(
+                        "Error sending FCM message: Status: {}, Body: {}",
+                        status,
+                        error_text
+                    );
+                    Err(Error::FirebaseApiErr(format!(
+                        "FCM send failed: {} - {}",
+                        status, error_text
+                    )))
+                } else {
+                    let response_text = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Failed to read success body".to_string());
+                    log::info!(
+                        "Successfully sent FCM message. Response: {:?}",
+                        response_text
+                    );
+                    Ok(())
+                }
+            }
+            Err(err) => {
+                log::error!("Error sending FCM message request: {:?}", err);
                 Err(Error::FirebaseApiErr(err.to_string()))
             }
         }
