@@ -12,7 +12,7 @@ use crate::Result;
 pub mod utils {
     use serde::{Deserialize, Serialize};
 
-    use crate::error::{Error, Result};
+    use crate::utils::error::{Error, Result};
 
     #[derive(Serialize, Deserialize)]
     #[serde(rename_all = "lowercase")]

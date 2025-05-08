@@ -36,4 +36,8 @@ pub enum ApiError {
     EnvironmentVariable,
     #[error("environment variable missing")]
     EnvironmentVariableMissing,
+    #[error("failed to mark user session as registered: {0}")]
+    UserAlreadyRegistered(String),
+    #[error("failed to initialize backend admin ic agent: {0}")]
+    BackendAdminIdentityInvalid(String),
 }

@@ -3,10 +3,9 @@ use ntex::{
     web,
 };
 use redis::RedisError;
+use std::{env::VarError, error};
 use thiserror::Error;
 use types::{error::ApiError, ApiResult};
-use std::env::VarError;
-
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -36,6 +35,10 @@ pub enum Error {
     EnvironmentVariable(#[from] VarError),
     #[error("Environment variable missing: {0}")]
     EnvironmentVariableMissing(String),
+    #[error("failed to mark user sessin as registered")]
+    UserAlreadyRegistered(String),
+    #[error("failed to initialize backend admin ic agent")]
+    BackendAdminIdentityInvalid(String),
 }
 
 impl From<&Error> for ApiResult<()> {
@@ -62,9 +65,13 @@ impl From<&Error> for ApiResult<()> {
             Error::AuthTokenMissing => ApiError::AuthTokenMissing,
             Error::AuthTokenInvalid => ApiError::AuthToken,
             Error::FirebaseApiErr(e) => ApiError::FirebaseApiError(e.clone()),
+            Error::BackendAdminIdentityInvalid(e) => {
+                ApiError::BackendAdminIdentityInvalid(e.clone())
+            }
             Error::Unknown(e) => ApiError::Unknown(e.clone()),
             Error::EnvironmentVariable(_) => ApiError::EnvironmentVariable,
             Error::EnvironmentVariableMissing(_) => ApiError::EnvironmentVariableMissing,
+            Error::UserAlreadyRegistered(e) => ApiError::UserAlreadyRegistered(e.clone()),
         };
         ApiResult::Err(err)
     }
@@ -86,13 +93,15 @@ impl web::error::WebResponseError for Error {
             | Error::Deser(_)
             | Error::Bb8(_)
             | Error::FirebaseApiErr(_)
-            | Error::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            | Error::Unknown(_)
+            | Error::BackendAdminIdentityInvalid(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Identity(_)
             | Error::Jwt(_)
             | Error::AuthTokenInvalid
             | Error::AuthTokenMissing => StatusCode::UNAUTHORIZED,
             Error::EnvironmentVariable(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::EnvironmentVariableMissing(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::UserAlreadyRegistered(_) => StatusCode::BAD_REQUEST,
         }
     }
 }

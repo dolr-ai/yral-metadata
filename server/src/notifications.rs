@@ -13,7 +13,12 @@ use types::{
 };
 use yral_identity::msg_builder::Message;
 
-use crate::{api::METADATA_FIELD, firebase, state::AppState, Error, Result};
+use crate::{
+    api::METADATA_FIELD,
+    firebase,
+    state::AppState,
+    utils::error::{Error, Result},
+};
 
 #[web::post("/notifications/{user_principal}")]
 async fn register_device(
@@ -187,8 +192,11 @@ async fn send_notification(
     req: Json<SendNotificationReq>,
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
     // --- Authentication Check ---
-    let expected_api_key = env::var("YRAL_METADATA_USER_NOTIFICATION_API_KEY")
-        .map_err(|_| Error::EnvironmentVariableMissing("YRAL_METADATA_USER_NOTIFICATION_API_KEY not set".to_string()))?;
+    let expected_api_key = env::var("YRAL_METADATA_USER_NOTIFICATION_API_KEY").map_err(|_| {
+        Error::EnvironmentVariableMissing(
+            "YRAL_METADATA_USER_NOTIFICATION_API_KEY not set".to_string(),
+        )
+    })?;
 
     let auth_header = http_req
         .headers()
