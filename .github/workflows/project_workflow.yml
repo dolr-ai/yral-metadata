@@ -21,7 +21,7 @@ jobs:
         id: generate-token
         uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ vars.APP_ID }}
+          app-id: ${{ vars.PROJECT_WORKFLOW_APP_ID }}
           private-key: ${{ secrets.PROJECT_WORKFLOW_APP_PRIVATE_KEY }}
       # Sets environment variables for this step.
       #
