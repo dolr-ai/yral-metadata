@@ -6,7 +6,7 @@ on:
       - ready_for_review
       
 jobs:
-  track_pr:
+  add_pr:
     runs-on: ubuntu-latest
     steps:
     # Uses the [actions/create-github-app-token](https://github.com/marketplace/actions/create-github-app-token) action to generate an installation access token for your app from the app ID and private key. The installation access token is accessed later in the workflow as `${{ steps.generate-token.outputs.token }}`.
@@ -22,7 +22,7 @@ jobs:
           private-key: ${{ secrets.PROJECT_WORKFLOW_APP_PRIVATE_KEY }}
 
       - name: Add pull request to project
-        uses: actions/add-to-project@RELEASE_VERSION
+        uses: actions/add-to-project@v1
         with:
           project-url: https://github.com/orgs/dolr-ai/projects/12
           github-token: ${{ steps.generate-token.outputs.token }}
