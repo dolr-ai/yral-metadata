@@ -1,4 +1,4 @@
-name: Add PR to project
+name: Add Pull Request to project
 # This workflow runs whenever a pull request in the repository is marked as "ready for review".
 on:
   pull_request:
@@ -20,6 +20,7 @@ jobs:
         with:
           app-id: ${{ vars.PROJECT_WORKFLOW_APP_ID }}
           private-key: ${{ secrets.PROJECT_WORKFLOW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
 
       - name: Add pull request to project
         uses: actions/add-to-project@v1
