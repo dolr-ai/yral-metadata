@@ -2,18 +2,19 @@ mod api;
 mod auth;
 mod config;
 mod consts;
-mod error;
 mod firebase;
 mod notifications;
 mod state;
 use config::AppConfig;
 use ntex::web;
+mod session;
+mod utils;
 
 use api::*;
-use error::*;
 use notifications::*;
 use ntex_cors::Cors;
 use state::AppState;
+use utils::error::*;
 
 #[ntex::main]
 async fn main() -> Result<()> {
