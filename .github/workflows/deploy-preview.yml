@@ -47,15 +47,20 @@ jobs:
         if: ${{ github.event.pull_request.merged == false}}
         run: |
           APP_NAME="pr-${{github.event.number}}-${{github.repository_owner}}-yral-metadata"
-          flyctl secrets set REDIS_URL=$REDIS_URL --app "$APP_NAME" --stage
+          flyctl secrets set REDIS_URL="$REDIS_URL" --app "$APP_NAME" --stage
           flyctl secrets set YRAL_METADATA_USER_NOTIFICATION_API_KEY="$YRAL_METADATA_USER_NOTIFICATION_API_KEY" --app "$APP_NAME" --stage
           flyctl secrets set JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" --app "$APP_NAME" --stage
           flyctl secrets set CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY="$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY" --app "$APP_NAME" --stage
           flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID="$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID" --app "$APP_NAME" --stage
+          flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID="$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID" --app "$APP_NAME" --stage
+
+          echo "Redeploying preview app to apply secrets..."
+          flyctl deploy --app "$APP_NAME" --remote-only --detach
         env:
           REDIS_URL: ${{ secrets.AUTH_FLY_IO_UPSTASH_REDIS_DATABASE_CONNECTION_STRING }}
-          FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
+          FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }} # This token is for flyctl itself
           YRAL_METADATA_USER_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_USER_NOTIFICATION_API_KEY }}
           JWT_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_PUBLIC_KEY }}
-          GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID }}
           CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
+          GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID }}
+          GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
