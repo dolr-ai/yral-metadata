@@ -1,9 +1,5 @@
 #
 name: Add PR to project
-# This workflow runs whenever a pull request in the repository is marked as "ready for review".
-permissions:
-  contents: read
-  repository-projects: write
 on:
   pull_request:
     types:
@@ -23,6 +19,7 @@ jobs:
         with:
           app-id: ${{ vars.PROJECT_WORKFLOW_APP_ID }}
           private-key: ${{ secrets.PROJECT_WORKFLOW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
       # Sets environment variables for this step.
       #
       # Replace `YOUR_ORGANIZATION` with the name of your organization. For example, `octo-org`.
@@ -31,7 +28,7 @@ jobs:
       - name: Get project data
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          ORGANIZATION: dolr-ai
+          ORGANIZATION: ${{ github.repository_owner }}
           PROJECT_NUMBER: 12
         # Uses [GitHub CLI](https://cli.github.com/manual/) to query the API for the ID of the project and return the name and ID of the first 20 fields in the project. `fields` returns a union and the query uses inline fragments (`... on`) to return information about any `ProjectV2Field` and `ProjectV2SingleSelectField` fields. The response is stored in a file called `project_data.json`.
         run: |
