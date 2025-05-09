@@ -53,6 +53,9 @@ jobs:
           flyctl secrets set CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY="$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY" --app "$APP_NAME" --stage
           flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID="$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID" --app "$APP_NAME" --stage
           flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID="$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID" --app "$APP_NAME" --stage
+
+          echo "Redeploying preview app to apply secrets..."
+          flyctl deploy --app "$APP_NAME" --remote-only --detach
         env:
           REDIS_URL: ${{ secrets.AUTH_FLY_IO_UPSTASH_REDIS_DATABASE_CONNECTION_STRING }}
           FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }} # This token is for flyctl itself
