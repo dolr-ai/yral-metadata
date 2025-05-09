@@ -120,7 +120,7 @@ impl Firebase {
             .header("Content-Type", "application/json")
             .header(
                 "project_id",
-                env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID")
+                env::var("GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID")
                     .map_err(|e| Error::Unknown(e.to_string()))?,
             )
             .header("access_token_auth", "true")
@@ -165,9 +165,9 @@ impl Firebase {
         data_payload: serde_json::Value,
     ) -> Result<()> {
         let client = Client::new();
-        let project_id = env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").map_err(|e| {
+        let project_id = env::var("GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID").map_err(|e| {
             Error::Unknown(format!(
-                "Missing GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: {}",
+                "Missing GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: {}",
                 e
             ))
         })?;
