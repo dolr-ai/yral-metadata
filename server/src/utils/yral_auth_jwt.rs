@@ -1,8 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::DecodingKey;
-use ntex::time;
 use serde::{Deserialize, Serialize};
+use yral_types::delegated_identity::DelegatedIdentityWire;
 
 use super::error::Error;
 
@@ -15,6 +15,7 @@ pub struct YralAuthClaim {
     pub sub: String,
     nonce: Option<String>,
     ext_is_anonymous: bool,
+    ext_delegated_identity: DelegatedIdentityWire,
 }
 #[derive(Clone)]
 pub struct YralAuthJwt {

@@ -1,5 +1,4 @@
 use candid::Principal;
-use jsonwebtoken::DecodingKey;
 use ntex::web::{
     self,
     types::{Json, Path, State},
