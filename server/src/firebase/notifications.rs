@@ -26,7 +26,8 @@ pub mod utils {
     pub struct Request {
         pub operation: Operation,
         pub notification_key_name: String,
-        pub notification_key: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub notification_key: Option<String>,
         pub registration_ids: Vec<String>,
     }
 
@@ -36,22 +37,13 @@ pub mod utils {
 
     pub fn get_create_request_body(
         notification_key_name: String,
-        notification_key: String,
+        registration_token: String,
     ) -> Result<String> {
-        // format!(
-        //     r#"{{
-        //         "operation": "create",
-        //         "notification_key_name": "{}",
-        //         "notification_key": "{}"
-        //     }}"#,
-        //     notification_key_name, notification_key
-        // )
-
         serde_json::to_string(&Request {
             operation: Operation::Create,
             notification_key_name,
-            notification_key,
-            registration_ids: Vec::new(),
+            notification_key: None,
+            registration_ids: vec![registration_token],
         })
         .map_err(|e| Error::Unknown(e.to_string()))
     }
@@ -61,19 +53,10 @@ pub mod utils {
         notification_key: String,
         registration_token: String,
     ) -> Result<String> {
-        // format!(
-        //     r#"{{
-        //         "operation": "create",
-        //         "notification_key_name": "{}",
-        //         "notification_key": "{}"
-        //     }}"#,
-        //     notification_key_name, notification_key
-        // )
-
         serde_json::to_string(&Request {
             operation: Operation::Add,
             notification_key_name,
-            notification_key,
+            notification_key: Some(notification_key),
             registration_ids: vec![registration_token],
         })
         .map_err(|e| Error::Unknown(e.to_string()))
@@ -84,20 +67,10 @@ pub mod utils {
         notification_key: String,
         registration_token: String,
     ) -> Result<String> {
-        // format!(
-        //     r#"{{
-        //         "operation": "remove",
-        //         "notification_key_name": "{}",
-        //         "notification_key": "{}",
-        //         "registration_ids": ["{}"]
-        //     }}"#,
-        //     notification_key_name, notification_key, registration_token
-        // )
-
         serde_json::to_string(&Request {
             operation: Operation::Remove,
             notification_key_name,
-            notification_key,
+            notification_key: Some(notification_key),
             registration_ids: vec![registration_token],
         })
         .map_err(|e| Error::Unknown(e.to_string()))
