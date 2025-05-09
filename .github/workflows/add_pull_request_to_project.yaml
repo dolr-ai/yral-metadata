@@ -23,7 +23,7 @@ jobs:
           owner: ${{ github.repository_owner }}
 
       - name: Add pull request to project
-        uses: actions/add-to-project@v1
+        uses: actions/add-to-project@v1.0.2
         with:
           project-url: https://github.com/orgs/dolr-ai/projects/12
           github-token: ${{ steps.generate-token.outputs.token }}
