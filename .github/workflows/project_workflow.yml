@@ -1,6 +1,9 @@
 #
 name: Add PR to project
 # This workflow runs whenever a pull request in the repository is marked as "ready for review".
+permissions:
+  contents: read
+  repository-projects: write
 on:
   pull_request:
     types:
