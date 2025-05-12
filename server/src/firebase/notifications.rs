@@ -138,15 +138,15 @@ impl Firebase {
         data_payload: serde_json::Value,
     ) -> Result<()> {
         let client = Client::new();
-        let project_id = env::var("GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID").map_err(|e| {
+        let project_id_string = env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").map_err(|e| {
             Error::Unknown(format!(
-                "Missing GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: {}",
+                "Missing GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: {}",
                 e
             ))
         })?;
         let url = format!(
             "https://fcm.googleapis.com/v1/projects/{}/messages:send",
-            project_id
+            project_id_string
         );
 
         let firebase_token = self
