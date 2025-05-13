@@ -70,7 +70,7 @@ async fn register_device(
         ),
     };
 
-    let notification_key = state
+    let notification_key_from_firebase = state
         .firebase
         .update_notification_devices(data?)
         .await?
@@ -79,6 +79,7 @@ async fn register_device(
         ))?;
     match user_metadata.notification_key.as_mut() {
         Some(meta) => {
+            meta.key = notification_key_from_firebase;
             meta.registration_tokens
                 .retain(|token| token.device_fingerprint != registration_token.device_fingerprint);
 
@@ -89,7 +90,7 @@ async fn register_device(
         }
         None => {
             user_metadata.notification_key = Some(NotificationKey {
-                key: notification_key,
+                key: notification_key_from_firebase,
                 registration_tokens: vec![DeviceRegistrationToken {
                     token: registration_token.token.clone(),
                     device_fingerprint: registration_token.device_fingerprint.clone(),
