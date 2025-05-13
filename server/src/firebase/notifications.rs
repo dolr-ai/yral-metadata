@@ -79,7 +79,7 @@ pub mod utils {
 
 impl Firebase {
     pub async fn update_notification_devices(&self, data: String) -> Result<Option<String>> {
-        let is_remove_operation = data.contains("\"operation\":\"remove\"");
+        let is_remove_operation = data.contains("remove");
 
         let client = Client::new();
         let url = "https://fcm.googleapis.com/fcm/notification";
