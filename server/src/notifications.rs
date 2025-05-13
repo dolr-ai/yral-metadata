@@ -190,6 +190,8 @@ async fn send_notification(
     user_principal: Path<Principal>,
     req: Json<SendNotificationReq>,
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
+    log::info!("[send_notification] Entered for user: {}", user_principal.as_ref().to_text());
+
     // --- Authentication Check ---
     let expected_api_key = env::var("YRAL_METADATA_USER_NOTIFICATION_API_KEY")
         .map_err(|_| Error::EnvironmentVariableMissing("YRAL_METADATA_USER_NOTIFICATION_API_KEY not set".to_string()))?;
@@ -201,32 +203,44 @@ async fn send_notification(
 
     let provided_token = match auth_header {
         Some(header) if header.starts_with("Bearer ") => &header[7..],
-        _ => return Ok(Json(Err(ApiError::Unauthorized))), // Or Missing Authorization Header
+        _ => {
+            log::warn!("[send_notification] Authorization header missing or malformed for user: {}", user_principal.as_ref().to_text());
+            return Ok(Json(Err(ApiError::Unauthorized))); // Or Missing Authorization Header
+        }
     };
 
     if provided_token != expected_api_key {
+        log::warn!("[send_notification] Invalid API key provided for user: {}", user_principal.as_ref().to_text());
         return Ok(Json(Err(ApiError::Unauthorized))); // Invalid Token
     }
+    log::info!("[send_notification] Authentication successful for user: {}", user_principal.as_ref().to_text());
     // --- End Authentication Check ---
 
     let mut conn = state.redis.get().await?;
     let user = user_principal.to_text();
     let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
     let Some(meta_raw) = meta_raw else {
+        log::warn!("[send_notification] Metadata not found for user: {}", user);
         return Ok(Json(Err(ApiError::MetadataNotFound)));
     };
+    log::info!("[send_notification] Metadata found for user: {}", user);
 
     let user_metadata: UserMetadata = serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
 
     let Some(notification_key) = user_metadata.notification_key else {
+        log::warn!("[send_notification] Notification key not found for user: {}", user);
         return Ok(Json(Err(ApiError::NotificationKeyNotFound)));
     };
+    log::info!("[send_notification] Notification key found for user: {}: {}", user, notification_key.key);
 
     let data = req.0.data;
+    log::info!("[send_notification] Preparing to send data for user {}: {:?}", user, data);
 
+    log::info!("[send_notification] Calling send_message_to_group for user: {}", user);
     state
         .firebase
         .send_message_to_group(notification_key, data)
         .await?;
+    log::info!("[send_notification] Successfully sent/processed notification for user: {}", user);
     Ok(Json(Ok(())))
 }
