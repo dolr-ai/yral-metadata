@@ -26,7 +26,8 @@ pub mod utils {
     pub struct Request {
         pub operation: Operation,
         pub notification_key_name: String,
-        pub notification_key: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub notification_key: Option<String>,
         pub registration_ids: Vec<String>,
     }
 
@@ -36,22 +37,13 @@ pub mod utils {
 
     pub fn get_create_request_body(
         notification_key_name: String,
-        notification_key: String,
+        registration_token: String,
     ) -> Result<String> {
-        // format!(
-        //     r#"{{
-        //         "operation": "create",
-        //         "notification_key_name": "{}",
-        //         "notification_key": "{}"
-        //     }}"#,
-        //     notification_key_name, notification_key
-        // )
-
         serde_json::to_string(&Request {
             operation: Operation::Create,
             notification_key_name,
-            notification_key,
-            registration_ids: Vec::new(),
+            notification_key: None,
+            registration_ids: vec![registration_token],
         })
         .map_err(|e| Error::Unknown(e.to_string()))
     }
@@ -61,19 +53,10 @@ pub mod utils {
         notification_key: String,
         registration_token: String,
     ) -> Result<String> {
-        // format!(
-        //     r#"{{
-        //         "operation": "create",
-        //         "notification_key_name": "{}",
-        //         "notification_key": "{}"
-        //     }}"#,
-        //     notification_key_name, notification_key
-        // )
-
         serde_json::to_string(&Request {
             operation: Operation::Add,
             notification_key_name,
-            notification_key,
+            notification_key: Some(notification_key),
             registration_ids: vec![registration_token],
         })
         .map_err(|e| Error::Unknown(e.to_string()))
@@ -84,20 +67,10 @@ pub mod utils {
         notification_key: String,
         registration_token: String,
     ) -> Result<String> {
-        // format!(
-        //     r#"{{
-        //         "operation": "remove",
-        //         "notification_key_name": "{}",
-        //         "notification_key": "{}",
-        //         "registration_ids": ["{}"]
-        //     }}"#,
-        //     notification_key_name, notification_key, registration_token
-        // )
-
         serde_json::to_string(&Request {
             operation: Operation::Remove,
             notification_key_name,
-            notification_key,
+            notification_key: Some(notification_key),
             registration_ids: vec![registration_token],
         })
         .map_err(|e| Error::Unknown(e.to_string()))
@@ -120,7 +93,7 @@ impl Firebase {
             .header("Content-Type", "application/json")
             .header(
                 "project_id",
-                env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID")
+                env::var("GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID")
                     .map_err(|e| Error::Unknown(e.to_string()))?,
             )
             .header("access_token_auth", "true")
@@ -165,7 +138,7 @@ impl Firebase {
         data_payload: serde_json::Value,
     ) -> Result<()> {
         let client = Client::new();
-        let project_id = env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").map_err(|e| {
+        let project_id_string = env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").map_err(|e| {
             Error::Unknown(format!(
                 "Missing GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: {}",
                 e
@@ -173,7 +146,7 @@ impl Firebase {
         })?;
         let url = format!(
             "https://fcm.googleapis.com/v1/projects/{}/messages:send",
-            project_id
+            project_id_string
         );
 
         let firebase_token = self
