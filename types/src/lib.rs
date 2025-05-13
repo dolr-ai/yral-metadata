@@ -38,16 +38,6 @@ pub struct UserMetadata {
     pub notification_key: Option<NotificationKey>,
 }
 
-impl Default for UserMetadata {
-    fn default() -> Self {
-        Self {
-            user_canister_id: Principal::anonymous(),
-            user_name: String::new(),
-            notification_key: None,
-        }
-    }
-}
-
 impl TryFrom<UserMetadata> for Message {
     type Error = Error;
     fn try_from(value: UserMetadata) -> Result<Self, Self::Error> {
