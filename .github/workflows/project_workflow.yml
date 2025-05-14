@@ -17,7 +17,7 @@ jobs:
         id: generate-token
         uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ vars.PROJECT_WORKFLOW_APP_ID }}
+          app-id: ${{ vars.PROJECT_WORKFLOW_APP_FOR_PR_ADDITION_TO_GITHUB_PROJECT_APP_ID }}
           private-key: ${{ secrets.PROJECT_WORKFLOW_APP_FOR_PR_ADDITION_TO_GITHUB_PROJECT_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
       # Sets environment variables for this step.
