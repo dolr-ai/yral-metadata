@@ -14,19 +14,11 @@ jobs:
     # Replace `APP_ID` with the name of the configuration variable that contains your app ID.
     #
     # Replace `APP_PEM` with the name of the secret that contains your app private key.
-      - name: Generate token
-        id: generate-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.PROJECT_WORKFLOW_APP_ID }}
-          private-key: ${{ secrets.PROJECT_WORKFLOW_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-
       - name: Add pull request to project
         uses: actions/add-to-project@v1.0.2
         with:
           project-url: https://github.com/orgs/dolr-ai/projects/12
-          github-token: ${{ steps.generate-token.outputs.token }}
+          github-token: ${{ secrets.DOLR_AI_ORG_PERSONAL_ACCOUNT }}
           
 
 
