@@ -13,7 +13,7 @@ pub struct AppConfig {
     pub redis_url: ConnectionInfo,
     pub jwt_public_key: String,
     pub yral_auth_public_key: String,
-    pub backend_admin_identity: Vec<u8>,
+    pub backend_admin_identity: String,
 }
 
 impl AppConfig {
