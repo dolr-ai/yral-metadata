@@ -38,10 +38,8 @@ impl AppState {
 }
 
 pub async fn init_backend_admin_key(config: &AppConfig) -> Result<ic_agent::Agent> {
-    let admin_id_pem: &str = config.backend_admin_identity.as_ref();
-    let admin_id_pem_by = admin_id_pem.as_bytes();
-    let admin_id =
-        BasicIdentity::from_pem(admin_id_pem_by).expect("Invalid `BACKEND_ADMIN_IDENTITY`");
+    let admin_id = BasicIdentity::from_pem(config.backend_admin_identity.as_slice())
+        .expect("Invalid `BACKEND_ADMIN_IDENTITY`");
 
     Agent::builder()
         .with_url(IC_AGENT_URL)
