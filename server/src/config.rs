@@ -13,7 +13,6 @@ pub struct AppConfig {
     pub redis_url: ConnectionInfo,
     pub jwt_public_key: String,
     pub yral_auth_public_key: String,
-    #[serde(alias = "yral_app_admin_dfx_identity_private_key")]
     pub backend_admin_identity: String,
 }
 
