@@ -10,7 +10,11 @@ use types::{
     SetUserMetadataRes, UserMetadata,
 };
 
-use crate::{auth::verify_token, state::AppState, Error, Result};
+use crate::{
+    auth::verify_token,
+    state::AppState,
+    utils::error::{Error, Result},
+};
 
 pub const METADATA_FIELD: &str = "metadata";
 
