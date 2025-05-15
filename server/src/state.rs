@@ -1,7 +1,5 @@
-use ic_agent::agent::AgentBuilder;
-use ic_agent::identity::BasicIdentity;
+use ic_agent::identity::Secp256k1Identity;
 use ic_agent::Agent;
-use yral_canisters_client::individual_user_template::Ok;
 
 use crate::auth::init_jwt;
 use crate::auth::JwtDetails;
@@ -41,7 +39,7 @@ pub async fn init_backend_admin_key(config: &AppConfig) -> Result<ic_agent::Agen
     let admin_id_pem: &str = config.backend_admin_identity.as_ref();
     let admin_id_pem_by = admin_id_pem.as_bytes();
     let admin_id =
-        BasicIdentity::from_pem(admin_id_pem_by).expect("Invalid `BACKEND_ADMIN_IDENTITY`");
+        Secp256k1Identity::from_pem(admin_id_pem_by).expect("Invalid BACKEND_ADMIN_IDENTITY");
 
     Agent::builder()
         .with_url(IC_AGENT_URL)
