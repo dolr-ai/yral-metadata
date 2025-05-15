@@ -173,10 +173,14 @@ async fn unregister_device(
                 || token.device_fingerprint != registration_token.device_fingerprint
         });
 
+        if notification_key.registration_tokens.is_empty() {
+            user_metadata.notification_key = None;
+        }
+
         let meta_raw = serde_json::to_vec(&user_metadata).map_err(Error::Deser)?;
         let _replaced: bool = conn.hset(user, METADATA_FIELD, &meta_raw).await?;
 
-        log::info!("Device registered successfully");
+        log::info!("Device unregistered successfully");
 
         return Ok(Json(Ok(())));
     }
