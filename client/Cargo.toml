@@ -16,6 +16,7 @@ reqwest = { workspace = true, default-features = false, features = [
 ] }
 thiserror.workspace = true
 ic-agent = { version = "0.38.1", default-features = false }
+yral-types = { workspace = true }
 
 [features]
 native-tls = ["reqwest/native-tls"]
