@@ -10,7 +10,6 @@ pub type ApiResult<T> = Result<T, ApiError>;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DeviceRegistrationToken {
     pub token: String,
-    pub device_fingerprint: String,
 }
 
 impl TryFrom<DeviceRegistrationToken> for Message {
@@ -18,7 +17,7 @@ impl TryFrom<DeviceRegistrationToken> for Message {
     fn try_from(value: DeviceRegistrationToken) -> Result<Self, Self::Error> {
         Message::default()
             .method_name("register_device".into())
-            .args((value.token, value.device_fingerprint))
+            .args((value.token,))
             .map_err(|_| Error::InvalidMessage("Failed to serialize arguments".to_string()))
     }
 }
