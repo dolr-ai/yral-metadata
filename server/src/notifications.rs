@@ -42,20 +42,20 @@ async fn register_device(
 
     let data = match user_metadata.notification_key.as_ref() {
         Some(notification_key) => {
-            let old_registration_token = notification_key
+            let old_registration_token_opt = notification_key
                 .registration_tokens
                 .iter()
-                .find(|token| token.device_fingerprint == registration_token.device_fingerprint)
+                .find(|token| token.token == registration_token.token)
                 .map(|token| token.token.clone());
 
-            if let Some(old_registration_token) = old_registration_token {
-                let data = firebase::notifications::utils::get_remove_request_body(
+            if let Some(old_token_to_remove) = old_registration_token_opt {
+                let remove_data = firebase::notifications::utils::get_remove_request_body(
                     notification_key_name.clone(),
                     notification_key.key.clone(),
-                    old_registration_token,
+                    old_token_to_remove,
                 )?;
 
-                state.firebase.update_notification_devices(data).await?;
+                state.firebase.update_notification_devices(remove_data).await?;
             }
 
             firebase::notifications::utils::get_add_request_body(
@@ -81,11 +81,10 @@ async fn register_device(
         Some(meta) => {
             meta.key = notification_key_from_firebase;
             meta.registration_tokens
-                .retain(|token| token.device_fingerprint != registration_token.device_fingerprint);
+                .retain(|token| token.token != registration_token.token);
 
             meta.registration_tokens.push(DeviceRegistrationToken {
                 token: registration_token.token.clone(),
-                device_fingerprint: registration_token.device_fingerprint.clone(),
             });
         }
         None => {
@@ -93,7 +92,6 @@ async fn register_device(
                 key: notification_key_from_firebase,
                 registration_tokens: vec![DeviceRegistrationToken {
                     token: registration_token.token.clone(),
-                    device_fingerprint: registration_token.device_fingerprint.clone(),
                 }],
             });
         }
@@ -145,12 +143,8 @@ async fn unregister_device(
     let Some(token_to_delete) = notification_key
         .registration_tokens
         .iter()
-        .filter(|token| {
-            token.token == registration_token.token
-                || token.device_fingerprint == registration_token.device_fingerprint
-        })
+        .find(|token| token.token == registration_token.token)
         .map(|token| token.token.clone())
-        .next()
     else {
         return Ok(Json(Err(ApiError::DeviceNotFound)));
     };
@@ -164,10 +158,7 @@ async fn unregister_device(
     state.firebase.update_notification_devices(data).await?;
 
     if let Some(notification_key) = user_metadata.notification_key.as_mut() {
-        notification_key.registration_tokens.retain(|token| {
-            token.token != registration_token.token
-                || token.device_fingerprint != registration_token.device_fingerprint
-        });
+        notification_key.registration_tokens.retain(|token| token.token != registration_token.token);
 
         if notification_key.registration_tokens.is_empty() {
             user_metadata.notification_key = None;
