@@ -11,3 +11,5 @@ candid.workspace = true
 thiserror.workspace = true
 yral-identity = { workspace = true, default-features = false }
 serde_json.workspace = true
+yral-types = { workspace = true }
+ic-agent = {workspace = true}

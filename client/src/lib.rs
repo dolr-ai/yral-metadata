@@ -5,7 +5,7 @@ pub use error::*;
 
 use consts::DEFAULT_API_URL;
 
-use ic_agent::{export::Principal, Identity};
+use ic_agent::{export::Principal, identity::DelegatedIdentity, Identity};
 use reqwest::{
     header::{HeaderMap, HeaderValue, AUTHORIZATION},
     Url,
@@ -18,6 +18,7 @@ use types::{
 use yral_identity::ic_agent::sign_message;
 
 pub use types::{DeviceRegistrationToken, NotificationKey};
+use yral_types::delegated_identity::DelegatedIdentityWire;
 
 #[derive(Clone, Debug)]
 pub struct MetadataClient<const AUTH: bool> {
@@ -97,19 +98,14 @@ impl<const A: bool> MetadataClient<A> {
 
     pub async fn register_device(
         &self,
-        identity: &impl Identity,
+        identity: DelegatedIdentityWire,
         registration_token: DeviceRegistrationToken,
     ) -> Result<RegisterDeviceRes> {
-        let signature = sign_message(
-            identity,
-            registration_token
-                .clone()
-                .try_into()
-                .map_err(|_| Error::Api(types::error::ApiError::AuthTokenMissing))?,
-        )?;
-        let sender = identity
+        let delegated_identity: DelegatedIdentity = DelegatedIdentity::try_from(identity.clone()).map_err(|_| Error::Identity(yral_identity::Error::IdentityMismatch))?;
+        let sender = delegated_identity
             .sender()
-            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+            .map_err(|_| Error::Identity(yral_identity::Error::SenderNotFound))?;
+
         let api_url = self
             .base_url
             .join("notifications/")
@@ -122,7 +118,7 @@ impl<const A: bool> MetadataClient<A> {
             .post(api_url)
             .json(&RegisterDeviceReq {
                 registration_token,
-                signature,
+                delegated_identity_wire: identity,
             })
             .send()
             .await?;
@@ -133,17 +129,11 @@ impl<const A: bool> MetadataClient<A> {
 
     pub async fn unregister_device(
         &self,
-        identity: &impl Identity,
+        identity: DelegatedIdentityWire,
         registration_token: DeviceRegistrationToken,
     ) -> Result<UnregisterDeviceRes> {
-        let signature = sign_message(
-            identity,
-            registration_token
-                .clone()
-                .try_into()
-                .map_err(|_| Error::Api(types::error::ApiError::AuthTokenMissing))?,
-        )?;
-        let sender = identity
+        let delegated_identity: DelegatedIdentity = DelegatedIdentity::try_from(identity.clone()).map_err(|_| Error::Identity(yral_identity::Error::IdentityMismatch))?;
+        let sender = delegated_identity
             .sender()
             .map_err(|_| Error::Identity(yral_identity::Error::SenderNotFound))?;
         let api_url = self
@@ -158,7 +148,7 @@ impl<const A: bool> MetadataClient<A> {
             .delete(api_url)
             .json(&UnregisterDeviceReq {
                 registration_token,
-                signature,
+                delegated_identity_wire: identity,
             })
             .send()
             .await?;
