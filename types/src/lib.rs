@@ -4,13 +4,13 @@ use candid::Principal;
 use error::ApiError;
 use serde::{Deserialize, Serialize};
 use yral_identity::{msg_builder::Message, Error, Signature};
+use yral_types::delegated_identity::DelegatedIdentityWire;
 
 pub type ApiResult<T> = Result<T, ApiError>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct DeviceRegistrationToken {
     pub token: String,
-    pub device_fingerprint: String,
 }
 
 impl TryFrom<DeviceRegistrationToken> for Message {
@@ -18,7 +18,7 @@ impl TryFrom<DeviceRegistrationToken> for Message {
     fn try_from(value: DeviceRegistrationToken) -> Result<Self, Self::Error> {
         Message::default()
             .method_name("register_device".into())
-            .args((value.token, value.device_fingerprint))
+            .args((value.token,))
             .map_err(|_| Error::InvalidMessage("Failed to serialize arguments".to_string()))
     }
 }
@@ -81,18 +81,18 @@ pub struct BulkUsers {
 
 pub type DeleteMetadataBulkRes = ();
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct RegisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,
-    pub signature: Signature,
+    pub delegated_identity_wire: DelegatedIdentityWire,
 }
 
 pub type RegisterDeviceRes = ();
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct UnregisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,
-    pub signature: Signature,
+    pub delegated_identity_wire: DelegatedIdentityWire,
 }
 
 pub type UnregisterDeviceRes = ();
