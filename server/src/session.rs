@@ -6,9 +6,9 @@ use ntex::web::{
 };
 use reqwest::header::AUTHORIZATION;
 use serde::{Deserialize, Serialize};
-use types::ApiResult;
+use types::{ApiResult, CanisterSessionRegisteredRes};
 use yral_canisters_client::{
-    individual_user_template::{self, IndividualUserTemplate, Ok, SessionType},
+    individual_user_template::{self, Canister, IndividualUserTemplate, Ok, SessionType},
     user_index::UserIndex,
 };
 
@@ -34,7 +34,7 @@ async fn update_session_as_registered(
     app_state: State<AppState>,
     canister_id: Path<String>,
     http_request: HttpRequest,
-) -> Result<Json<ApiResult<()>>, APIError> {
+) -> Result<Json<CanisterSessionRegisteredRes>, APIError> {
     let headers = http_request.headers();
 
     let Some(auth_header) = headers.get(AUTHORIZATION) else {
@@ -58,6 +58,12 @@ async fn update_session_as_registered(
 
     let referee_individual_user_template = IndividualUserTemplate(canister_id, ic_agent);
 
+    let mut api_result = CanisterSessionRegisteredRes {
+        success: true,
+        error: None,
+        referral_success: true,
+    };
+
     match referee_individual_user_template
         .update_session_type(SessionType::RegisteredSession)
         .await
@@ -69,15 +75,18 @@ async fn update_session_as_registered(
                     .await
             {
                 log::error!("Error issuing referral reward: {}", e);
+                api_result.referral_success = false;
+                api_result.error = Some(e.to_string());
             }
-
-            Ok(Json(Ok(())))
         }
         yral_canisters_client::individual_user_template::Result22::Err(e) => {
             log::error!("Error updating session type: {}", e);
-            Err(APIError::UserAlreadyRegistered(e))
+            api_result.success = false;
+            api_result.error = Some(e.to_string());
         }
-    }
+    };
+
+    return Ok(Json(api_result));
 }
 
 async fn issue_referral_reward(
