@@ -1,5 +1,3 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use jsonwebtoken::DecodingKey;
 use serde::{Deserialize, Serialize};
 use yral_types::delegated_identity::DelegatedIdentityWire;

@@ -6,9 +6,11 @@ use ntex::web::{
 };
 use reqwest::header::AUTHORIZATION;
 use serde::{Deserialize, Serialize};
-use types::{ApiResult, CanisterSessionRegisteredRes};
+use types::ApiResult;
 use yral_canisters_client::{
-    individual_user_template::{self, Canister, IndividualUserTemplate, Ok, SessionType, UserProfileDetailsForFrontendV2},
+    individual_user_template::{
+        self, IndividualUserTemplate, SessionType, UserProfileDetailsForFrontendV2,
+    },
     user_index::UserIndex,
 };
 
@@ -51,12 +53,13 @@ async fn update_session_as_registered(
 
     let ic_agent = &app_state.backend_admin_ic_agent;
 
-    let canister_id =
-        Principal::from_text(canister_id.as_ref())?;
+    let canister_id = Principal::from_text(canister_id.as_ref())?;
 
     let referee_individual_user_template = IndividualUserTemplate(canister_id, ic_agent);
 
-    let referee_profile = referee_individual_user_template.get_profile_details_v_2().await?;
+    let referee_profile = referee_individual_user_template
+        .get_profile_details_v_2()
+        .await?;
     if referee_profile.principal_id != referree_user_principal {
         return Err(Error::AuthTokenInvalid);
     }
@@ -69,7 +72,12 @@ async fn update_session_as_registered(
         return Err(Error::UpdateSession(e));
     }
 
-    issue_referral_reward(&referee_individual_user_template, referree_user_principal, referee_profile).await?;
+    issue_referral_reward(
+        &referee_individual_user_template,
+        referree_user_principal,
+        referee_profile,
+    )
+    .await?;
 
     Ok(Json(Ok(())))
 }
@@ -77,10 +85,10 @@ async fn update_session_as_registered(
 async fn issue_referral_reward(
     referree_individual_user_template: &IndividualUserTemplate<'_>,
     referree_user_principal: Principal,
-    profile_detials: UserProfileDetailsForFrontendV2
+    profile_detials: UserProfileDetailsForFrontendV2,
 ) -> Result<(), Error> {
     let Some(referral_details) = profile_detials.referrer_details else {
-        return Ok(())
+        return Ok(());
     };
 
     let referrer_canister_id = referral_details.user_canister_id;
@@ -101,15 +109,13 @@ async fn issue_referral_reward(
         )
         .await?;
 
-    let (referee_user_index, referrer_user_index) = referee_user_index.and_then(|referee_user_id| {
-        Some((referee_user_id, referrer_user_index?))
-    }).ok_or_else(|| Error::Unknown("Subnet orchestrator not found".into()))?;
+    let (referee_user_index, referrer_user_index) = referee_user_index
+        .and_then(|referee_user_id| Some((referee_user_id, referrer_user_index?)))
+        .ok_or_else(|| Error::Unknown("Subnet orchestrator not found".into()))?;
 
-    let referrer_user_index =
-        UserIndex(referrer_user_index, referree_individual_user_template.1);
+    let referrer_user_index = UserIndex(referrer_user_index, referree_individual_user_template.1);
 
-    let referee_user_index =
-        UserIndex(referee_user_index, referree_individual_user_template.1);
+    let referee_user_index = UserIndex(referee_user_index, referree_individual_user_template.1);
 
     referee_user_index
         .issue_rewards_for_referral(

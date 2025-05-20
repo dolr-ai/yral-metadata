@@ -83,11 +83,11 @@ impl From<&Error> for ApiResult<()> {
             Error::Agent(e) => {
                 log::warn!("agent error {e}");
                 ApiError::Unknown(e.to_string())
-            },
+            }
             Error::UpdateSession(e) => {
                 log::warn!("update session error {e}");
                 ApiError::UpdateSession(e.clone())
-            },
+            }
         };
         ApiResult::Err(err)
     }

@@ -10,7 +10,7 @@ use crate::utils::yral_auth_jwt::YralAuthJwt;
 
 pub type RedisPool = bb8::Pool<bb8_redis::RedisConnectionManager>;
 
-pub static IC_AGENT_URL: &'static str = "https://ic0.app";
+pub static IC_AGENT_URL: &str = "https://ic0.app";
 
 #[derive(Clone)]
 pub struct AppState {
