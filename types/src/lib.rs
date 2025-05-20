@@ -4,7 +4,6 @@ use candid::Principal;
 use error::ApiError;
 use serde::{Deserialize, Serialize};
 use yral_identity::{msg_builder::Message, Error, Signature};
-use yral_types::delegated_identity::DelegatedIdentityWire;
 
 pub type ApiResult<T> = Result<T, ApiError>;
 
@@ -84,7 +83,7 @@ pub type DeleteMetadataBulkRes = ();
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RegisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,
-    pub delegated_identity_wire: DelegatedIdentityWire,
+    pub signature: Signature,
 }
 
 pub type RegisterDeviceRes = ();
@@ -92,7 +91,7 @@ pub type RegisterDeviceRes = ();
 #[derive(Serialize, Deserialize, Clone)]
 pub struct UnregisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,
-    pub delegated_identity_wire: DelegatedIdentityWire,
+    pub signature: Signature,
 }
 
 pub type UnregisterDeviceRes = ();
