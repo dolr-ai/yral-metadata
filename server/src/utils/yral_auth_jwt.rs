@@ -39,16 +39,6 @@ impl YralAuthJwt {
 
         let expiry = token_message.claims.exp;
 
-        // Check if the token is expired
-        if expiry
-            < SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Time went backwards")
-                .as_secs()
-        {
-            return Err(Error::AuthTokenInvalid);
-        }
-
         if token_message.claims.ext_is_anonymous {
             return Err(Error::AuthTokenInvalid);
         }
