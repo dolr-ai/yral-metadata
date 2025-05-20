@@ -22,7 +22,7 @@ pub struct YralAuthJwt {
 
 impl YralAuthJwt {
     pub fn init(public_key: String) -> Result<Self, Error> {
-        let decoding_key = DecodingKey::from_ed_pem(public_key.as_bytes())?;
+        let decoding_key = DecodingKey::from_ec_pem(public_key.as_bytes())?;
 
         Ok(YralAuthJwt { decoding_key })
     }
