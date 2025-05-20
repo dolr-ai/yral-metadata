@@ -137,6 +137,12 @@ impl Firebase {
         notification_key: NotificationKey,
         data_payload: serde_json::Value,
     ) -> Result<()> {
+        log::info!(
+            "[send_message_to_group] Entered. Notification Key: {}, Data: {:?}",
+            notification_key.key,
+            data_payload
+        );
+
         let client = Client::new();
         let project_id_string =
             env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").map_err(|e| {
@@ -149,6 +155,7 @@ impl Firebase {
             "https://fcm.googleapis.com/v1/projects/{}/messages:send",
             project_id_string
         );
+        log::info!("[send_message_to_group] FCM URL: {}", url);
 
         let firebase_token = self
             .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
@@ -156,10 +163,14 @@ impl Firebase {
 
         let message_body = json!({
             "message": {
-                "token": notification_key,
+                "token": notification_key.key,
                 "data": data_payload
             }
         });
+        log::info!(
+            "[send_message_to_group] FCM Message Body: {:?}",
+            message_body
+        );
 
         let response = client
             .post(url)
