@@ -110,6 +110,7 @@ impl<const A: bool> MetadataClient<A> {
         let sender = identity
             .sender()
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
         let api_url = self
             .base_url
             .join("notifications/")
