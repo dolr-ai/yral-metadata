@@ -1,5 +1,4 @@
 use candid::Principal;
-use ic_agent::{identity::DelegatedIdentity, Identity};
 use ntex::web::{
     self,
     types::{Json, Path, State},
@@ -12,6 +11,7 @@ use types::{
     RegisterDeviceRes, SendNotificationReq, SendNotificationRes, UnregisterDeviceReq,
     UnregisterDeviceRes, UserMetadata,
 };
+use yral_identity::msg_builder::Message;
 
 use crate::{api::METADATA_FIELD, firebase, state::AppState, Error, Result};
 
@@ -21,13 +21,12 @@ async fn register_device(
     user_principal: Path<Principal>,
     req: Json<RegisterDeviceReq>,
 ) -> Result<Json<ApiResult<RegisterDeviceRes>>> {
-    let delegated_identity: DelegatedIdentity = DelegatedIdentity::try_from(req.0.delegated_identity_wire).map_err(|e| Error::Unknown(e.to_string()))?;
+    let signature = req.0.signature;
     let registration_token = req.0.registration_token;
-
-    let sender = delegated_identity.sender().map_err(|e| Error::Unknown(e.to_string()))?;
-    if sender != *user_principal.as_ref() {
-        return Ok(Json(Err(ApiError::Unauthorized)));
-    }
+    signature.verify_identity(
+        *user_principal.as_ref(),
+        Message::try_from(registration_token.clone())?,
+    )?;
 
     let mut conn = state.redis.get().await?;
     let user = user_principal.to_text();
@@ -113,12 +112,15 @@ async fn unregister_device(
     req: Json<UnregisterDeviceReq>,
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
     // Verify the identity of the sender
-    let delegated_identity: DelegatedIdentity = DelegatedIdentity::try_from(req.0.delegated_identity_wire).map_err(|e| Error::Unknown(e.to_string()))?;
+    let signature = req.0.signature;
     let registration_token = req.0.registration_token;
-    let sender = delegated_identity.sender().map_err(|e| Error::Unknown(e.to_string()))?;
-    if sender != *user_principal.as_ref() {
-        return Ok(Json(Err(ApiError::Unauthorized)));
-    }
+    signature.verify_identity(
+        *user_principal.as_ref(),
+        registration_token
+            .clone()
+            .try_into()
+            .map_err(|_| Error::AuthTokenMissing)?,
+    )?;
 
     // Get the user metadata
     let mut conn = state.redis.get().await?;
