@@ -40,4 +40,8 @@ pub enum ApiError {
     UserAlreadyRegistered(String),
     #[error("failed to initialize backend admin ic agent: {0}")]
     BackendAdminIdentityInvalid(String),
+    #[error("invalid principal")]
+    InvalidPrincipal,
+    #[error("failed to update session: {0}")]
+    UpdateSession(String),
 }

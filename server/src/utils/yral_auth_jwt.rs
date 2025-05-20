@@ -37,8 +37,6 @@ impl YralAuthJwt {
         )
         .map_err(Error::Jwt)?;
 
-        let expiry = token_message.claims.exp;
-
         if token_message.claims.ext_is_anonymous {
             return Err(Error::AuthTokenInvalid);
         }
