@@ -76,9 +76,19 @@ async fn register_device(
         }
     };
     let notification_key_from_firebase = if !is_create {
-        state.firebase.update_notification_devices(body).await?.ok_or(Error::Unknown(
-            "add notification key did not return a notification key".to_string(),
-        ))?
+        match state.firebase.update_notification_devices(body).await {
+            Ok(Some(key)) => key,
+            Err(Error::FirebaseApiErr(err_text)) if err_text.contains("notification_key not found") => {
+                let create_body = firebase::notifications::utils::get_create_request_body(
+                    notification_key_name.clone(),
+                    registration_token.token.clone(),
+                )?;
+                state.firebase.update_notification_devices(create_body).await?
+                    .ok_or(Error::Unknown("create notification key did not return a notification key".to_string()))?
+            }
+            Err(e) => return Err(e),
+            Ok(None) => return Err(Error::Unknown("add notification key did not return a notification key".to_string())),
+        }
     } else {
         match state.firebase.update_notification_devices(body.clone()).await {
             Ok(Some(key)) => key,
