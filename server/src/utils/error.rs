@@ -1,12 +1,12 @@
+use ic_agent::export::PrincipalError;
 use ntex::{
     http::{header, StatusCode},
     web,
 };
 use redis::RedisError;
+use std::env::VarError;
 use thiserror::Error;
 use types::{error::ApiError, ApiResult};
-use std::env::VarError;
-
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -36,6 +36,16 @@ pub enum Error {
     EnvironmentVariable(#[from] VarError),
     #[error("Environment variable missing: {0}")]
     EnvironmentVariableMissing(String),
+    #[error("failed to mark user sessin as registered")]
+    UserAlreadyRegistered(String),
+    #[error("failed to initialize backend admin ic agent")]
+    BackendAdminIdentityInvalid(String),
+    #[error("failed to parse principal {0}")]
+    InvalidPrincipal(#[from] PrincipalError),
+    #[error("failed to communicate with IC: {0}")]
+    Agent(#[from] ic_agent::AgentError),
+    #[error("failed to update session: {0}")]
+    UpdateSession(String),
 }
 
 impl From<&Error> for ApiResult<()> {
@@ -62,9 +72,22 @@ impl From<&Error> for ApiResult<()> {
             Error::AuthTokenMissing => ApiError::AuthTokenMissing,
             Error::AuthTokenInvalid => ApiError::AuthToken,
             Error::FirebaseApiErr(e) => ApiError::FirebaseApiError(e.clone()),
+            Error::BackendAdminIdentityInvalid(e) => {
+                ApiError::BackendAdminIdentityInvalid(e.clone())
+            }
             Error::Unknown(e) => ApiError::Unknown(e.clone()),
             Error::EnvironmentVariable(_) => ApiError::EnvironmentVariable,
             Error::EnvironmentVariableMissing(_) => ApiError::EnvironmentVariableMissing,
+            Error::UserAlreadyRegistered(e) => ApiError::UserAlreadyRegistered(e.clone()),
+            Error::InvalidPrincipal(_) => ApiError::InvalidPrincipal,
+            Error::Agent(e) => {
+                log::warn!("agent error {e}");
+                ApiError::Unknown(e.to_string())
+            }
+            Error::UpdateSession(e) => {
+                log::warn!("update session error {e}");
+                ApiError::UpdateSession(e.clone())
+            }
         };
         ApiResult::Err(err)
     }
@@ -86,13 +109,20 @@ impl web::error::WebResponseError for Error {
             | Error::Deser(_)
             | Error::Bb8(_)
             | Error::FirebaseApiErr(_)
-            | Error::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            | Error::Unknown(_)
+            | Error::BackendAdminIdentityInvalid(_)
+            | Error::Agent(_)
+            // don't know whether its the user's fault or not
+            // since update_session_type does not return an exhausitve enum
+            | Error::UpdateSession(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Identity(_)
             | Error::Jwt(_)
             | Error::AuthTokenInvalid
             | Error::AuthTokenMissing => StatusCode::UNAUTHORIZED,
             Error::EnvironmentVariable(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::EnvironmentVariableMissing(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::UserAlreadyRegistered(_)
+            | Error::InvalidPrincipal(_) => StatusCode::BAD_REQUEST,
         }
     }
 }

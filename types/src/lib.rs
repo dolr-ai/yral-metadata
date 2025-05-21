@@ -108,3 +108,10 @@ pub struct SendNotificationReq {
 }
 
 pub type SendNotificationRes = ();
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct CanisterSessionRegisteredRes {
+    pub success: bool,
+    pub error: Option<String>,
+    pub referral_success: bool,
+}

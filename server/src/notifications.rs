@@ -12,7 +12,13 @@ use types::{
     UnregisterDeviceRes, UserMetadata,
 };
 use yral_identity::msg_builder::Message;
-use crate::{api::METADATA_FIELD, firebase, state::AppState, Error, Result};
+
+use crate::{
+    api::METADATA_FIELD,
+    firebase,
+    state::AppState,
+    utils::error::{Error, Result},
+};
 
 #[web::post("/notifications/{user_principal}")]
 async fn register_device(
@@ -54,7 +60,10 @@ async fn register_device(
                     old_token_to_remove,
                 )?;
 
-                state.firebase.update_notification_devices(remove_data).await?;
+                state
+                    .firebase
+                    .update_notification_devices(remove_data)
+                    .await?;
             }
 
             firebase::notifications::utils::get_add_request_body(
@@ -74,8 +83,8 @@ async fn register_device(
         .update_notification_devices(data?)
         .await?
         .ok_or(Error::Unknown(
-            "create/add notification key did not return a notification key".to_string(),
-        ))?;
+        "create/add notification key did not return a notification key".to_string(),
+    ))?;
     match user_metadata.notification_key.as_mut() {
         Some(meta) => {
             meta.key = notification_key_from_firebase;
@@ -156,7 +165,9 @@ async fn unregister_device(
     state.firebase.update_notification_devices(data).await?;
 
     if let Some(notification_key) = user_metadata.notification_key.as_mut() {
-        notification_key.registration_tokens.retain(|token| token.token != registration_token.token);
+        notification_key
+            .registration_tokens
+            .retain(|token| token.token != registration_token.token);
 
         if notification_key.registration_tokens.is_empty() {
             user_metadata.notification_key = None;
@@ -180,12 +191,18 @@ async fn send_notification(
     user_principal: Path<Principal>,
     req: Json<SendNotificationReq>,
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
-    log::info!("[send_notification] Entered for user: {}", user_principal.as_ref().to_text());
+    log::info!(
+        "[send_notification] Entered for user: {}",
+        user_principal.as_ref().to_text()
+    );
 
     // --- Authentication Check ---
-    let expected_api_key = env::var("YRAL_METADATA_USER_NOTIFICATION_API_KEY")
-        .map_err(|_| Error::EnvironmentVariableMissing("YRAL_METADATA_USER_NOTIFICATION_API_KEY not set".to_string()))?;
-    
+    let expected_api_key = env::var("YRAL_METADATA_USER_NOTIFICATION_API_KEY").map_err(|_| {
+        Error::EnvironmentVariableMissing(
+            "YRAL_METADATA_USER_NOTIFICATION_API_KEY not set".to_string(),
+        )
+    })?;
+
     let auth_header = http_req
         .headers()
         .get("Authorization")
@@ -194,16 +211,25 @@ async fn send_notification(
     let provided_token = match auth_header {
         Some(header) if header.starts_with("Bearer ") => &header[7..],
         _ => {
-            log::warn!("[send_notification] Authorization header missing or malformed for user: {}", user_principal.as_ref().to_text());
+            log::warn!(
+                "[send_notification] Authorization header missing or malformed for user: {}",
+                user_principal.as_ref().to_text()
+            );
             return Ok(Json(Err(ApiError::Unauthorized))); // Or Missing Authorization Header
         }
     };
 
     if provided_token != expected_api_key {
-        log::warn!("[send_notification] Invalid API key provided for user: {}", user_principal.as_ref().to_text());
+        log::warn!(
+            "[send_notification] Invalid API key provided for user: {}",
+            user_principal.as_ref().to_text()
+        );
         return Ok(Json(Err(ApiError::Unauthorized))); // Invalid Token
     }
-    log::info!("[send_notification] Authentication successful for user: {}", user_principal.as_ref().to_text());
+    log::info!(
+        "[send_notification] Authentication successful for user: {}",
+        user_principal.as_ref().to_text()
+    );
     // --- End Authentication Check ---
 
     let mut conn = state.redis.get().await?;
@@ -218,19 +244,36 @@ async fn send_notification(
     let user_metadata: UserMetadata = serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
 
     let Some(notification_key) = user_metadata.notification_key else {
-        log::warn!("[send_notification] Notification key not found for user: {}", user);
+        log::warn!(
+            "[send_notification] Notification key not found for user: {}",
+            user
+        );
         return Ok(Json(Err(ApiError::NotificationKeyNotFound)));
     };
-    log::info!("[send_notification] Notification key found for user: {}: {}", user, notification_key.key);
+    log::info!(
+        "[send_notification] Notification key found for user: {}: {}",
+        user,
+        notification_key.key
+    );
 
     let data = req.0.data;
-    log::info!("[send_notification] Preparing to send data for user {}: {:?}", user, data);
+    log::info!(
+        "[send_notification] Preparing to send data for user {}: {:?}",
+        user,
+        data
+    );
 
-    log::info!("[send_notification] Calling send_message_to_group for user: {}", user);
+    log::info!(
+        "[send_notification] Calling send_message_to_group for user: {}",
+        user
+    );
     state
         .firebase
         .send_message_to_group(notification_key, data)
         .await?;
-    log::info!("[send_notification] Successfully sent/processed notification for user: {}", user);
+    log::info!(
+        "[send_notification] Successfully sent/processed notification for user: {}",
+        user
+    );
     Ok(Json(Ok(())))
 }

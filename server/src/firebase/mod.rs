@@ -8,7 +8,7 @@ use yup_oauth2::{
     authenticator::Authenticator, CustomHyperClientBuilder, ServiceAccountAuthenticator,
 };
 
-use crate::error::Error;
+use crate::utils::error::Error;
 
 pub mod notifications;
 

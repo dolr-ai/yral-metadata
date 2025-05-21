@@ -13,7 +13,7 @@ use crate::Result;
 pub mod utils {
     use serde::{Deserialize, Serialize};
 
-    use crate::error::{Error, Result};
+    use crate::utils::error::{Error, Result};
 
     #[derive(Serialize, Deserialize)]
     #[serde(rename_all = "lowercase")]
@@ -139,12 +139,13 @@ impl Firebase {
         data_payload: NotificationPayload,
     ) -> Result<()> {
         let client = Client::new();
-        let project_id_string = env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").map_err(|e| {
-            Error::Unknown(format!(
-                "Missing GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: {}",
-                e
-            ))
-        })?;
+        let project_id_string =
+            env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").map_err(|e| {
+                Error::Unknown(format!(
+                    "Missing GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: {}",
+                    e
+                ))
+            })?;
         let url = format!(
             "https://fcm.googleapis.com/v1/projects/{}/messages:send",
             project_id_string
@@ -161,7 +162,10 @@ impl Firebase {
                 "notification": data_payload
             }
         });
-        log::info!("[send_message_to_group] FCM Message Body: {:?}", message_body);
+        log::info!(
+            "[send_message_to_group] FCM Message Body: {:?}",
+            message_body
+        );
 
         let response = client
             .post(url)
