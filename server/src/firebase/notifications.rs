@@ -4,6 +4,7 @@ use std::env;
 use reqwest::Client;
 use serde_json::json;
 use types::NotificationKey;
+use types::NotificationPayload;
 
 use crate::firebase::Firebase;
 use crate::Error;
@@ -135,10 +136,8 @@ impl Firebase {
     pub async fn send_message_to_group(
         &self,
         notification_key: NotificationKey,
-        data_payload: serde_json::Value,
+        data_payload: NotificationPayload,
     ) -> Result<()> {
-        log::info!("[send_message_to_group] Entered. Notification Key: {}, Data: {:?}", notification_key.key, data_payload);
-
         let client = Client::new();
         let project_id_string = env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").map_err(|e| {
             Error::Unknown(format!(
@@ -159,7 +158,7 @@ impl Firebase {
         let message_body = json!({
             "message": {
                 "token": notification_key.key,
-                "data": data_payload
+                "notification": data_payload
             }
         });
         log::info!("[send_message_to_group] FCM Message Body: {:?}", message_body);
