@@ -45,46 +45,64 @@ async fn register_device(
     let notification_key_name =
         firebase::notifications::utils::get_notification_key_name_from_principal(&user);
 
-    let data = match user_metadata.notification_key.as_ref() {
+    let (body, is_create) = match user_metadata.notification_key.as_ref() {
         Some(notification_key) => {
             let old_registration_token_opt = notification_key
                 .registration_tokens
                 .iter()
                 .find(|token| token.token == registration_token.token)
                 .map(|token| token.token.clone());
-
             if let Some(old_token_to_remove) = old_registration_token_opt {
-                let remove_data = firebase::notifications::utils::get_remove_request_body(
+                let remove_body = firebase::notifications::utils::get_remove_request_body(
                     notification_key_name.clone(),
                     notification_key.key.clone(),
                     old_token_to_remove,
                 )?;
-
-                state
-                    .firebase
-                    .update_notification_devices(remove_data)
-                    .await?;
+                state.firebase.update_notification_devices(remove_body).await?;
             }
-
-            firebase::notifications::utils::get_add_request_body(
-                notification_key_name,
+            let add_body = firebase::notifications::utils::get_add_request_body(
+                notification_key_name.clone(),
                 notification_key.key.clone(),
                 registration_token.token.clone(),
-            )
+            )?;
+            (add_body, false)
         }
-        None => firebase::notifications::utils::get_create_request_body(
-            notification_key_name,
-            registration_token.token.clone(),
-        ),
+        None => {
+            let create_body = firebase::notifications::utils::get_create_request_body(
+                notification_key_name.clone(),
+                registration_token.token.clone(),
+            )?;
+            (create_body, true)
+        }
+    };
+    let notification_key_from_firebase = if !is_create {
+        state.firebase.update_notification_devices(body).await?.ok_or(Error::Unknown(
+            "add notification key did not return a notification key".to_string(),
+        ))?
+    } else {
+        match state.firebase.update_notification_devices(body.clone()).await {
+            Ok(Some(key)) => key,
+            Err(Error::FirebaseApiErr(err_text)) if err_text.contains("notification_key_name exists") || err_text.contains("notification_key") => {
+                let v: serde_json::Value = serde_json::from_str(&err_text)
+                    .map_err(|_| Error::FirebaseApiErr(format!("Failed to parse FCM error: {}", err_text)))?;
+                let existing_key = v.get("notification_key")
+                    .and_then(|val| val.as_str())
+                    .ok_or(Error::FirebaseApiErr(format!("FCM error missing notification_key: {}", err_text)))?
+                    .to_string();
+                let add_body = firebase::notifications::utils::get_add_request_body(
+                    notification_key_name.clone(),
+                    existing_key.clone(),
+                    registration_token.token.clone(),
+                )?;
+                state.firebase.update_notification_devices(add_body).await?
+                    .ok_or(Error::Unknown("add notification key did not return a notification key".to_string()))?;
+                existing_key
+            }
+            Err(e) => return Err(e),
+            Ok(None) => return Err(Error::Unknown("create notification key did not return a notification key".to_string())),
+        }
     };
 
-    let notification_key_from_firebase = state
-        .firebase
-        .update_notification_devices(data?)
-        .await?
-        .ok_or(Error::Unknown(
-        "create/add notification key did not return a notification key".to_string(),
-    ))?;
     match user_metadata.notification_key.as_mut() {
         Some(meta) => {
             meta.key = notification_key_from_firebase;
