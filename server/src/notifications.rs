@@ -185,8 +185,6 @@ async fn send_notification(
     // --- Authentication Check ---
     let expected_api_key = env::var("YRAL_METADATA_USER_NOTIFICATION_API_KEY")
         .map_err(|_| Error::EnvironmentVariableMissing("YRAL_METADATA_USER_NOTIFICATION_API_KEY not set".to_string()))?;
-
-    log::info!("[send_notification] Expected API key: {}", expected_api_key);
     
     let auth_header = http_req
         .headers()
