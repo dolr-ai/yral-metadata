@@ -96,9 +96,15 @@ pub struct UnregisterDeviceReq {
 
 pub type UnregisterDeviceRes = ();
 
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+pub struct NotificationPayload{
+    pub title: String,
+    pub body: String,
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct SendNotificationReq {
-    pub data: serde_json::Value,
+    pub data: NotificationPayload,
 }
 
 pub type SendNotificationRes = ();
