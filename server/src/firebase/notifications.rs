@@ -138,8 +138,6 @@ impl Firebase {
         notification_key: NotificationKey,
         data_payload: NotificationPayload,
     ) -> Result<()> {
-        log::info!("[send_message_to_group] Entered. Notification Key: {}, Data: {:?}", notification_key.key, data_payload);
-
         let client = Client::new();
         let project_id_string = env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID").map_err(|e| {
             Error::Unknown(format!(
