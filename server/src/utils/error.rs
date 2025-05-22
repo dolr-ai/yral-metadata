@@ -68,7 +68,10 @@ impl From<&Error> for ApiResult<()> {
                 log::warn!("deserialization error {e}");
                 ApiError::Deser
             }
-            Error::Jwt(_) => ApiError::Jwt,
+            Error::Jwt(e) => {
+                log::info!("jwt error {e}");
+                ApiError::Jwt
+            }
             Error::AuthTokenMissing => ApiError::AuthTokenMissing,
             Error::AuthTokenInvalid => ApiError::AuthToken,
             Error::FirebaseApiErr(e) => ApiError::FirebaseApiError(e.clone()),
