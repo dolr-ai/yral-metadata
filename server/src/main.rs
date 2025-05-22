@@ -33,6 +33,7 @@ async fn main() -> Result<()> {
             .service(register_device)
             .service(unregister_device)
             .service(send_notification)
+            .service(session::update_session_as_registered)
     })
     .bind(conf.bind_address)?
     .run()
