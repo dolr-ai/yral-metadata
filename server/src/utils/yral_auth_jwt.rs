@@ -1,6 +1,7 @@
 use jsonwebtoken::DecodingKey;
 use serde::{Deserialize, Serialize};
-use yral_types::delegated_identity::DelegatedIdentityWire;
+
+use crate::consts::YRAL_AUTH_V2_ACCESS_TOKEN_ISS;
 
 use super::error::Error;
 
@@ -13,8 +14,8 @@ pub struct YralAuthClaim {
     pub sub: String,
     nonce: Option<String>,
     ext_is_anonymous: bool,
-    ext_delegated_identity: DelegatedIdentityWire,
 }
+
 #[derive(Clone)]
 pub struct YralAuthJwt {
     pub decoding_key: DecodingKey,
@@ -28,12 +29,13 @@ impl YralAuthJwt {
     }
 
     pub fn verify_token(&self, token: &str) -> Result<YralAuthClaim, Error> {
-        let token_message = jsonwebtoken::decode::<YralAuthClaim>(
-            token,
-            &self.decoding_key,
-            &jsonwebtoken::Validation::default(),
-        )
-        .map_err(Error::Jwt)?;
+        let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256);
+        validation.set_issuer(&[YRAL_AUTH_V2_ACCESS_TOKEN_ISS]);
+        validation.validate_aud = false;
+
+        let token_message =
+            jsonwebtoken::decode::<YralAuthClaim>(token, &self.decoding_key, &validation)
+                .map_err(Error::Jwt)?;
 
         if token_message.claims.ext_is_anonymous {
             return Err(Error::AuthTokenInvalid);
