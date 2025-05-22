@@ -97,7 +97,7 @@ pub struct UnregisterDeviceReq {
 pub type UnregisterDeviceRes = ();
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
-pub struct NotificationPayload {
+pub struct NotificationPayload{
     pub title: String,
     pub body: String,
 }
