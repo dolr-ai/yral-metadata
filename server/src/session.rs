@@ -30,7 +30,7 @@ pub struct YralAuthClaim {
 }
 
 #[web::post("/update_session_as_registered/{canister_id}")]
-async fn update_session_as_registered(
+pub async fn update_session_as_registered(
     app_state: State<AppState>,
     canister_id: Path<String>,
     http_request: HttpRequest,
