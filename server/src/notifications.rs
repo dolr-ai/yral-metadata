@@ -45,21 +45,17 @@ async fn register_device(
     let notification_key_name =
         firebase::notifications::utils::get_notification_key_name_from_principal(&user);
 
+    // Check if this token already exists
+    if let Some(notification_key) = &user_metadata.notification_key {
+        if notification_key.registration_tokens.iter().any(|token| token.token == registration_token.token) {
+            // Token already registered, no need to do anything
+            log::info!("Device already registered with this token");
+            return Ok(Json(Ok(())));
+        }
+    }
+
     let (body, is_create) = match user_metadata.notification_key.as_ref() {
         Some(notification_key) => {
-            let old_registration_token_opt = notification_key
-                .registration_tokens
-                .iter()
-                .find(|token| token.token == registration_token.token)
-                .map(|token| token.token.clone());
-            if let Some(old_token_to_remove) = old_registration_token_opt {
-                let remove_body = firebase::notifications::utils::get_remove_request_body(
-                    notification_key_name.clone(),
-                    notification_key.key.clone(),
-                    old_token_to_remove,
-                )?;
-                state.firebase.update_notification_devices(remove_body).await?;
-            }
             let add_body = firebase::notifications::utils::get_add_request_body(
                 notification_key_name.clone(),
                 notification_key.key.clone(),
@@ -75,6 +71,7 @@ async fn register_device(
             (create_body, true)
         }
     };
+
     let notification_key_from_firebase = if !is_create {
         match state.firebase.update_notification_devices(body).await {
             Ok(Some(key)) => key,
@@ -113,15 +110,16 @@ async fn register_device(
         }
     };
 
+    // Update the metadata with the new token
     match user_metadata.notification_key.as_mut() {
         Some(meta) => {
             meta.key = notification_key_from_firebase;
-            meta.registration_tokens
-                .retain(|token| token.token != registration_token.token);
-
-            meta.registration_tokens.push(DeviceRegistrationToken {
-                token: registration_token.token.clone(),
-            });
+            // Only add the token if it doesn't already exist
+            if !meta.registration_tokens.iter().any(|token| token.token == registration_token.token) {
+                meta.registration_tokens.push(DeviceRegistrationToken {
+                    token: registration_token.token.clone(),
+                });
+            }
         }
         None => {
             user_metadata.notification_key = Some(NotificationKey {
