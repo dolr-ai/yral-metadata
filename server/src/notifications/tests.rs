@@ -4,7 +4,7 @@ mod tests {
     use types::{error::ApiError, DeviceRegistrationToken, NotificationKey};
 
     use crate::{
-        notification_mocks::{
+        notifications::mocks::{
             MockFCM, MockRedisConnection, MockRegisterDeviceReq,
             MockUnregisterDeviceReq, MockUserMetadata,
         },
@@ -119,7 +119,7 @@ mod tests {
             );
         mock_fcm.notification_groups.insert(
             notification_key_name.clone(),
-            crate::notification_mocks::DeviceGroup {
+            crate::notifications::mocks::DeviceGroup {
                 notification_key: initial_fcm_key.clone(),
                 registration_tokens: vec![existing_token.clone()],
             },
@@ -208,7 +208,7 @@ mod tests {
             );
         mock_fcm.notification_groups.insert(
             notification_key_name.clone(),
-            crate::notification_mocks::DeviceGroup {
+            crate::notifications::mocks::DeviceGroup {
                 notification_key: initial_fcm_key.clone(),
                 registration_tokens: vec![existing_token_str.clone()],
             },
@@ -322,7 +322,7 @@ mod tests {
             );
         mock_fcm.notification_groups.insert(
             notification_key_name.clone(),
-            crate::notification_mocks::DeviceGroup {
+            crate::notifications::mocks::DeviceGroup {
                 notification_key: fcm_key.clone(),
                 registration_tokens: vec![token_to_unregister.clone(), other_token.clone()],
             },
@@ -397,7 +397,7 @@ mod tests {
             );
         mock_fcm.notification_groups.insert(
             notification_key_name.clone(),
-            crate::notification_mocks::DeviceGroup {
+            crate::notifications::mocks::DeviceGroup {
                 notification_key: fcm_key.clone(),
                 registration_tokens: vec![last_token.clone()],
             },
@@ -469,7 +469,7 @@ mod tests {
             );
         mock_fcm.notification_groups.insert(
             notification_key_name.clone(),
-            crate::notification_mocks::DeviceGroup {
+            crate::notifications::mocks::DeviceGroup {
                 notification_key: fcm_key.clone(),
                 registration_tokens: vec![existing_token.clone()],
             },
@@ -607,7 +607,7 @@ mod tests {
             );
         mock_fcm.notification_groups.insert(
             notification_key_name.clone(),
-            crate::notification_mocks::DeviceGroup {
+            crate::notifications::mocks::DeviceGroup {
                 notification_key: fcm_key.clone(),
                 registration_tokens: vec![device_token.clone()],
             },
@@ -784,7 +784,7 @@ mod tests {
         let fcm_existing_key = format!("fcm_key_for_{}", user_principal_text);
         mock_fcm.notification_groups.insert(
             notification_key_name.clone(),
-            crate::notification_mocks::DeviceGroup {
+            crate::notifications::mocks::DeviceGroup {
                 notification_key: fcm_existing_key.clone(),
                 registration_tokens: vec!["old_token_in_fcm".to_string()], // Group exists with a token
             },
@@ -963,7 +963,7 @@ mod tests {
             );
         mock_fcm.notification_groups.insert(
             notification_key_name.clone(),
-            crate::notification_mocks::DeviceGroup {
+            crate::notifications::mocks::DeviceGroup {
                 notification_key: fcm_key.clone(),
                 registration_tokens: vec![token_in_both.clone()], // Missing token_in_redis_only
             },

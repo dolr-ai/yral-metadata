@@ -12,6 +12,10 @@ use types::{
     UnregisterDeviceRes, UserMetadata,
 };
 
+#[cfg(test)]
+mod mocks;
+mod tests;
+
 use crate::{
     api::METADATA_FIELD,
     firebase,
@@ -34,9 +38,9 @@ pub async fn register_device_impl(
     #[cfg(not(test))] user_principal: Path<Principal>,
     #[cfg(test)] user_principal: String,
     #[cfg(not(test))] req: Json<RegisterDeviceReq>,
-    #[cfg(test)] req: Json<crate::notification_mocks::MockRegisterDeviceReq>,
-    #[cfg(test)] mock_fcm: &mut crate::notification_mocks::MockFCM,
-    #[cfg(test)] mock_redis: &mut crate::notification_mocks::MockRedisConnection,
+    #[cfg(test)] req: Json<mocks::MockRegisterDeviceReq>,
+    #[cfg(test)] mock_fcm: &mut mocks::MockFCM,
+    #[cfg(test)] mock_redis: &mut mocks::MockRedisConnection,
 ) -> Result<Json<ApiResult<RegisterDeviceRes>>> {
     let registration_token = req.0.registration_token;
 
@@ -121,7 +125,7 @@ pub async fn register_device_impl(
                 #[cfg(test)]
                 {
                     mock_fcm.update_notification_devices(
-                        crate::notification_mocks::MockFCMEnum::Remove,
+                        mocks::MockFCMEnum::Remove,
                         notification_key_name.clone(),
                         old_token_to_remove,
                     )?;
@@ -151,7 +155,7 @@ pub async fn register_device_impl(
             #[cfg(test)]
             {
                 mock_fcm.update_notification_devices(
-                    crate::notification_mocks::MockFCMEnum::Add,
+                    mocks::MockFCMEnum::Add,
                     notification_key_name.clone(),
                     registration_token.token.clone(),
                 )
@@ -179,7 +183,7 @@ pub async fn register_device_impl(
                 {
                     mock_fcm
                         .update_notification_devices(
-                            crate::notification_mocks::MockFCMEnum::Create,
+                            mocks::MockFCMEnum::Create,
                             notification_key_name.clone(),
                             registration_token.token.clone(),
                         )?
@@ -207,7 +211,7 @@ pub async fn register_device_impl(
             #[cfg(test)]
             {
                 mock_fcm.update_notification_devices(
-                    crate::notification_mocks::MockFCMEnum::Create,
+                    mocks::MockFCMEnum::Create,
                     notification_key_name.clone(),
                     registration_token.token.clone(),
                 )
@@ -248,7 +252,7 @@ pub async fn register_device_impl(
                 {
                     mock_fcm
                         .update_notification_devices(
-                            crate::notification_mocks::MockFCMEnum::Add,
+                            mocks::MockFCMEnum::Add,
                             notification_key_name.clone(),
                             registration_token.token.clone(),
                         )?
@@ -323,9 +327,9 @@ pub async fn unregister_device_impl(
     #[cfg(not(test))] user_principal: Path<Principal>,
     #[cfg(test)] user_principal: String,
     #[cfg(not(test))] req: Json<UnregisterDeviceReq>,
-    #[cfg(test)] req: Json<crate::notification_mocks::MockUnregisterDeviceReq>,
-    #[cfg(test)] mock_fcm: &mut crate::notification_mocks::MockFCM,
-    #[cfg(test)] mock_redis: &mut crate::notification_mocks::MockRedisConnection,
+    #[cfg(test)] req: Json<mocks::MockUnregisterDeviceReq>,
+    #[cfg(test)] mock_fcm: &mut mocks::MockFCM,
+    #[cfg(test)] mock_redis: &mut mocks::MockRedisConnection,
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
     let registration_token = req.0.registration_token;
 
@@ -412,7 +416,7 @@ pub async fn unregister_device_impl(
         #[cfg(test)]
         {
             mock_fcm.update_notification_devices(
-                crate::notification_mocks::MockFCMEnum::Remove,
+                mocks::MockFCMEnum::Remove,
                 notification_key_name,
                 token_to_delete,
             )
@@ -482,8 +486,8 @@ pub async fn send_notification_impl(
     #[cfg(not(test))] user_principal: Path<Principal>,
     #[cfg(test)] user_principal: String,
     req: Json<SendNotificationReq>,
-    #[cfg(test)] mock_fcm: &mut crate::notification_mocks::MockFCM,
-    #[cfg(test)] mock_redis: &mut crate::notification_mocks::MockRedisConnection,
+    #[cfg(test)] mock_fcm: &mut mocks::MockFCM,
+    #[cfg(test)] mock_redis: &mut mocks::MockRedisConnection,
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
     #[cfg(not(test))]
     {

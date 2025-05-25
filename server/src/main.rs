@@ -3,13 +3,10 @@ mod auth;
 mod config;
 mod consts;
 mod firebase;
-#[cfg(test)]
-mod notification_mocks;
-mod notifications;
-mod notifications_test;
 mod session;
 mod state;
 mod utils;
+mod notifications;
 use utils::error::*;
 
 #[ntex::main]
