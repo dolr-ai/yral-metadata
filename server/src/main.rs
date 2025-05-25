@@ -3,41 +3,48 @@ mod auth;
 mod config;
 mod consts;
 mod firebase;
+#[cfg(test)]
+mod notification_mocks;
 mod notifications;
-mod state;
-use config::AppConfig;
-use ntex::web;
+mod notifications_test;
 mod session;
+mod state;
 mod utils;
-
-use api::*;
-use notifications::*;
-use ntex_cors::Cors;
-use state::AppState;
 use utils::error::*;
 
 #[ntex::main]
 async fn main() -> Result<()> {
-    let conf = AppConfig::load()?;
     env_logger::init();
 
-    let state = AppState::new(&conf).await?;
+    #[cfg(not(test))]
+    {
+        use api::*;
+        use config::AppConfig;
+        use notifications::*;
+        use ntex::web;
+        use ntex_cors::Cors;
+        use state::AppState;
 
-    web::HttpServer::new(move || {
-        web::App::new()
-            .wrap(Cors::default())
-            .state(state.clone())
-            .service(set_user_metadata)
-            .service(get_user_metadata)
-            .service(delete_metadata_bulk)
-            .service(register_device)
-            .service(unregister_device)
-            .service(send_notification)
-            .service(session::update_session_as_registered)
-    })
-    .bind(conf.bind_address)?
-    .run()
-    .await?;
+        let conf = AppConfig::load()?;
+
+        let state = AppState::new(&conf).await?;
+
+        web::HttpServer::new(move || {
+            web::App::new()
+                .wrap(Cors::default())
+                .state(state.clone())
+                .service(set_user_metadata)
+                .service(get_user_metadata)
+                .service(delete_metadata_bulk)
+                .service(register_device)
+                .service(unregister_device)
+                .service(send_notification)
+                .service(session::update_session_as_registered)
+        })
+        .bind(conf.bind_address)?
+        .run()
+        .await?;
+    }
 
     Ok(())
 }

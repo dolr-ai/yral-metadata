@@ -7,6 +7,7 @@ use types::NotificationKey;
 use types::NotificationPayload;
 
 use crate::firebase::Firebase;
+
 use crate::Error;
 use crate::Result;
 
