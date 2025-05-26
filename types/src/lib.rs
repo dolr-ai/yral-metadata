@@ -3,7 +3,7 @@ pub mod error;
 use candid::Principal;
 use error::ApiError;
 use serde::{Deserialize, Serialize};
-use yral_identity::{msg_builder::Message, Error, Signature};
+pub use yral_identity::{msg_builder::Message, Error, Signature};
 
 pub type ApiResult<T> = Result<T, ApiError>;
 

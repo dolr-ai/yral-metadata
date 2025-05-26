@@ -14,8 +14,6 @@ use crate::Result;
 pub mod utils {
     use serde::{Deserialize, Serialize};
 
-    use crate::utils::error::{Error, Result};
-
     #[derive(Serialize, Deserialize)]
     #[serde(rename_all = "lowercase")]
     pub enum Operation {
@@ -40,42 +38,39 @@ pub mod utils {
     pub fn get_create_request_body(
         notification_key_name: String,
         registration_token: String,
-    ) -> Result<String> {
-        serde_json::to_string(&Request {
+    ) -> Request {
+        Request {
             operation: Operation::Create,
             notification_key_name,
             notification_key: None,
             registration_ids: vec![registration_token],
-        })
-        .map_err(|e| Error::Unknown(e.to_string()))
+        }
     }
 
     pub fn get_add_request_body(
         notification_key_name: String,
         notification_key: String,
         registration_token: String,
-    ) -> Result<String> {
-        serde_json::to_string(&Request {
+    ) -> Request {
+        Request {
             operation: Operation::Add,
             notification_key_name,
             notification_key: Some(notification_key),
             registration_ids: vec![registration_token],
-        })
-        .map_err(|e| Error::Unknown(e.to_string()))
+        }
     }
 
     pub fn get_remove_request_body(
         notification_key_name: String,
         notification_key: String,
         registration_token: String,
-    ) -> Result<String> {
-        serde_json::to_string(&Request {
+    ) -> Request {
+        Request {
             operation: Operation::Remove,
             notification_key_name,
             notification_key: Some(notification_key),
             registration_ids: vec![registration_token],
-        })
-        .map_err(|e| Error::Unknown(e.to_string()))
+        }
     }
 }
 
