@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Deserialize, Serialize, Error, Debug)]
+#[derive(Deserialize, Serialize, Error, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum ApiError {
     #[error("invalid signature provided")]

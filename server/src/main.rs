@@ -4,22 +4,22 @@ mod config;
 mod consts;
 mod firebase;
 mod notifications;
-mod state;
-use config::AppConfig;
-use ntex::web;
 mod session;
+mod state;
 mod utils;
-
 use api::*;
+use config::AppConfig;
 use notifications::*;
+use ntex::web;
 use ntex_cors::Cors;
 use state::AppState;
 use utils::error::*;
 
 #[ntex::main]
 async fn main() -> Result<()> {
-    let conf = AppConfig::load()?;
     env_logger::init();
+
+    let conf = AppConfig::load()?;
 
     let state = AppState::new(&conf).await?;
 
