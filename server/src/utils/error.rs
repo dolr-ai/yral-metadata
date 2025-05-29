@@ -9,28 +9,33 @@ use thiserror::Error;
 use types::{error::ApiError, ApiResult};
 use utoipa::ToSchema;
 
+use crate::services::error_wrappers::{
+    AgentErrorDetail, Bb8RedisErrorDetail, ConfigErrorDetail, IdentityErrorDetail, JwtErrorDetail,
+    PrincipalErrorDetail, RedisErrorDetail, SerdeJsonErrorDetail, VarErrorDetail,
+};
+
 #[derive(Error, Debug, ToSchema)]
 pub enum Error {
     #[error(transparent)]
     #[schema(value_type = String)]
     IO(#[from] std::io::Error),
     #[error("failed to load config {0}")]
-    #[schema(value_type = String)]
+    #[schema(value_type = ConfigErrorDetail)]
     Config(#[from] config::ConfigError),
     #[error("{0}")]
-    #[schema(value_type = String)]
+    #[schema(value_type = IdentityErrorDetail)]
     Identity(#[from] yral_identity::Error),
     #[error("{0}")]
-    #[schema(value_type = String)]
+    #[schema(value_type = RedisErrorDetail)]
     Redis(#[from] RedisError),
     #[error("{0}")]
-    #[schema(value_type = String)]
+    #[schema(value_type = Bb8RedisErrorDetail)]
     Bb8(#[from] bb8::RunError<RedisError>),
     #[error("failed to deserialize json {0}")]
-    #[schema(value_type = String)]
-    Deser(serde_json::Error),
+    #[schema(value_type = SerdeJsonErrorDetail)]
+    Deser(#[from] serde_json::Error),
     #[error("jwt {0}")]
-    #[schema(value_type = String)]
+    #[schema(value_type = JwtErrorDetail)]
     Jwt(#[from] jsonwebtoken::errors::Error),
     #[error("auth token missing")]
     AuthTokenMissing,
@@ -41,20 +46,19 @@ pub enum Error {
     #[error("unknown error {0}")]
     Unknown(String),
     #[error("Environment variable error: {0}")]
-    #[schema(value_type = String)]
+    #[schema(value_type = VarErrorDetail)]
     EnvironmentVariable(#[from] VarError),
     #[error("Environment variable missing: {0}")]
-    #[schema(value_type = String)]
     EnvironmentVariableMissing(String),
     #[error("failed to mark user sessin as registered")]
     UserAlreadyRegistered(String),
     #[error("failed to initialize backend admin ic agent")]
     BackendAdminIdentityInvalid(String),
     #[error("failed to parse principal {0}")]
-    #[schema(value_type = String)]
+    #[schema(value_type = PrincipalErrorDetail)]
     InvalidPrincipal(#[from] PrincipalError),
     #[error("failed to communicate with IC: {0}")]
-    #[schema(value_type = String)]
+    #[schema(value_type = AgentErrorDetail)]
     Agent(#[from] ic_agent::AgentError),
     #[error("failed to update session: {0}")]
     UpdateSession(String),
