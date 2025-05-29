@@ -9,7 +9,6 @@ use bb8;
 use config;
 use jsonwebtoken::errors as jwt_errors;
 use serde_json;
-use thiserror::Error;
 use utoipa::ToSchema;
 use yral_identity;
 
@@ -276,7 +275,9 @@ impl From<jwt_errors::Error> for JwtErrorDetail {
             jwt_errors::ErrorKind::RsaFailedSigning => "RsaFailedSigning".to_string(),
             jwt_errors::ErrorKind::InvalidAlgorithmName => "InvalidAlgorithmName".to_string(),
             jwt_errors::ErrorKind::InvalidKeyFormat => "InvalidKeyFormat".to_string(),
-            jwt_errors::ErrorKind::MissingRequiredClaim(claim) => format!("MissingRequiredClaim: {}", claim),
+            jwt_errors::ErrorKind::MissingRequiredClaim(claim) => {
+                format!("MissingRequiredClaim: {}", claim)
+            }
             jwt_errors::ErrorKind::ExpiredSignature => "ExpiredSignature".to_string(),
             jwt_errors::ErrorKind::InvalidIssuer => "InvalidIssuer".to_string(),
             jwt_errors::ErrorKind::InvalidAudience => "InvalidAudience".to_string(),
@@ -285,7 +286,9 @@ impl From<jwt_errors::Error> for JwtErrorDetail {
             jwt_errors::ErrorKind::InvalidAlgorithm => "InvalidAlgorithm".to_string(),
             jwt_errors::ErrorKind::MissingAlgorithm => "MissingAlgorithm".to_string(),
             jwt_errors::ErrorKind::Base64(err) => format!("Base64: {}", err),
-            jwt_errors::ErrorKind::Json(json_err) => format!("Json: {}", SerdeJsonErrorDetail::from(json_err.deref())),
+            jwt_errors::ErrorKind::Json(json_err) => {
+                format!("Json: {}", SerdeJsonErrorDetail::from(json_err.deref()))
+            }
             jwt_errors::ErrorKind::Utf8(err) => format!("Utf8: {}", err),
             jwt_errors::ErrorKind::Crypto(err) => format!("Crypto: {}", err),
             _ => "Unknown".to_string(),
@@ -352,7 +355,8 @@ impl From<PrincipalError> for PrincipalErrorDetail {
             },
             PrincipalError::CheckSequenceNotMatch() => PrincipalErrorDetail {
                 kind: "CheckSequenceNotMatch".to_string(),
-                message: "CRC32 check sequence doesn't match with calculated from Principal bytes.".to_string(),
+                message: "CRC32 check sequence doesn't match with calculated from Principal bytes."
+                    .to_string(),
             },
             PrincipalError::AbnormalGrouped(principal) => PrincipalErrorDetail {
                 kind: "AbnormalGrouped".to_string(),
