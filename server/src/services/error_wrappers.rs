@@ -423,338 +423,191 @@ impl From<PrincipalError> for PrincipalErrorDetail {
 }
 
 #[derive(Debug, ToSchema, Serialize)]
-pub enum AgentErrorDetail {
-    /// The replica URL was invalid.
+pub struct AgentErrorDetail {
+    #[schema(example = "InvalidReplicaUrl")]
+    pub kind: String,
     #[schema(example = "Invalid Replica URL: \"https://replica.example.com\"")]
-    InvalidReplicaUrl(String),
-
-    /// The request timed out.
-    #[schema(example = "The request timed out while waiting for a response.")]
-    TimeoutWaitingForResponse,
-
-    /// An error occurred when signing with the identity.
-    #[schema(example = "Identity had a signing error: \"Invalid signature\"")]
-    SigningError(String),
-
-    /// The data fetched was invalid CBOR.
-    #[schema(example = "Invalid CBOR data, could not deserialize: \"Invalid CBOR data\"")]
-    InvalidCborData(String),
-
-    /// There was an error calculating a request ID.
-    #[schema(example = "Cannot calculate a RequestID: \"Invalid request ID\"")]
-    CannotCalculateRequestId(String),
-
-    /// There was an error when de/serializing with Candid.
-    #[schema(example = "Candid returned an error: \"Invalid candid\"")]
-    CandidError(String),
-
-    /// There was an error parsing a URL.
-    #[schema(example = "Cannot parse url: \"Invalid URL\"")]
-    UrlParseError(String),
-
-    /// The HTTP method was invalid.
-    #[schema(example = "Invalid method: \"Invalid method\"")]
-    InvalidMethodError(String),
-
-    /// The principal string was not a valid principal.
-    #[schema(example = "Cannot parse Principal: \"Invalid principal\"")]
-    PrincipalError(String),
-
-    /// The subnet rejected the message.
-    #[schema(
-        example = "The replica returned a rejection error: reject code 1, reject message \"Reject message\", error code 2"
-    )]
-    CertifiedReject(String),
-
-    /// The replica rejected the message. This rejection cannot be verified as authentic.
-    #[schema(
-        example = "The replica returned a rejection error: reject code 1, reject message \"Reject message\", error code 2"
-    )]
-    UncertifiedReject(String),
-
-    /// The replica returned an HTTP error.
-    #[schema(example = "The replica returned an HTTP Error: \"Invalid HTTP error\"")]
-    HttpError(String),
-
-    /// The status endpoint returned an invalid status.
-    #[schema(example = "Status endpoint returned an invalid status.")]
-    InvalidReplicaStatus,
-
-    /// The call was marked done, but no reply was provided.
-    #[schema(
-        example = "Call was marked as done but we never saw the reply. Request ID: \"Request ID\""
-    )]
-    RequestStatusDoneNoReply(String),
-
-    /// A string error occurred in an external tool.
-    #[schema(example = "A tool returned a string message error: \"Invalid message\"")]
-    MessageError(String),
-
-    /// There was an error reading a LEB128 value.
-    #[schema(example = "Error reading LEB128 value: \"Invalid LEB128 value\"")]
-    Leb128ReadError(String),
-
-    /// A string was invalid UTF-8.
-    #[schema(example = "Error in UTF-8 string: \"Invalid UTF-8 string\"")]
-    Utf8ReadError(String),
-
-    /// The lookup path was absent in the certificate.
-    #[schema(example = "The lookup path (\"path\") is absent in the certificate.")]
-    LookupPathAbsent(String),
-
-    /// The lookup path was unknown in the certificate.
-    #[schema(example = "The lookup path (\"path\") is unknown in the certificate.")]
-    LookupPathUnknown(String),
-
-    /// The lookup path did not make sense for the certificate.
-    #[schema(example = "The lookup path (\"path\") does not make sense for the certificate.")]
-    LookupPathError(String),
-
-    /// The request status at the requested path was invalid.
-    #[schema(example = "The request status (\"status\") at path (\"path\") is invalid.")]
-    InvalidRequestStatus(String, String),
-
-    /// The certificate verification for a read_state call failed.
-    #[schema(example = "Certificate verification failed.")]
-    CertificateVerificationFailed,
-
-    /// The signature verification for a query call failed.
-    #[schema(example = "Query signature verification failed.")]
-    QuerySignatureVerificationFailed,
-
-    /// The certificate contained a delegation that does not include the effective_canister_id in the canister_ranges field.
-    #[schema(
-        example = "Certificate is not authorized to respond to queries for this canister. While developing: Did you forget to set effective_canister_id?"
-    )]
-    CertificateNotAuthorized,
-
-    /// The certificate was older than allowed by the `ingress_expiry`.
-    #[schema(
-        example = "Certificate is stale (over \"duration\"). Is the computer's clock synchronized?"
-    )]
-    CertificateOutdated(String),
-
-    /// The certificate contained more than one delegation.
-    #[schema(example = "The certificate contained more than one delegation")]
-    CertificateHasTooManyDelegations,
-
-    /// The query response did not contain any node signatures.
-    #[schema(example = "Query response did not contain any node signatures")]
-    MissingSignature,
-
-    /// The query response contained a malformed signature.
-    #[schema(example = "Query response contained a malformed signature")]
-    MalformedSignature,
-
-    /// The read-state response contained a malformed public key.
-    #[schema(example = "Read state response contained a malformed public key")]
-    MalformedPublicKey,
-
-    /// The query response contained more node signatures than the subnet has nodes.
-    #[schema(
-        example = "Query response contained too many signatures (1, exceeding the subnet's total nodes: 2)"
-    )]
-    TooManySignatures {
-        /// The number of provided signatures.
-        had: usize,
-        /// The number of nodes on the subnet.
-        needed: usize,
-    },
-
-    /// There was a length mismatch between the expected and actual length of the BLS DER-encoded public key.
-    #[schema(example = "BLS DER-encoded public key must be 32 bytes long, but is 33 bytes long.")]
-    DerKeyLengthMismatch {
-        /// The expected length of the key.
-        expected: usize,
-        /// The actual length of the key.
-        actual: usize,
-    },
-
-    /// There was a mismatch between the expected and actual prefix of the BLS DER-encoded public key.
-    #[schema(
-        example = "BLS DER-encoded public key is invalid. Expected the following prefix: [1, 2, 3], but got [4, 5, 6]"
-    )]
-    DerPrefixMismatch {
-        /// The expected key prefix.
-        expected: Vec<u8>,
-        /// The actual key prefix.
-        actual: Vec<u8>,
-    },
-
-    /// The status response did not contain a root key.
-    #[schema(example = "The status response did not contain a root key.  Status: \"Status\"")]
-    NoRootKeyInStatus(String),
-
-    /// The invocation to the wallet call forward method failed with an error.
-    #[schema(
-        example = "The invocation to the wallet call forward method failed with the error: \"Invalid error\""
-    )]
-    WalletCallFailed(String),
-
-    /// The wallet operation failed.
-    #[schema(example = "The  wallet operation failed: \"Invalid error\"")]
-    WalletError(String),
-
-    /// The wallet canister must be upgraded. See [`dfx wallet upgrade`](https://internetcomputer.org/docs/current/references/cli-reference/dfx-wallet)
-    #[schema(example = "The wallet canister must be upgraded: \"Invalid error\"")]
-    WalletUpgradeRequired(String),
-
-    /// The response size exceeded the provided limit.
-    #[schema(example = "Response size exceeded limit.")]
-    ResponseSizeExceededLimit,
-
-    /// An unknown error occurred during communication with the replica.
-    #[schema(
-        example = "An error happened during communication with the replica: \"Transport error details\""
-    )]
-    TransportError(String),
-
-    /// There was a mismatch between the expected and actual CBOR data during inspection.
-    #[schema(
-        example = "There is a mismatch between the CBOR encoded call and the arguments: field \"field\", value in argument is \"value_arg\", value in CBOR is \"value_cbor\""
-    )]
-    CallDataMismatch {
-        /// The field that was mismatched.
-        field: String,
-        /// The value that was expected to be in the CBOR.
-        value_arg: String,
-        /// The value that was actually in the CBOR.
-        value_cbor: String,
-    },
-
-    /// The rejected call had an invalid reject code (valid range 1..5).
-    #[schema(example = "The rejected call had an invalid reject code (valid range 1..5).")]
-    InvalidRejectCode(String),
-
-    /// Route provider failed to generate a url for some reason.
-    #[schema(example = "Route provider failed to generate url: \"Invalid error\"")]
-    RouteProviderError(String),
-
-    /// Invalid HTTP response.
-    #[schema(example = "Invalid HTTP response: \"Invalid HTTP response\"")]
-    InvalidHttpResponse(String),
+    pub message: String,
 }
 
 impl From<ic_agent::AgentError> for AgentErrorDetail {
     fn from(e: ic_agent::AgentError) -> Self {
         match e {
-            ic_agent::AgentError::InvalidReplicaUrl(url) => {
-                AgentErrorDetail::InvalidReplicaUrl(url)
-            }
-            ic_agent::AgentError::TimeoutWaitingForResponse() => {
-                AgentErrorDetail::TimeoutWaitingForResponse
-            }
-            ic_agent::AgentError::SigningError(error) => AgentErrorDetail::SigningError(error),
-            ic_agent::AgentError::InvalidCborData(error) => {
-                AgentErrorDetail::InvalidCborData(error.to_string())
-            }
-            ic_agent::AgentError::CannotCalculateRequestId(error) => {
-                AgentErrorDetail::CannotCalculateRequestId(error.to_string())
-            }
-            ic_agent::AgentError::CandidError(error) => {
-                AgentErrorDetail::CandidError(error.to_string())
-            }
-            ic_agent::AgentError::UrlParseError(error) => {
-                AgentErrorDetail::UrlParseError(error.to_string())
-            }
-            ic_agent::AgentError::InvalidMethodError(error) => {
-                AgentErrorDetail::InvalidMethodError(error.to_string())
-            }
-            ic_agent::AgentError::PrincipalError(error) => {
-                AgentErrorDetail::PrincipalError(error.to_string())
-            }
-            ic_agent::AgentError::CertifiedReject(error) => {
-                AgentErrorDetail::CertifiedReject(format!("{:?}", error))
-            }
-            ic_agent::AgentError::UncertifiedReject(error) => {
-                AgentErrorDetail::UncertifiedReject(format!("{:?}", error))
-            }
-            ic_agent::AgentError::HttpError(error) => {
-                AgentErrorDetail::HttpError(format!("{:?}", error))
-            }
-            ic_agent::AgentError::InvalidReplicaStatus => AgentErrorDetail::InvalidReplicaStatus,
-            ic_agent::AgentError::RequestStatusDoneNoReply(error) => {
-                AgentErrorDetail::RequestStatusDoneNoReply(error)
-            }
-            ic_agent::AgentError::MessageError(error) => AgentErrorDetail::MessageError(error),
-            ic_agent::AgentError::Leb128ReadError(error) => {
-                AgentErrorDetail::Leb128ReadError(error.to_string())
-            }
-            ic_agent::AgentError::Utf8ReadError(error) => {
-                AgentErrorDetail::Utf8ReadError(error.to_string())
-            }
-            ic_agent::AgentError::LookupPathAbsent(error) => {
-                AgentErrorDetail::LookupPathAbsent(format!("{:?}", error))
-            }
-            ic_agent::AgentError::LookupPathUnknown(error) => {
-                AgentErrorDetail::LookupPathUnknown(format!("{:?}", error))
-            }
-            ic_agent::AgentError::LookupPathError(error) => {
-                AgentErrorDetail::LookupPathError(format!("{:?}", error))
-            }
-            ic_agent::AgentError::InvalidRequestStatus(status, path) => {
-                AgentErrorDetail::InvalidRequestStatus(
-                    format!("{:?}", status),
-                    format!("{:?}", path),
-                )
-            }
-            ic_agent::AgentError::CertificateVerificationFailed() => {
-                AgentErrorDetail::CertificateVerificationFailed
-            }
-            ic_agent::AgentError::QuerySignatureVerificationFailed => {
-                AgentErrorDetail::QuerySignatureVerificationFailed
-            }
-            ic_agent::AgentError::CertificateNotAuthorized() => {
-                AgentErrorDetail::CertificateNotAuthorized
-            }
-            ic_agent::AgentError::CertificateOutdated(duration) => {
-                AgentErrorDetail::CertificateOutdated(format!("{:?}", duration))
-            }
-            ic_agent::AgentError::CertificateHasTooManyDelegations => {
-                AgentErrorDetail::CertificateHasTooManyDelegations
-            }
-            ic_agent::AgentError::MissingSignature => AgentErrorDetail::MissingSignature,
-            ic_agent::AgentError::MalformedSignature => AgentErrorDetail::MalformedSignature,
-            ic_agent::AgentError::MalformedPublicKey => AgentErrorDetail::MalformedPublicKey,
-            ic_agent::AgentError::TooManySignatures { had, needed } => {
-                AgentErrorDetail::TooManySignatures { had, needed }
-            }
-            ic_agent::AgentError::DerKeyLengthMismatch { expected, actual } => {
-                AgentErrorDetail::DerKeyLengthMismatch { expected, actual }
-            }
-            ic_agent::AgentError::DerPrefixMismatch { expected, actual } => {
-                AgentErrorDetail::DerPrefixMismatch { expected, actual }
-            }
-            ic_agent::AgentError::NoRootKeyInStatus(s) => {
-                AgentErrorDetail::NoRootKeyInStatus(s.to_string())
-            }
-            ic_agent::AgentError::WalletCallFailed(s) => AgentErrorDetail::WalletCallFailed(s),
-            ic_agent::AgentError::WalletError(s) => AgentErrorDetail::WalletError(s),
-            ic_agent::AgentError::WalletUpgradeRequired(s) => {
-                AgentErrorDetail::WalletUpgradeRequired(s)
-            }
-            ic_agent::AgentError::ResponseSizeExceededLimit() => {
-                AgentErrorDetail::ResponseSizeExceededLimit
-            }
-            ic_agent::AgentError::TransportError(e) => {
-                AgentErrorDetail::TransportError(e.to_string())
-            }
+            ic_agent::AgentError::InvalidReplicaUrl(url) => AgentErrorDetail {
+                kind: "InvalidReplicaUrl".to_string(),
+                message: format!("Invalid Replica URL: \"{}\"", url),
+            },
+            ic_agent::AgentError::TimeoutWaitingForResponse() => AgentErrorDetail {
+                kind: "TimeoutWaitingForResponse".to_string(),
+                message: "The request timed out while waiting for a response.".to_string(),
+            },
+            ic_agent::AgentError::SigningError(error) => AgentErrorDetail {
+                kind: "SigningError".to_string(),
+                message: format!("Identity had a signing error: \"{}\"", error),
+            },
+            ic_agent::AgentError::InvalidCborData(error) => AgentErrorDetail {
+                kind: "InvalidCborData".to_string(),
+                message: format!("Invalid CBOR data, could not deserialize: \"{}\"", error.to_string()),
+            },
+            ic_agent::AgentError::CannotCalculateRequestId(error) => AgentErrorDetail {
+                kind: "CannotCalculateRequestId".to_string(),
+                message: format!("Cannot calculate a RequestID: \"{}\"", error.to_string()),
+            },
+            ic_agent::AgentError::CandidError(error) => AgentErrorDetail {
+                kind: "CandidError".to_string(),
+                message: format!("Candid returned an error: \"{}\"", error.to_string()),
+            },
+            ic_agent::AgentError::UrlParseError(error) => AgentErrorDetail {
+                kind: "UrlParseError".to_string(),
+                message: format!("Cannot parse url: \"{}\"", error.to_string()),
+            },
+            ic_agent::AgentError::InvalidMethodError(error) => AgentErrorDetail {
+                kind: "InvalidMethodError".to_string(),
+                message: format!("Invalid method: \"{}\"", error.to_string()),
+            },
+            ic_agent::AgentError::PrincipalError(error) => AgentErrorDetail {
+                kind: "PrincipalError".to_string(),
+                message: format!("Cannot parse Principal: \"{}\"", error.to_string()),
+            },
+            ic_agent::AgentError::CertifiedReject(error) => AgentErrorDetail {
+                kind: "CertifiedReject".to_string(),
+                message: format!("The replica returned a certified rejection error: {:?}", error),
+            },
+            ic_agent::AgentError::UncertifiedReject(error) => AgentErrorDetail {
+                kind: "UncertifiedReject".to_string(),
+                message: format!("The replica returned an uncertified rejection error: {:?}", error),
+            },
+            ic_agent::AgentError::HttpError(error) => AgentErrorDetail {
+                kind: "HttpError".to_string(),
+                message: format!("The replica returned an HTTP Error: {:?}", error),
+            },
+            ic_agent::AgentError::InvalidReplicaStatus => AgentErrorDetail {
+                kind: "InvalidReplicaStatus".to_string(),
+                message: "Status endpoint returned an invalid status.".to_string(),
+            },
+            ic_agent::AgentError::RequestStatusDoneNoReply(request_id) => AgentErrorDetail {
+                kind: "RequestStatusDoneNoReply".to_string(),
+                message: format!("Call was marked as done but we never saw the reply. Request ID: \"{}\"", request_id),
+            },
+            ic_agent::AgentError::MessageError(msg) => AgentErrorDetail {
+                kind: "MessageError".to_string(),
+                message: format!("A tool returned a string message error: \"{}\"", msg),
+            },
+            ic_agent::AgentError::Leb128ReadError(error) => AgentErrorDetail {
+                kind: "Leb128ReadError".to_string(),
+                message: format!("Error reading LEB128 value: \"{}\"", error.to_string()),
+            },
+            ic_agent::AgentError::Utf8ReadError(error) => AgentErrorDetail {
+                kind: "Utf8ReadError".to_string(),
+                message: format!("Error in UTF-8 string: \"{}\"", error.to_string()),
+            },
+            ic_agent::AgentError::LookupPathAbsent(path) => AgentErrorDetail {
+                kind: "LookupPathAbsent".to_string(),
+                message: format!("The lookup path ({:?}) is absent in the certificate.", path),
+            },
+            ic_agent::AgentError::LookupPathUnknown(path) => AgentErrorDetail {
+                kind: "LookupPathUnknown".to_string(),
+                message: format!("The lookup path ({:?}) is unknown in the certificate.", path),
+            },
+            ic_agent::AgentError::LookupPathError(path) => AgentErrorDetail {
+                kind: "LookupPathError".to_string(),
+                message: format!("The lookup path ({:?}) does not make sense for the certificate.", path),
+            },
+            ic_agent::AgentError::InvalidRequestStatus(status, path) => AgentErrorDetail {
+                kind: "InvalidRequestStatus".to_string(),
+                message: format!("The request status ({:?}) at path ({:?}) is invalid.", status, path),
+            },
+            ic_agent::AgentError::CertificateVerificationFailed() => AgentErrorDetail {
+                kind: "CertificateVerificationFailed".to_string(),
+                message: "Certificate verification failed.".to_string(),
+            },
+            ic_agent::AgentError::QuerySignatureVerificationFailed => AgentErrorDetail {
+                kind: "QuerySignatureVerificationFailed".to_string(),
+                message: "Query signature verification failed.".to_string(),
+            },
+            ic_agent::AgentError::CertificateNotAuthorized() => AgentErrorDetail {
+                kind: "CertificateNotAuthorized".to_string(),
+                message: "Certificate is not authorized to respond to queries for this canister. While developing: Did you forget to set effective_canister_id?".to_string(),
+            },
+            ic_agent::AgentError::CertificateOutdated(duration) => AgentErrorDetail {
+                kind: "CertificateOutdated".to_string(),
+                message: format!("Certificate is stale (over {:?}). Is the computer's clock synchronized?", duration),
+            },
+            ic_agent::AgentError::CertificateHasTooManyDelegations => AgentErrorDetail {
+                kind: "CertificateHasTooManyDelegations".to_string(),
+                message: "The certificate contained more than one delegation.".to_string(),
+            },
+            ic_agent::AgentError::MissingSignature => AgentErrorDetail {
+                kind: "MissingSignature".to_string(),
+                message: "Query response did not contain any node signatures.".to_string(),
+            },
+            ic_agent::AgentError::MalformedSignature => AgentErrorDetail {
+                kind: "MalformedSignature".to_string(),
+                message: "Query response contained a malformed signature.".to_string(),
+            },
+            ic_agent::AgentError::MalformedPublicKey => AgentErrorDetail {
+                kind: "MalformedPublicKey".to_string(),
+                message: "Read state response contained a malformed public key.".to_string(),
+            },
+            ic_agent::AgentError::TooManySignatures { had, needed } => AgentErrorDetail {
+                kind: "TooManySignatures".to_string(),
+                message: format!("Query response contained too many signatures (had {}, exceeding the subnet's total nodes: {}).", had, needed),
+            },
+            ic_agent::AgentError::DerKeyLengthMismatch { expected, actual } => AgentErrorDetail {
+                kind: "DerKeyLengthMismatch".to_string(),
+                message: format!("BLS DER-encoded public key must be {} bytes long, but is {} bytes long.", expected, actual),
+            },
+            ic_agent::AgentError::DerPrefixMismatch { expected, actual } => AgentErrorDetail {
+                kind: "DerPrefixMismatch".to_string(),
+                message: format!("BLS DER-encoded public key is invalid. Expected the following prefix: {:?}, but got {:?}", expected, actual),
+            },
+            ic_agent::AgentError::NoRootKeyInStatus(status_string) => AgentErrorDetail {
+                kind: "NoRootKeyInStatus".to_string(),
+                message: format!("The status response did not contain a root key. Status: \"{}\"", status_string.to_string()),
+            },
+            ic_agent::AgentError::WalletCallFailed(error_string) => AgentErrorDetail {
+                kind: "WalletCallFailed".to_string(),
+                message: format!("The invocation to the wallet call forward method failed with the error: \"{}\"", error_string),
+            },
+            ic_agent::AgentError::WalletError(error_string) => AgentErrorDetail {
+                kind: "WalletError".to_string(),
+                message: format!("The wallet operation failed: \"{}\"", error_string),
+            },
+            ic_agent::AgentError::WalletUpgradeRequired(error_string) => AgentErrorDetail {
+                kind: "WalletUpgradeRequired".to_string(),
+                message: format!("The wallet canister must be upgraded: \"{}\"", error_string),
+            },
+            ic_agent::AgentError::ResponseSizeExceededLimit() => AgentErrorDetail {
+                kind: "ResponseSizeExceededLimit".to_string(),
+                message: "Response size exceeded limit.".to_string(),
+            },
+            ic_agent::AgentError::TransportError(transport_error) => AgentErrorDetail {
+                kind: "TransportError".to_string(),
+                message: format!("An error happened during communication with the replica: \"{}\"", transport_error.to_string()),
+            },
             ic_agent::AgentError::CallDataMismatch {
                 field,
                 value_arg,
                 value_cbor,
-            } => AgentErrorDetail::CallDataMismatch {
-                field,
-                value_arg,
-                value_cbor,
+            } => AgentErrorDetail {
+                kind: "CallDataMismatch".to_string(),
+                message: format!(
+                    "There is a mismatch between the CBOR encoded call and the arguments: field \"{}\", value in argument is \"{}\", value in CBOR is \"{}\"",
+                    field, value_arg, value_cbor
+                ),
             },
-            ic_agent::AgentError::InvalidRejectCode(e) => {
-                AgentErrorDetail::InvalidRejectCode(e.to_string())
-            }
-            ic_agent::AgentError::RouteProviderError(s) => AgentErrorDetail::RouteProviderError(s),
-            ic_agent::AgentError::InvalidHttpResponse(s) => {
-                AgentErrorDetail::InvalidHttpResponse(s)
-            }
+            ic_agent::AgentError::InvalidRejectCode(reject_code_val) => AgentErrorDetail {
+                kind: "InvalidRejectCode".to_string(),
+                message: format!("The rejected call had an invalid reject code {}. Valid range is 1-5.", reject_code_val.to_string()),
+            },
+            ic_agent::AgentError::RouteProviderError(error_string) => AgentErrorDetail {
+                kind: "RouteProviderError".to_string(),
+                message: format!("Route provider failed to generate url: \"{}\"", error_string),
+            },
+            ic_agent::AgentError::InvalidHttpResponse(response_string) => AgentErrorDetail {
+                kind: "InvalidHttpResponse".to_string(),
+                message: format!("Invalid HTTP response: \"{}\"", response_string),
+            },
         }
     }
 }
