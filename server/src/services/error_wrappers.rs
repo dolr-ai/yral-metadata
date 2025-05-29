@@ -33,65 +33,59 @@ impl From<std::io::Error> for IoErrorDetail {
 }
 
 #[derive(Debug, ToSchema, Serialize)]
-pub enum ConfigErrorDetail {
+pub struct ConfigErrorDetail {
+    #[schema(example = "Frozen")]
+    pub kind: String,
     #[schema(example = "Configuration is frozen and no further mutations can be made.")]
-    Frozen,
-
-    #[schema(example = "Configuration property was not found")]
-    NotFound(String),
-
-    #[schema(example = "Configuration path could not be parsed.")]
-    PathParse(String),
-
-    FileParse {
-        #[schema(example = "/path/to/config.json")]
-        uri: Option<String>,
-        #[schema(example = "EOF while parsing a value")]
-        cause: String,
-    },
-
-    Type {
-        #[schema(example = "/path/to/config.json")]
-        origin: Option<String>,
-
-        #[schema(example = "EOF while parsing a value")]
-        unexpected: String,
-
-        #[schema(example = "String")]
-        expected: &'static str,
-
-        #[schema(example = "key")]
-        key: Option<String>,
-    },
-
-    Message(String),
-
-    Foreign(String),
+    pub message: String,
 }
 
 impl From<config::ConfigError> for ConfigErrorDetail {
     fn from(e: config::ConfigError) -> Self {
         match e {
-            config::ConfigError::Frozen => ConfigErrorDetail::Frozen,
-            config::ConfigError::NotFound(s) => ConfigErrorDetail::NotFound(s),
-            config::ConfigError::PathParse(s) => ConfigErrorDetail::PathParse(format!("{:?}", s)),
-            config::ConfigError::FileParse { uri, cause } => ConfigErrorDetail::FileParse {
-                uri,
-                cause: cause.to_string(),
+            config::ConfigError::Frozen => ConfigErrorDetail {
+                kind: "Frozen".to_string(),
+                message: "Configuration is frozen and no further mutations can be made.".to_string(),
+            },
+            config::ConfigError::NotFound(s) => ConfigErrorDetail {
+                kind: "NotFound".to_string(),
+                message: format!("Configuration property not found: {}", s),
+            },
+            config::ConfigError::PathParse(s) => ConfigErrorDetail {
+                kind: "PathParse".to_string(),
+                message: format!("Configuration path could not be parsed: {:?}", s),
+            },
+            config::ConfigError::FileParse { uri, cause } => ConfigErrorDetail {
+                kind: "FileParse".to_string(),
+                message: format!(
+                    "Configuration file could not be parsed. URI: {:?}, Cause: {}",
+                    uri,
+                    cause.to_string()
+                ),
             },
             config::ConfigError::Type {
                 origin,
                 unexpected,
                 expected,
                 key,
-            } => ConfigErrorDetail::Type {
-                origin,
-                unexpected: unexpected.to_string(),
-                expected,
-                key,
+            } => ConfigErrorDetail {
+                kind: "Type".to_string(),
+                message: format!(
+                    "Configuration type error. Origin: {:?}, Unexpected: {}, Expected: {}, Key: {:?}",
+                    origin,
+                    unexpected.to_string(),
+                    expected,
+                    key
+                ),
             },
-            config::ConfigError::Message(s) => ConfigErrorDetail::Message(s),
-            config::ConfigError::Foreign(e) => ConfigErrorDetail::Foreign(e.to_string()),
+            config::ConfigError::Message(s) => ConfigErrorDetail {
+                kind: "Message".to_string(),
+                message: s,
+            },
+            config::ConfigError::Foreign(e) => ConfigErrorDetail {
+                kind: "Foreign".to_string(),
+                message: format!("Foreign error: {}", e.to_string()),
+            },
         }
     }
 }
@@ -199,18 +193,26 @@ impl From<RedisError> for RedisErrorDetail {
 }
 
 #[derive(Debug, ToSchema, Serialize)]
-#[serde(tag = "type", content = "payload")]
-pub enum Bb8RedisErrorDetail {
-    Timeout,
-    User(RedisErrorDetail),
+pub struct Bb8RedisErrorDetail {
+    #[schema(example = "Timeout")]
+    pub kind: String,
+    #[schema(example = "Connection timed out")]
+    pub message: String,
 }
 
 impl From<bb8::RunError<RedisError>> for Bb8RedisErrorDetail {
     fn from(e: bb8::RunError<RedisError>) -> Self {
         match e {
-            bb8::RunError::TimedOut => Bb8RedisErrorDetail::Timeout,
+            bb8::RunError::TimedOut => Bb8RedisErrorDetail {
+                kind: "Timeout".to_string(),
+                message: "Connection pool timeout".to_string(),
+            },
             bb8::RunError::User(redis_err) => {
-                Bb8RedisErrorDetail::User(RedisErrorDetail::from(redis_err))
+                let detail = RedisErrorDetail::from(redis_err);
+                Bb8RedisErrorDetail {
+                    kind: format!("UserError.{:?}", detail.kind),
+                    message: detail.detail,
+                }
             }
         }
     }
@@ -258,166 +260,107 @@ impl std::fmt::Display for SerdeJsonErrorDetail {
 
 #[derive(Debug, ToSchema, Serialize)]
 pub struct JwtErrorDetail {
-    pub kind: JwtErrorKind,
+    #[schema(example = "InvalidToken")]
+    pub kind: String,
     #[schema(example = "Expired token")]
     pub message: String,
 }
 
-#[derive(Debug, ToSchema, Serialize)]
-pub enum JwtErrorKind {
-    #[schema(example = "When a token doesn't have a valid JWT shape")]
-    InvalidToken,
-    #[schema(example = "When the signature doesn't match")]
-    InvalidSignature,
-    #[schema(example = "When the secret given is not a valid ECDSA key")]
-    InvalidEcdsaKey,
-    #[schema(example = "When the secret given is not a valid RSA key")]
-    InvalidRsaKey(String),
-    #[schema(example = "We could not sign with the given key")]
-    RsaFailedSigning,
-    #[schema(
-        example = "When the algorithm from string doesn't match the one passed to `from_str`"
-    )]
-    InvalidAlgorithmName,
-    #[schema(example = "When a key is provided with an invalid format")]
-    InvalidKeyFormat,
-
-    #[schema(example = "When a claim required by the validation is not present")]
-    MissingRequiredClaim(String),
-    #[schema(example = "When a token's `exp` claim indicates that it has expired")]
-    ExpiredSignature,
-    #[schema(example = "When a token's `iss` claim does not match the expected issuer")]
-    InvalidIssuer,
-    #[schema(
-        example = "When a token's `aud` claim does not match one of the expected audience values"
-    )]
-    InvalidAudience,
-    #[schema(
-        example = "When a token's `sub` claim does not match one of the expected subject values"
-    )]
-    InvalidSubject,
-    #[schema(example = "When a token's `nbf` claim represents a time in the future")]
-    ImmatureSignature,
-    #[schema(
-        example = "When the algorithm in the header doesn't match the one passed to `decode` or the encoding/decoding key used doesn't match the alg requested"
-    )]
-    InvalidAlgorithm,
-    #[schema(example = "When the Validation struct does not contain at least 1 algorithm")]
-    MissingAlgorithm,
-
-    #[schema(example = "An error happened when decoding some base64 text")]
-    Base64(String),
-    #[schema(example = "An error happened while serializing/deserializing JSON")]
-    Json(SerdeJsonErrorDetail),
-    #[schema(example = "Some of the text was invalid UTF-8")]
-    Utf8(String),
-    #[schema(example = "Something unspecified went wrong with crypto")]
-    Crypto(String),
-    #[schema(example = "Unknown error")]
-    Unknown,
-}
-
-impl From<&jwt_errors::ErrorKind> for JwtErrorKind {
-    fn from(e: &jwt_errors::ErrorKind) -> Self {
-        match e {
-            jwt_errors::ErrorKind::InvalidToken => JwtErrorKind::InvalidToken,
-            jwt_errors::ErrorKind::InvalidSignature => JwtErrorKind::InvalidSignature,
-            jwt_errors::ErrorKind::InvalidEcdsaKey => JwtErrorKind::InvalidEcdsaKey,
-            jwt_errors::ErrorKind::InvalidRsaKey(e) => JwtErrorKind::InvalidRsaKey(e.to_string()),
-            jwt_errors::ErrorKind::RsaFailedSigning => JwtErrorKind::RsaFailedSigning,
-            jwt_errors::ErrorKind::InvalidAlgorithmName => JwtErrorKind::InvalidAlgorithmName,
-            jwt_errors::ErrorKind::InvalidKeyFormat => JwtErrorKind::InvalidKeyFormat,
-            jwt_errors::ErrorKind::MissingRequiredClaim(e) => {
-                JwtErrorKind::MissingRequiredClaim(e.to_string())
-            }
-            jwt_errors::ErrorKind::ExpiredSignature => JwtErrorKind::ExpiredSignature,
-            jwt_errors::ErrorKind::InvalidIssuer => JwtErrorKind::InvalidIssuer,
-            jwt_errors::ErrorKind::InvalidAudience => JwtErrorKind::InvalidAudience,
-            jwt_errors::ErrorKind::InvalidSubject => JwtErrorKind::InvalidSubject,
-            jwt_errors::ErrorKind::ImmatureSignature => JwtErrorKind::ImmatureSignature,
-            jwt_errors::ErrorKind::InvalidAlgorithm => JwtErrorKind::InvalidAlgorithm,
-            jwt_errors::ErrorKind::MissingAlgorithm => JwtErrorKind::MissingAlgorithm,
-            jwt_errors::ErrorKind::Base64(e) => JwtErrorKind::Base64(e.to_string()),
-            jwt_errors::ErrorKind::Json(e) => {
-                JwtErrorKind::Json(SerdeJsonErrorDetail::from(e.deref()))
-            }
-            jwt_errors::ErrorKind::Utf8(e) => JwtErrorKind::Utf8(e.to_string()),
-            jwt_errors::ErrorKind::Crypto(e) => JwtErrorKind::Crypto(e.to_string()),
-            _ => JwtErrorKind::Unknown,
-        }
-    }
-}
 impl From<jwt_errors::Error> for JwtErrorDetail {
     fn from(e: jwt_errors::Error) -> Self {
+        let kind_str = match e.kind() {
+            jwt_errors::ErrorKind::InvalidToken => "InvalidToken".to_string(),
+            jwt_errors::ErrorKind::InvalidSignature => "InvalidSignature".to_string(),
+            jwt_errors::ErrorKind::InvalidEcdsaKey => "InvalidEcdsaKey".to_string(),
+            jwt_errors::ErrorKind::InvalidRsaKey(err) => format!("InvalidRsaKey: {}", err),
+            jwt_errors::ErrorKind::RsaFailedSigning => "RsaFailedSigning".to_string(),
+            jwt_errors::ErrorKind::InvalidAlgorithmName => "InvalidAlgorithmName".to_string(),
+            jwt_errors::ErrorKind::InvalidKeyFormat => "InvalidKeyFormat".to_string(),
+            jwt_errors::ErrorKind::MissingRequiredClaim(claim) => format!("MissingRequiredClaim: {}", claim),
+            jwt_errors::ErrorKind::ExpiredSignature => "ExpiredSignature".to_string(),
+            jwt_errors::ErrorKind::InvalidIssuer => "InvalidIssuer".to_string(),
+            jwt_errors::ErrorKind::InvalidAudience => "InvalidAudience".to_string(),
+            jwt_errors::ErrorKind::InvalidSubject => "InvalidSubject".to_string(),
+            jwt_errors::ErrorKind::ImmatureSignature => "ImmatureSignature".to_string(),
+            jwt_errors::ErrorKind::InvalidAlgorithm => "InvalidAlgorithm".to_string(),
+            jwt_errors::ErrorKind::MissingAlgorithm => "MissingAlgorithm".to_string(),
+            jwt_errors::ErrorKind::Base64(err) => format!("Base64: {}", err),
+            jwt_errors::ErrorKind::Json(json_err) => format!("Json: {}", SerdeJsonErrorDetail::from(json_err.deref())),
+            jwt_errors::ErrorKind::Utf8(err) => format!("Utf8: {}", err),
+            jwt_errors::ErrorKind::Crypto(err) => format!("Crypto: {}", err),
+            _ => "Unknown".to_string(),
+        };
         Self {
-            kind: JwtErrorKind::from(e.kind()),
+            kind: kind_str,
             message: e.to_string(),
         }
     }
 }
 
 #[derive(Debug, ToSchema, Serialize)]
-#[serde(tag = "type")]
-pub enum VarErrorDetail {
-    #[schema(example = "Environment variable not present")]
-    NotPresent,
-    NotUnicode {
-        #[schema(example = "some_value")]
-        original_value_lossy: String,
-    },
+pub struct VarErrorDetail {
+    #[schema(example = "NotPresent")]
+    pub kind: String,
+    #[schema(example = "Environment variable not present, or not unicode")]
+    pub message: String,
 }
 
 impl From<VarError> for VarErrorDetail {
     fn from(e: VarError) -> Self {
         match e {
-            VarError::NotPresent => VarErrorDetail::NotPresent,
-            VarError::NotUnicode(os_string) => VarErrorDetail::NotUnicode {
-                original_value_lossy: os_string.to_string_lossy().into_owned(),
+            VarError::NotPresent => VarErrorDetail {
+                kind: "NotPresent".to_string(),
+                message: "Environment variable not present".to_string(),
+            },
+            VarError::NotUnicode(os_string) => VarErrorDetail {
+                kind: "NotUnicode".to_string(),
+                message: format!(
+                    "Environment variable not unicode. Original value (lossy): {}",
+                    os_string.to_string_lossy()
+                ),
             },
         }
     }
 }
 
-#[derive(Debug, ToSchema, Serialize, Error)]
-pub enum PrincipalErrorDetail {
-    #[error("Bytes is longer than 29 bytes.")]
+#[derive(Debug, ToSchema, Serialize)]
+pub struct PrincipalErrorDetail {
+    #[schema(example = "BytesTooLong")]
+    pub kind: String,
     #[schema(example = "Bytes is longer than 29 bytes.")]
-    BytesTooLong,
-
-    #[error("Text must be in valid Base32 encoding.")]
-    #[schema(example = "Text must be in valid Base32 encoding.")]
-    InvalidBase32,
-
-    #[error("Text is too short.")]
-    #[schema(example = "Text is too short.")]
-    TextTooShort,
-
-    #[error("Text is too long.")]
-    #[schema(example = "Text is too long.")]
-    TextTooLong,
-
-    #[error("CRC32 check sequence doesn't match with calculated from Principal bytes.")]
-    #[schema(example = "CRC32 check sequence doesn't match with calculated from Principal bytes.")]
-    CheckSequenceNotMatch,
-
-    #[error(r#"Text should be separated by - (dash) every 5 characters: expected "{0}""#)]
-    #[schema(
-        example = "Text should be separated by - (dash) every 5 characters: expected \"12345-67890\""
-    )]
-    AbnormalGrouped(String),
+    pub message: String,
 }
 
 impl From<PrincipalError> for PrincipalErrorDetail {
     fn from(e: PrincipalError) -> Self {
         match e {
-            PrincipalError::BytesTooLong() => PrincipalErrorDetail::BytesTooLong,
-            PrincipalError::InvalidBase32() => PrincipalErrorDetail::InvalidBase32,
-            PrincipalError::TextTooShort() => PrincipalErrorDetail::TextTooShort,
-            PrincipalError::TextTooLong() => PrincipalErrorDetail::TextTooLong,
-            PrincipalError::CheckSequenceNotMatch() => PrincipalErrorDetail::CheckSequenceNotMatch,
-            PrincipalError::AbnormalGrouped(principal) => {
-                PrincipalErrorDetail::AbnormalGrouped(principal.to_text())
-            }
+            PrincipalError::BytesTooLong() => PrincipalErrorDetail {
+                kind: "BytesTooLong".to_string(),
+                message: "Bytes is longer than 29 bytes.".to_string(),
+            },
+            PrincipalError::InvalidBase32() => PrincipalErrorDetail {
+                kind: "InvalidBase32".to_string(),
+                message: "Text must be in valid Base32 encoding.".to_string(),
+            },
+            PrincipalError::TextTooShort() => PrincipalErrorDetail {
+                kind: "TextTooShort".to_string(),
+                message: "Text is too short.".to_string(),
+            },
+            PrincipalError::TextTooLong() => PrincipalErrorDetail {
+                kind: "TextTooLong".to_string(),
+                message: "Text is too long.".to_string(),
+            },
+            PrincipalError::CheckSequenceNotMatch() => PrincipalErrorDetail {
+                kind: "CheckSequenceNotMatch".to_string(),
+                message: "CRC32 check sequence doesn't match with calculated from Principal bytes.".to_string(),
+            },
+            PrincipalError::AbnormalGrouped(principal) => PrincipalErrorDetail {
+                kind: "AbnormalGrouped".to_string(),
+                message: format!(
+                    "Text should be separated by - (dash) every 5 characters: expected \"{}\"",
+                    principal.to_text()
+                ),
+            },
         }
     }
 }
