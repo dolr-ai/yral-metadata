@@ -7,6 +7,7 @@ use ntex::web::{
 use reqwest::header::AUTHORIZATION;
 use serde::{Deserialize, Serialize};
 use types::ApiResult;
+use utoipa::ToSchema;
 use yral_canisters_client::{
     individual_user_template::{
         self, IndividualUserTemplate, SessionType, UserProfileDetailsForFrontendV2,
@@ -18,7 +19,7 @@ use crate::{Error, Result};
 
 use crate::state::AppState;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct YralAuthClaim {
     aud: String,
     exp: u64,
@@ -29,6 +30,22 @@ pub struct YralAuthClaim {
     ext_is_anonymous: bool,
 }
 
+#[utoipa::path(
+    post,
+    path = "/update_session_as_registered/{canister_id}",
+    params(
+        ("canister_id" = String, Path, description = "Canister ID of the user session to update")
+    ),
+    responses(
+        (status = 200, description = "Session updated successfully", body = ()),
+        (status = 400, description = "Invalid request or canister ID", body = crate::utils::error::Error),
+        (status = 401, description = "Unauthorized - Auth token missing or invalid", body = crate::utils::error::Error),
+        (status = 500, description = "Internal server error", body = crate::utils::error::Error)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[web::post("/update_session_as_registered/{canister_id}")]
 pub async fn update_session_as_registered(
     app_state: State<AppState>,

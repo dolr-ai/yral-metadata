@@ -29,6 +29,21 @@ use crate::notifications::traits::{
     FcmService, RedisConnection, RegisterDeviceRequest, UnregisterDeviceRequest, UserPrincipal,
 };
 
+#[utoipa::path(
+    post,
+    path = "/notifications/{user_principal}",
+    params(
+        ("user_principal" = String, Path, description = "User principal ID")
+    ),
+    request_body = RegisterDeviceReq,
+    responses(
+        (status = 200, description = "Register device successfully", body = RegisterDeviceRes),
+        (status = 400, description = "Invalid request", body = crate::utils::error::Error),
+        (status = 401, description = "Unauthorized", body = crate::utils::error::Error),
+        (status = 404, description = "User metadata not found", body = crate::utils::error::Error),
+        (status = 500, description = "Internal server error", body = crate::utils::error::Error)
+    )
+)]
 #[web::post("/notifications/{user_principal}")]
 async fn register_device(
     state: State<AppState>,
@@ -245,6 +260,21 @@ pub async fn register_device_impl<
     Ok(Json(Ok(())))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/notifications/{user_principal}",
+    params(
+        ("user_principal" = String, Path, description = "User principal ID")
+    ),
+    request_body = UnregisterDeviceReq,
+    responses(
+        (status = 200, description = "Unregister device successfully", body = UnregisterDeviceRes),
+        (status = 400, description = "Invalid request", body = crate::utils::error::Error),
+        (status = 401, description = "Unauthorized", body = crate::utils::error::Error),
+        (status = 404, description = "User metadata or device not found", body = crate::utils::error::Error),
+        (status = 500, description = "Internal server error", body = crate::utils::error::Error)
+    )
+)]
 #[web::delete("/notifications/{user_principal}")]
 async fn unregister_device(
     state: State<AppState>,
@@ -360,6 +390,24 @@ pub async fn unregister_device_impl<
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/notifications/{user_principal}/send",
+    params(
+        ("user_principal" = String, Path, description = "User principal ID")
+    ),
+    request_body = SendNotificationReq,
+    responses(
+        (status = 200, description = "Send notification successfully", body = SendNotificationRes),
+        (status = 400, description = "Invalid request", body = crate::utils::error::Error),
+        (status = 401, description = "Unauthorized", body = crate::utils::error::Error),
+        (status = 404, description = "User metadata or notification key not found", body = crate::utils::error::Error),
+        (status = 500, description = "Internal server error", body = crate::utils::error::Error)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[web::post("/notifications/{user_principal}/send")]
 async fn send_notification(
     http_req: HttpRequest,
