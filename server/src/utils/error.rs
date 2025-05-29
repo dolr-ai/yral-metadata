@@ -10,14 +10,14 @@ use types::{error::ApiError, ApiResult};
 use utoipa::ToSchema;
 
 use crate::services::error_wrappers::{
-    AgentErrorDetail, Bb8RedisErrorDetail, ConfigErrorDetail, IdentityErrorDetail, JwtErrorDetail,
-    PrincipalErrorDetail, RedisErrorDetail, SerdeJsonErrorDetail, VarErrorDetail,
+    AgentErrorDetail, Bb8RedisErrorDetail, ConfigErrorDetail, IOErrorData, IdentityErrorDetail,
+    JwtErrorDetail, PrincipalErrorDetail, RedisErrorDetail, SerdeJsonErrorDetail, VarErrorDetail,
 };
 
 #[derive(Error, Debug, ToSchema)]
 pub enum Error {
     #[error(transparent)]
-    #[schema(value_type = String)]
+    #[schema(value_type = IOErrorData)]
     IO(#[from] std::io::Error),
     #[error("failed to load config {0}")]
     #[schema(value_type = ConfigErrorDetail)]

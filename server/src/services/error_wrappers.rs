@@ -758,3 +758,15 @@ impl From<ic_agent::AgentError> for AgentErrorDetail {
         }
     }
 }
+
+#[derive(Debug, ToSchema)]
+pub enum IOErrorData {
+    #[schema(example = "Os(\"Invalid OS error\")")]
+    Os(String),
+    #[schema(example = "Simple(\"Invalid simple error\")")]
+    Simple(String),
+    #[schema(example = "SimpleMessage(\"Invalid simple message error\")")]
+    SimpleMessage(String),
+    #[schema(example = "Custom(\"Invalid custom error\")")]
+    Custom(String),
+}
