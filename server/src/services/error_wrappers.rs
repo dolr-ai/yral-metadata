@@ -3,7 +3,7 @@ use std::{env::VarError, ops::Deref};
 use ic_agent::export::PrincipalError;
 use redis::RedisError;
 // Add necessary imports
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 // Assuming these crates are available in the project
 use bb8;
 use config;
@@ -13,6 +13,23 @@ use utoipa::ToSchema;
 use yral_identity;
 
 // Define detailed error structs
+#[allow(non_snake_case)]
+#[derive(Debug, ToSchema, Serialize, Deserialize)]
+pub struct ErrorWrapper<T: ToSchema> {
+    Err: T,
+}
+
+#[derive(Debug, ToSchema, Serialize, Deserialize)]
+#[allow(non_snake_case)]
+pub struct OkWrapper<T: ToSchema> {
+    Ok: T,
+}
+
+#[derive(Debug, ToSchema, Serialize, Deserialize)]
+#[allow(non_snake_case)]
+pub struct NullOk {
+    Ok: (),
+}
 
 #[derive(Debug, ToSchema, Serialize)]
 pub struct IoErrorDetail {

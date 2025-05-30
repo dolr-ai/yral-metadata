@@ -20,6 +20,7 @@ pub mod traits;
 
 use crate::{
     api::METADATA_FIELD,
+    services::error_wrappers::{ErrorWrapper, OkWrapper},
     state::AppState,
     utils::error::{Error, Result},
 };
@@ -37,11 +38,11 @@ use crate::notifications::traits::{
     ),
     request_body = RegisterDeviceReq,
     responses(
-        (status = 200, description = "Register device successfully", body = RegisterDeviceRes),
-        (status = 400, description = "Invalid request", body = crate::utils::error::Error),
-        (status = 401, description = "Unauthorized", body = crate::utils::error::Error),
-        (status = 404, description = "User metadata not found", body = crate::utils::error::Error),
-        (status = 500, description = "Internal server error", body = crate::utils::error::Error)
+        (status = 200, description = "Register device successfully", body = OkWrapper<RegisterDeviceRes>),
+        (status = 400, description = "Invalid request", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 401, description = "Unauthorized", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 404, description = "User metadata not found", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<crate::utils::error::Error>)
     )
 )]
 #[web::post("/notifications/{user_principal}")]
@@ -268,11 +269,11 @@ pub async fn register_device_impl<
     ),
     request_body = UnregisterDeviceReq,
     responses(
-        (status = 200, description = "Unregister device successfully", body = UnregisterDeviceRes),
-        (status = 400, description = "Invalid request", body = crate::utils::error::Error),
-        (status = 401, description = "Unauthorized", body = crate::utils::error::Error),
-        (status = 404, description = "User metadata or device not found", body = crate::utils::error::Error),
-        (status = 500, description = "Internal server error", body = crate::utils::error::Error)
+        (status = 200, description = "Unregister device successfully", body = OkWrapper<UnregisterDeviceRes>),
+        (status = 400, description = "Invalid request", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 401, description = "Unauthorized", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 404, description = "User metadata or device not found", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<crate::utils::error::Error>)
     )
 )]
 #[web::delete("/notifications/{user_principal}")]
@@ -398,11 +399,11 @@ pub async fn unregister_device_impl<
     ),
     request_body = SendNotificationReq,
     responses(
-        (status = 200, description = "Send notification successfully", body = SendNotificationRes),
-        (status = 400, description = "Invalid request", body = crate::utils::error::Error),
-        (status = 401, description = "Unauthorized", body = crate::utils::error::Error),
-        (status = 404, description = "User metadata or notification key not found", body = crate::utils::error::Error),
-        (status = 500, description = "Internal server error", body = crate::utils::error::Error)
+        (status = 200, description = "Send notification successfully", body = OkWrapper<SendNotificationRes>),
+        (status = 400, description = "Invalid request", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 401, description = "Unauthorized", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 404, description = "User metadata or notification key not found", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<crate::utils::error::Error>)
     ),
     security(
         ("bearer_auth" = [])

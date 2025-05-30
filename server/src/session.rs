@@ -15,7 +15,10 @@ use yral_canisters_client::{
     user_index::UserIndex,
 };
 
-use crate::{Error, Result};
+use crate::{
+    services::error_wrappers::{ErrorWrapper, NullOk},
+    Error, Result,
+};
 
 use crate::state::AppState;
 
@@ -37,10 +40,10 @@ pub struct YralAuthClaim {
         ("canister_id" = String, Path, description = "Canister ID of the user session to update")
     ),
     responses(
-        (status = 200, description = "Session updated successfully", body = ()),
-        (status = 400, description = "Invalid request or canister ID", body = crate::utils::error::Error),
-        (status = 401, description = "Unauthorized - Auth token missing or invalid", body = crate::utils::error::Error),
-        (status = 500, description = "Internal server error", body = crate::utils::error::Error)
+        (status = 200, description = "Session updated successfully", body = NullOk), // OkWrapper<()> panics for some reason
+        (status = 400, description = "Invalid request or canister ID", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 401, description = "Unauthorized - Auth token missing or invalid", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<crate::utils::error::Error>)
     ),
     security(
         ("bearer_auth" = [])
