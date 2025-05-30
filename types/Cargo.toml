@@ -11,3 +11,5 @@ candid.workspace = true
 thiserror.workspace = true
 yral-identity = { workspace = true, default-features = false }
 serde_json.workspace = true
+utoipa = { version = "5.3.1" }
+utoipa-swagger-ui = { version = "9.0.2" }

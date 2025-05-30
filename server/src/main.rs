@@ -4,6 +4,7 @@ mod config;
 mod consts;
 mod firebase;
 mod notifications;
+mod services;
 mod session;
 mod state;
 mod utils;
@@ -27,6 +28,7 @@ async fn main() -> Result<()> {
         web::App::new()
             .wrap(Cors::default())
             .state(state.clone())
+            .configure(services::openapi::ntex_config)
             .service(set_user_metadata)
             .service(get_user_metadata)
             .service(delete_metadata_bulk)

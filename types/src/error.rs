@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Serialize, Error, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Error, Debug, PartialEq, ToSchema)]
 #[non_exhaustive]
 pub enum ApiError {
     #[error("invalid signature provided")]

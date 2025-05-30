@@ -12,12 +12,27 @@ use types::{
 
 use crate::{
     auth::verify_token,
+    services::error_wrappers::{ErrorWrapper, NullOk, OkWrapper},
     state::AppState,
     utils::error::{Error, Result},
 };
 
 pub const METADATA_FIELD: &str = "metadata";
 
+#[utoipa::path(
+    post,
+    path = "/metadata/{user_principal}",
+    params(
+        ("user_principal" = String, Path, description = "User principal ID")
+    ),
+    request_body = SetUserMetadataReq,
+    responses(
+        (status = 200, description = "Set user metadata successfully", body = OkWrapper<SetUserMetadataRes>),
+        (status = 400, description = "Invalid request", body = ErrorWrapper<SetUserMetadataRes>),
+        (status = 401, description = "Unauthorized", body = ErrorWrapper<SetUserMetadataRes>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<SetUserMetadataRes>)
+    )
+)]
 #[web::post("/metadata/{user_principal}")]
 async fn set_user_metadata(
     state: State<AppState>,
@@ -42,6 +57,18 @@ async fn set_user_metadata(
     Ok(Json(Ok(())))
 }
 
+#[utoipa::path(
+    get,
+    path = "/metadata/{user_principal}",
+    params(
+        ("user_principal" = String, Path, description = "User principal ID")
+    ),
+    responses(
+        (status = 200, description = "Get user metadata successfully", body = OkWrapper<GetUserMetadataRes>),
+        (status = 404, description = "User metadata not found", body = ErrorWrapper<GetUserMetadataRes>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<GetUserMetadataRes>)
+    )
+)]
 #[web::get("/metadata/{user_principal}")]
 async fn get_user_metadata(
     state: State<AppState>,
@@ -59,6 +86,20 @@ async fn get_user_metadata(
     Ok(Json(Ok(Some(meta))))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/metadata/bulk",
+    request_body = BulkUsers,
+    responses(
+        (status = 200, description = "Delete user metadata in bulk successfully", body = NullOk), // OkWrapper<()> panics for some reason
+        (status = 400, description = "Invalid request", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 401, description = "Unauthorized", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<crate::utils::error::Error>)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[web::delete("/metadata/bulk")]
 async fn delete_metadata_bulk(
     state: State<AppState>,
