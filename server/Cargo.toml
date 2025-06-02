@@ -49,7 +49,7 @@ yral-canisters-client = {git = "https://github.com/dolr-ai/yral-common.git", bra
 yral-types = {git = "https://github.com/dolr-ai/yral-common.git", branch = "master"}
 ic-agent.workspace = true
 utoipa = { version = "5.3.1" }
-utoipa-swagger-ui = { version = "9.0.2" }
+utoipa-swagger-ui = { version = "9.0.2", features = ["reqwest"]}
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

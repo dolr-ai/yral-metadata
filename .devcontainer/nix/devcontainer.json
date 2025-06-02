@@ -12,7 +12,7 @@
     "customizations": {
 		"vscode": {
 			"settings": {},
-			"extensions": ["vscodevim.Vim"]
+			"extensions": ["vscodevim.vim", "rust-lang.rust-analyzer", "mkhl.direnv"]
 		}
 }
 }

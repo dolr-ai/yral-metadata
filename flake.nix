@@ -14,8 +14,10 @@
                 in
                 {
                     devShells.default = pkgs.mkShell {
-                        buildInputs = [
-                            pkgs.rustup
+                        buildInputs = with pkgs; [
+                            rustup
+                            curl
+                            openssl
                         ];
                     };
                 }
