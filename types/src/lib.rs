@@ -129,13 +129,13 @@ pub struct SendNotificationReq {
     pub fcm_options: Option<FcmOptions>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 pub struct FcmOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub analytics_label: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 pub struct ApnsConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Value>,
@@ -147,7 +147,7 @@ pub struct ApnsConfig {
     pub live_activity_token: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 pub struct ApnsFcmOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub analytics_label: Option<String>,
@@ -155,7 +155,7 @@ pub struct ApnsFcmOptions {
     pub image: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, ToSchema)]
 pub struct AndroidConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collapse_key: Option<String>,
@@ -175,7 +175,7 @@ pub struct AndroidConfig {
     pub direct_boot_ok: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 pub struct WebpushConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Value>,
@@ -187,7 +187,7 @@ pub struct WebpushConfig {
     pub fcm_options: Option<WebpushFcmOptions>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 pub struct WebpushFcmOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
@@ -195,19 +195,19 @@ pub struct WebpushFcmOptions {
     pub analytics_label: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 pub struct AndroidFcmOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub analytics_label: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 pub enum AndroidMessagePriority {
     Normal,
     High,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, ToSchema, Eq)]
 pub struct LightSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<Value>,
@@ -216,7 +216,7 @@ pub struct LightSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub light_off_duration: Option<String>,
 }
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AndroidProxy {
     ProxyUnspecified,
@@ -225,7 +225,7 @@ pub enum AndroidProxy {
     IfPriorityLowered,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, ToSchema)]
 pub struct AndroidNotification {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
@@ -281,7 +281,7 @@ pub struct AndroidNotification {
     pub proxy: Option<AndroidProxy>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum AndroidVisibility {
     VisibilityUnspecified,
@@ -290,7 +290,7 @@ pub enum AndroidVisibility {
     Secret,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum NotificationPriority {
     PriorityUnspecified,
