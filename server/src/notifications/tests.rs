@@ -585,7 +585,7 @@ mod tests {
             image: None,
         };
         let req = Json(SendNotificationReq {
-            notification: notification_payload.clone(),
+            notification: Some(notification_payload.clone()),
             data: None,
             android: None,
             webpush: None,
@@ -627,7 +627,7 @@ mod tests {
             image: None,
         };
         let req = Json(SendNotificationReq {
-            notification: notification_payload.clone(),
+            notification: Some(notification_payload.clone()),
             data: None,
             android: None,
             webpush: None,
@@ -665,7 +665,7 @@ mod tests {
             image: None,
         };
         let req = Json(SendNotificationReq {
-            notification: notification_payload.clone(),
+            notification: Some(notification_payload.clone()),
             data: None,
             android: None,
             webpush: None,
@@ -712,7 +712,7 @@ mod tests {
             image: None,
         };
         let req = Json(SendNotificationReq {
-            notification: notification_payload.clone(),
+            notification: Some(notification_payload.clone()),
             data: None,
             android: None,
             webpush: None,
