@@ -4,7 +4,7 @@ use std::env;
 use reqwest::Client;
 use serde_json::json;
 use types::NotificationKey;
-use types::NotificationPayload;
+use types::SendNotificationReq;
 
 use crate::firebase::Firebase;
 
@@ -132,7 +132,14 @@ impl Firebase {
     pub async fn send_message_to_group(
         &self,
         notification_key: NotificationKey,
-        data_payload: NotificationPayload,
+        SendNotificationReq {
+            notification,
+            data,
+            android,
+            webpush,
+            apns,
+            fcm_options,
+        }: SendNotificationReq,
     ) -> Result<()> {
         let client = Client::new();
         let project_id_string =
@@ -155,7 +162,12 @@ impl Firebase {
         let message_body = json!({
             "message": {
                 "token": notification_key.key,
-                "notification": data_payload
+                "notification": notification,
+                "data": data,
+                "android": android,
+                "webpush": webpush,
+                "apns": apns,
+                "fcm_options": fcm_options
             }
         });
         log::info!(

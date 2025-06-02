@@ -580,11 +580,17 @@ mod tests {
         );
 
         let notification_payload = types::NotificationPayload {
-            title: "Test Title".to_string(),
-            body: "Test Body".to_string(),
+            title: Some("Test Title".to_string()),
+            body: Some("Test Body".to_string()),
+            image: None,
         };
         let req = Json(SendNotificationReq {
-            data: notification_payload.clone(),
+            notification: notification_payload.clone(),
+            data: None,
+            android: None,
+            webpush: None,
+            apns: None,
+            fcm_options: None,
         });
 
         let result = send_notification_impl(
@@ -616,11 +622,17 @@ mod tests {
         let user_principal_text = "wrd2k-oyaaa-aaaai-afitq-cai".to_string();
 
         let notification_payload = types::NotificationPayload {
-            title: "Test Title".to_string(),
-            body: "Test Body".to_string(),
+            title: Some("Test Title".to_string()),
+            body: Some("Test Body".to_string()),
+            image: None,
         };
         let req = Json(SendNotificationReq {
-            data: notification_payload,
+            notification: notification_payload.clone(),
+            data: None,
+            android: None,
+            webpush: None,
+            apns: None,
+            fcm_options: None,
         });
 
         let result = send_notification_impl(
@@ -648,11 +660,17 @@ mod tests {
         mock_redis.add_user(initial_metadata);
 
         let notification_payload = types::NotificationPayload {
-            title: "Test Title".to_string(),
-            body: "Test Body".to_string(),
+            title: Some("Test Title".to_string()),
+            body: Some("Test Body".to_string()),
+            image: None,
         };
         let req = Json(SendNotificationReq {
-            data: notification_payload,
+            notification: notification_payload.clone(),
+            data: None,
+            android: None,
+            webpush: None,
+            apns: None,
+            fcm_options: None,
         });
 
         let result = send_notification_impl(
@@ -689,11 +707,17 @@ mod tests {
         mock_redis.add_user(initial_metadata);
 
         let notification_payload = types::NotificationPayload {
-            title: "Test Title".to_string(),
-            body: "Test Body".to_string(),
+            title: Some("Test Title".to_string()),
+            body: Some("Test Body".to_string()),
+            image: None,
         };
         let req = Json(SendNotificationReq {
-            data: notification_payload.clone(),
+            notification: notification_payload.clone(),
+            data: None,
+            android: None,
+            webpush: None,
+            apns: None,
+            fcm_options: None,
         });
 
         let result = send_notification_impl(
