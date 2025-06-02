@@ -118,7 +118,7 @@ pub struct NotificationPayload {
 pub struct SendNotificationReq {
     pub notification: NotificationPayload,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<serde_json::Value>,
+    pub data: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub android: Option<AndroidConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
