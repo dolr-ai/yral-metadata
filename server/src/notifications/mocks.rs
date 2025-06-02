@@ -14,7 +14,7 @@ use serde_json;
 use std::collections::HashMap;
 use std::sync::RwLock;
 use types::{
-    DeviceRegistrationToken, NotificationKey, NotificationPayload, Signature,
+    DeviceRegistrationToken, NotificationKey, SendNotificationReq, Signature,
     UserMetadata as ActualUserMetadata,
 };
 
@@ -278,7 +278,7 @@ impl FcmService for MockFCM {
     async fn send_message_to_group(
         &self,
         notification_key: NotificationKey,
-        data_payload: NotificationPayload,
+        data_payload: SendNotificationReq,
     ) -> Result<(), Error> {
         let groups = self.notification_groups.read().unwrap();
         if let Some(_group) = groups

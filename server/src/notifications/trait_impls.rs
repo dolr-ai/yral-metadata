@@ -10,7 +10,7 @@ use crate::{
 
 // Corrected import for types crate
 use types::{
-    DeviceRegistrationToken, NotificationKey, NotificationPayload, RegisterDeviceReq, Signature,
+    DeviceRegistrationToken, NotificationKey, RegisterDeviceReq, SendNotificationReq, Signature,
     UnregisterDeviceReq,
 };
 
@@ -27,7 +27,7 @@ impl FcmService for Firebase {
     async fn send_message_to_group(
         &self,
         notification_key: NotificationKey,
-        data_payload: NotificationPayload,
+        data_payload: SendNotificationReq,
     ) -> Result<(), Error> {
         self.send_message_to_group(notification_key, data_payload)
             .await

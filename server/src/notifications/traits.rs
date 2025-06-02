@@ -3,7 +3,7 @@ use ntex::web::types::Path;
 use redis::RedisResult;
 
 use crate::utils::error::{Error, Result};
-use types::{DeviceRegistrationToken, NotificationKey, NotificationPayload, Signature};
+use types::{DeviceRegistrationToken, NotificationKey, SendNotificationReq, Signature};
 
 // --- FCM Service Trait ---
 pub trait FcmService: Send + Sync {
@@ -15,7 +15,7 @@ pub trait FcmService: Send + Sync {
     async fn send_message_to_group(
         &self,
         notification_key: NotificationKey,
-        data_payload: NotificationPayload,
+        data_payload: SendNotificationReq,
     ) -> Result<(), Error>;
 
     // In tests, a more specific version is used. We can handle this with different

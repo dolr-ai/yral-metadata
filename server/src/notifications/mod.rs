@@ -500,7 +500,7 @@ pub async fn send_notification_impl<F: FcmService, R: RedisConnection, P: UserPr
         notification_key_to_use.key
     );
 
-    let data_to_send = req.into_inner().data;
+    let data_to_send = req.into_inner();
     log::info!(
         "[send_notification] Preparing to send data for user {}: {:?}",
         user_id_text,
