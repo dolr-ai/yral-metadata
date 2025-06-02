@@ -4,11 +4,12 @@ use candid::Principal;
 use error::ApiError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use utoipa::ToSchema;
 pub use yral_identity::{msg_builder::Message, Error, Signature};
 
 pub type ApiResult<T> = Result<T, ApiError>;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct DeviceRegistrationToken {
     pub token: String,
 }
@@ -23,14 +24,15 @@ impl TryFrom<DeviceRegistrationToken> for Message {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct NotificationKey {
     pub key: String,
     pub registration_tokens: Vec<DeviceRegistrationToken>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct UserMetadata {
+    #[schema(value_type = String)]
     pub user_canister_id: Principal,
     pub user_name: String,
 
@@ -48,8 +50,9 @@ impl TryFrom<UserMetadata> for Message {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct SetUserMetadataReqMetadata {
+    #[schema(value_type = String)]
     pub user_canister_id: Principal,
     pub user_name: String,
 }
@@ -64,9 +67,10 @@ impl TryFrom<SetUserMetadataReqMetadata> for Message {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema)]
 pub struct SetUserMetadataReq {
     pub metadata: SetUserMetadataReqMetadata,
+    #[schema(value_type = String)]
     pub signature: Signature,
 }
 
@@ -74,30 +78,33 @@ pub type SetUserMetadataRes = ();
 
 pub type GetUserMetadataRes = Option<UserMetadata>;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct BulkUsers {
+    #[schema(value_type = String)]
     pub users: Vec<Principal>,
 }
 
 pub type DeleteMetadataBulkRes = ();
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, ToSchema)]
 pub struct RegisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,
+    #[schema(value_type = String)]
     pub signature: Signature,
 }
 
 pub type RegisterDeviceRes = ();
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, ToSchema)]
 pub struct UnregisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,
+    #[schema(value_type = String)]
     pub signature: Signature,
 }
 
 pub type UnregisterDeviceRes = ();
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
 pub struct NotificationPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
@@ -107,7 +114,7 @@ pub struct NotificationPayload {
     pub image: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema, Debug)]
 pub struct SendNotificationReq {
     pub notification: NotificationPayload,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -296,7 +303,7 @@ pub enum NotificationPriority {
 
 pub type SendNotificationRes = ();
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema, Debug)]
 pub struct CanisterSessionRegisteredRes {
     pub success: bool,
     pub error: Option<String>,

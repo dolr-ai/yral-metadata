@@ -7,22 +7,35 @@ use redis::RedisError;
 use std::env::VarError;
 use thiserror::Error;
 use types::{error::ApiError, ApiResult};
+use utoipa::ToSchema;
 
-#[derive(Error, Debug)]
+use crate::services::error_wrappers::{
+    AgentErrorDetail, Bb8RedisErrorDetail, ConfigErrorDetail, IOErrorData, IdentityErrorDetail,
+    JwtErrorDetail, PrincipalErrorDetail, RedisErrorDetail, SerdeJsonErrorDetail, VarErrorDetail,
+};
+
+#[derive(Error, Debug, ToSchema)]
 pub enum Error {
     #[error(transparent)]
+    #[schema(value_type = IOErrorData)]
     IO(#[from] std::io::Error),
     #[error("failed to load config {0}")]
+    #[schema(value_type = ConfigErrorDetail)]
     Config(#[from] config::ConfigError),
     #[error("{0}")]
+    #[schema(value_type = IdentityErrorDetail)]
     Identity(#[from] yral_identity::Error),
     #[error("{0}")]
+    #[schema(value_type = RedisErrorDetail)]
     Redis(#[from] RedisError),
     #[error("{0}")]
+    #[schema(value_type = Bb8RedisErrorDetail)]
     Bb8(#[from] bb8::RunError<RedisError>),
     #[error("failed to deserialize json {0}")]
-    Deser(serde_json::Error),
+    #[schema(value_type = SerdeJsonErrorDetail)]
+    Deser(#[from] serde_json::Error),
     #[error("jwt {0}")]
+    #[schema(value_type = JwtErrorDetail)]
     Jwt(#[from] jsonwebtoken::errors::Error),
     #[error("auth token missing")]
     AuthTokenMissing,
@@ -33,6 +46,7 @@ pub enum Error {
     #[error("unknown error {0}")]
     Unknown(String),
     #[error("Environment variable error: {0}")]
+    #[schema(value_type = VarErrorDetail)]
     EnvironmentVariable(#[from] VarError),
     #[error("Environment variable missing: {0}")]
     EnvironmentVariableMissing(String),
@@ -41,11 +55,15 @@ pub enum Error {
     #[error("failed to initialize backend admin ic agent")]
     BackendAdminIdentityInvalid(String),
     #[error("failed to parse principal {0}")]
+    #[schema(value_type = PrincipalErrorDetail)]
     InvalidPrincipal(#[from] PrincipalError),
     #[error("failed to communicate with IC: {0}")]
+    #[schema(value_type = AgentErrorDetail)]
     Agent(#[from] ic_agent::AgentError),
     #[error("failed to update session: {0}")]
     UpdateSession(String),
+    #[error("swagger ui error {0}")]
+    SwaggerUi(String),
 }
 
 impl From<&Error> for ApiResult<()> {
@@ -88,6 +106,10 @@ impl From<&Error> for ApiResult<()> {
                 log::warn!("update session error {e}");
                 ApiError::UpdateSession(e.clone())
             }
+            Error::SwaggerUi(e) => {
+                log::warn!("swagger ui error {e}");
+                ApiError::Unknown(format!("Swagger UI error: {}", e))
+            }
         };
         ApiResult::Err(err)
     }
@@ -112,8 +134,6 @@ impl web::error::WebResponseError for Error {
             | Error::Unknown(_)
             | Error::BackendAdminIdentityInvalid(_)
             | Error::Agent(_)
-            // don't know whether its the user's fault or not
-            // since update_session_type does not return an exhausitve enum
             | Error::UpdateSession(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Identity(_)
             | Error::Jwt(_)
@@ -121,8 +141,8 @@ impl web::error::WebResponseError for Error {
             | Error::AuthTokenMissing => StatusCode::UNAUTHORIZED,
             Error::EnvironmentVariable(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::EnvironmentVariableMissing(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::UserAlreadyRegistered(_)
-            | Error::InvalidPrincipal(_) => StatusCode::BAD_REQUEST,
+            Error::UserAlreadyRegistered(_) | Error::InvalidPrincipal(_) => StatusCode::BAD_REQUEST,
+            Error::SwaggerUi(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
