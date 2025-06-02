@@ -104,7 +104,7 @@ pub struct UnregisterDeviceReq {
 
 pub type UnregisterDeviceRes = ();
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
 pub struct NotificationPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
@@ -114,9 +114,10 @@ pub struct NotificationPayload {
     pub image: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema, Debug)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema, Debug, Default)]
 pub struct SendNotificationReq {
-    pub notification: NotificationPayload,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub notification: Option<NotificationPayload>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -129,13 +130,13 @@ pub struct SendNotificationReq {
     pub fcm_options: Option<FcmOptions>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
 pub struct FcmOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub analytics_label: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
 pub struct ApnsConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Value>,
@@ -147,7 +148,7 @@ pub struct ApnsConfig {
     pub live_activity_token: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
 pub struct ApnsFcmOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub analytics_label: Option<String>,
@@ -155,7 +156,7 @@ pub struct ApnsFcmOptions {
     pub image: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, ToSchema, Default)]
 pub struct AndroidConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collapse_key: Option<String>,
@@ -175,7 +176,7 @@ pub struct AndroidConfig {
     pub direct_boot_ok: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
 pub struct WebpushConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Value>,
@@ -187,7 +188,7 @@ pub struct WebpushConfig {
     pub fcm_options: Option<WebpushFcmOptions>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
 pub struct WebpushFcmOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
@@ -195,7 +196,7 @@ pub struct WebpushFcmOptions {
     pub analytics_label: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
 pub struct AndroidFcmOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub analytics_label: Option<String>,
@@ -207,7 +208,7 @@ pub enum AndroidMessagePriority {
     High,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, ToSchema, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, ToSchema, Eq, Default)]
 pub struct LightSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<Value>,
@@ -225,7 +226,7 @@ pub enum AndroidProxy {
     IfPriorityLowered,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, ToSchema, Default)]
 pub struct AndroidNotification {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
