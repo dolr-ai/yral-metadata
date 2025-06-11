@@ -98,7 +98,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_register_device_existing_user_adds_to_key() {
+    async fn test_register_device_unmigrated_user_replaces_key() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
         let user_principal_text = "gytd5-mqaaa-aaaah-ajwka-cai".to_string();
@@ -167,6 +167,86 @@ mod tests {
 
         let redis_notification_key = updated_metadata.notification_key.as_ref().unwrap();
         assert_eq!(redis_notification_key.key, initial_fcm_key);
+        assert_eq!(redis_notification_key.registration_tokens.len(), 1);
+        assert_eq!(
+            redis_notification_key.registration_tokens[0].token,
+            new_device_token_str
+        );
+        assert!(updated_metadata.is_migrated);
+    }
+
+    #[tokio::test]
+    async fn test_register_device_migrated_user_adds_to_key() {
+        let mock_fcm = MockFCM::new();
+        let mut mock_redis = MockRedisConnection::new();
+        let user_principal_text = "gytd5-mqaaa-aaaah-ajwka-cai".to_string();
+
+        let initial_fcm_key =
+            "existing_fcm_key_for_gytd5-mqaaa-aaaah-ajwka-cai".to_string();
+        let existing_token = "existing_device_token_1".to_string();
+
+        let mut initial_metadata = create_actual_user_metadata(
+            &user_principal_text,
+            Some(NotificationKey {
+                key: initial_fcm_key.clone(),
+                registration_tokens: vec![DeviceRegistrationToken {
+                    token: existing_token.clone(),
+                }],
+            }),
+        );
+        initial_metadata.is_migrated = true;
+        mock_redis.add_user(initial_metadata);
+
+        let notification_key_name =
+            crate::firebase::notifications::utils::get_notification_key_name_from_principal(
+                &user_principal_text,
+            );
+        mock_fcm.notification_groups.write().unwrap().insert(
+            notification_key_name.clone(),
+            DeviceGroup {
+                notification_key: initial_fcm_key.clone(),
+                registration_tokens: vec![existing_token.clone()],
+            },
+        );
+
+        let new_device_token_str = "new_device_token_2".to_string();
+        let req = Json(MockRegisterDeviceReq {
+            registration_token: DeviceRegistrationToken {
+                token: new_device_token_str.clone(),
+            },
+        });
+
+        let result =
+            register_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
+                .await;
+
+        assert!(result.is_ok(), "Registration failed: {:?}", result.err());
+        let api_result = result.unwrap().0;
+        assert!(
+            api_result.is_ok(),
+            "API result was an error: {:?}",
+            api_result.err()
+        );
+
+        let fcm_groups = mock_fcm.notification_groups.read().unwrap();
+        assert!(fcm_groups.contains_key(&notification_key_name));
+        let group = fcm_groups.get(&notification_key_name).unwrap();
+        assert_eq!(group.registration_tokens.len(), 2);
+        assert!(group.registration_tokens.contains(&existing_token));
+        assert!(group.registration_tokens.contains(&new_device_token_str));
+        assert_eq!(group.notification_key, initial_fcm_key);
+
+        let updated_metadata_bytes: Option<Vec<u8>> = mock_redis
+            .hget(&user_principal_text, METADATA_FIELD)
+            .await
+            .unwrap();
+        let updated_metadata_bytes =
+            updated_metadata_bytes.expect("User metadata not found after registration (bytes)");
+        let updated_metadata: ActualUserMetadata = serde_json::from_slice(&updated_metadata_bytes)
+            .expect("Failed to deserialize metadata");
+
+        let redis_notification_key = updated_metadata.notification_key.as_ref().unwrap();
+        assert_eq!(redis_notification_key.key, initial_fcm_key);
         assert_eq!(redis_notification_key.registration_tokens.len(), 2);
         assert!(redis_notification_key
             .registration_tokens
@@ -176,6 +256,7 @@ mod tests {
             .registration_tokens
             .iter()
             .any(|rt| rt.token == new_device_token_str));
+        assert!(updated_metadata.is_migrated);
     }
 
     #[tokio::test]
