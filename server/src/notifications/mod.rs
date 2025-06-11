@@ -86,6 +86,11 @@ pub async fn register_device_impl<
         }
     };
 
+    if !user_metadata.is_migrated {
+        user_metadata.notification_key = None;
+        user_metadata.is_migrated = true;
+    }
+
     let maybe_notification_key_ref = user_metadata.notification_key.as_ref();
     let original_key_in_redis: Option<String> = maybe_notification_key_ref.map(|nk| nk.key.clone());
 

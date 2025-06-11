@@ -38,6 +38,9 @@ pub struct UserMetadata {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification_key: Option<NotificationKey>,
+
+    #[serde(default)]
+    pub is_migrated: bool,
 }
 
 impl TryFrom<UserMetadata> for Message {

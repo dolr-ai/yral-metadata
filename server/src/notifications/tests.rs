@@ -31,6 +31,7 @@ mod tests {
             user_canister_id: user_id.parse().expect("Test user_id not a valid principal"),
             user_name: format!("user_{}", user_id),
             notification_key,
+            is_migrated: false,
         }
     }
 
