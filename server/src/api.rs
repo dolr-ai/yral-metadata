@@ -115,33 +115,19 @@ async fn delete_metadata_bulk(
     let token = token.trim_start_matches("Bearer ");
     verify_token(token, &state.jwt_details)?;
 
-    let keys = &req.users;
+    let keys = req.users.iter().map(|k| k.to_text()).collect::<Vec<_>>();
 
-    let conn = state.redis.get().await?;
+    let mut conn = state.redis.get().await?;
 
-    let futures: FuturesUnordered<_> = keys
-        .iter()
-        .map(|key| async {
-            conn.clone()
-                .hdel::<_, _, bool>(key.to_text(), METADATA_FIELD)
-                .await
-                .map_err(|e| (key.to_text(), e))
-        })
-        .collect();
-    let results = futures
-        .collect::<Vec<Result<_, (String, RedisError)>>>()
-        .await;
-    let errors = results
-        .into_iter()
-        .filter_map(|res| match res {
-            Ok(_) => None,
-            Err((key, e)) => Some((key, e)),
-        })
-        .collect::<Vec<_>>();
+    let chunk_size = 1000;
+    let mut failed = 0;
+    for chunk in keys.chunks(chunk_size) {
+        let res: usize = conn.del(chunk).await?;
+        failed += chunk.len() - res as usize;
+    }
 
-    if !errors.is_empty() {
-        log::error!("failed to delete keys: {:?}", errors);
-        return Ok(Json(Err(ApiError::DeleteKeys)));
+    if failed > 0 {
+        return Err(Error::Unknown(format!("failed to delete {} keys", failed)));
     }
 
     Ok(Json(Ok(())))
