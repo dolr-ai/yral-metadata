@@ -1,10 +1,13 @@
 use candid::Principal;
+use futures::{prelude::*, stream::FuturesUnordered};
 use ntex::web::{
     self,
     types::{Json, Path, State},
 };
+use redis::{AsyncCommands, RedisError};
 use types::{
-    ApiResult, BulkUsers, GetUserMetadataRes, SetUserMetadataReq, SetUserMetadataRes, UserMetadata,
+    error::ApiError, ApiResult, BulkUsers, GetUserMetadataRes, SetUserMetadataReq,
+    SetUserMetadataRes, UserMetadata,
 };
 
 use crate::{
@@ -49,7 +52,7 @@ async fn set_user_metadata(
     let user = user_principal.to_text();
     let mut conn = state.redis.get().await?;
     let meta_raw = serde_json::to_vec(&metadata).map_err(Error::Deser)?;
-    conn.hset(user, METADATA_FIELD, &meta_raw).await?;
+    let _replaced: bool = conn.hset(user, METADATA_FIELD, &meta_raw).await?;
 
     Ok(Json(Ok(())))
 }

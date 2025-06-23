@@ -1,11 +1,10 @@
-use redis::{FromRedisValue, ToRedisArgs};
+use redis::{FromRedisValue, RedisResult, ToRedisArgs};
 
 use crate::{
     firebase::Firebase,
     notifications::traits::{
         FcmService, RedisConnection, RegisterDeviceRequest, UnregisterDeviceRequest,
     },
-    state::PooledConn,
     utils::error::{Error, Result},
 };
 
@@ -36,20 +35,24 @@ impl FcmService for Firebase {
 }
 
 // --- Implement RedisConnection for redis::aio::MultiplexedConnection ---
-impl RedisConnection for PooledConn<'_> {
-    async fn hget<RV>(&mut self, key: &str, field: &str) -> Result<RV>
+impl RedisConnection for redis::aio::MultiplexedConnection {
+    async fn hget<F, RV>(&mut self, key: &str, field: F) -> RedisResult<RV>
     where
+        F: ToRedisArgs + Send + Sync,
         RV: FromRedisValue + Send + Sync,
     {
-        self.hget(key, field).await
+        let mut conn = self.clone();
+        redis::AsyncCommands::hget(&mut conn, key, field).await
     }
 
-    async fn hset<K, V>(&mut self, key: K, field: &str, value: V) -> Result<()>
+    async fn hset<K, F, V>(&mut self, key: K, field: F, value: V) -> RedisResult<bool>
     where
-        K: ToRedisArgs + Send + Sync + Clone,
+        K: ToRedisArgs + Send + Sync,
+        F: ToRedisArgs + Send + Sync,
         V: ToRedisArgs + Send + Sync,
     {
-        self.hset(key, field, &value).await
+        let mut conn = self.clone();
+        redis::AsyncCommands::hset(&mut conn, key, field, value).await
     }
 }
 
