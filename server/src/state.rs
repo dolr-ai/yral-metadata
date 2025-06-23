@@ -36,11 +36,12 @@ impl<'a> PooledConn<'a> {
         Ok(())
     }
 
-    pub async fn del<K: ToRedisArgs + Send + Sync, RV: FromRedisValue>(
-        &mut self,
-        k: K,
-    ) -> Result<RV> {
+    pub async fn del<K: ?Sized, RV: FromRedisValue>(&mut self, k: &K) -> Result<RV>
+    where
+        for<'k> &'k K: ToRedisArgs + Send + Sync,
+    {
         let res = self.old.del(k).await?;
+        _ = self.new.del::<_, usize>(k).await;
         Ok(res)
     }
 
