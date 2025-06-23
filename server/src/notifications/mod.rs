@@ -51,10 +51,15 @@ async fn register_device(
     user_principal: Path<Principal>,
     req: Json<RegisterDeviceReq>,
 ) -> Result<Json<ApiResult<RegisterDeviceRes>>> {
-    let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
-    let redis_service = &mut *redis_conn_pooled;
+    let mut redis_conn_pooled = state.redis.get().await?;
     let firebase_service = &state.firebase;
-    register_device_impl(firebase_service, redis_service, user_principal, req).await
+    register_device_impl(
+        firebase_service,
+        &mut redis_conn_pooled,
+        user_principal,
+        req,
+    )
+    .await
 }
 
 pub async fn register_device_impl<
@@ -76,10 +81,7 @@ pub async fn register_device_impl<
     let user_id_text = user_principal.to_text();
 
     let mut user_metadata: UserMetadata = {
-        let meta_raw: Option<Vec<u8>> = redis_service
-            .hget(&user_id_text, METADATA_FIELD)
-            .await
-            .map_err(Error::Redis)?;
+        let meta_raw: Option<Vec<u8>> = redis_service.hget(&user_id_text, METADATA_FIELD).await?;
         match meta_raw {
             Some(bytes) => serde_json::from_slice(&bytes).map_err(Error::Deser)?,
             None => return Ok(Json(Err(ApiError::MetadataNotFound))),
@@ -258,8 +260,7 @@ pub async fn register_device_impl<
     let meta_raw_to_save = serde_json::to_vec(&user_metadata).map_err(Error::Deser)?;
     redis_service
         .hset(&user_id_text, METADATA_FIELD, &meta_raw_to_save)
-        .await
-        .map_err(Error::Redis)?;
+        .await?;
 
     log::info!("Device registered successfully for user: {}", user_id_text);
 
@@ -287,10 +288,15 @@ async fn unregister_device(
     user_principal: Path<Principal>,
     req: Json<UnregisterDeviceReq>,
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
-    let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
-    let redis_service = &mut *redis_conn_pooled;
+    let mut redis_conn_pooled = state.redis.get().await?;
     let firebase_service = &state.firebase;
-    unregister_device_impl(firebase_service, redis_service, user_principal, req).await
+    unregister_device_impl(
+        firebase_service,
+        &mut redis_conn_pooled,
+        user_principal,
+        req,
+    )
+    .await
 }
 
 pub async fn unregister_device_impl<
@@ -312,10 +318,7 @@ pub async fn unregister_device_impl<
     let user_id_text = user_principal.to_text();
 
     let mut user_metadata: UserMetadata = {
-        let meta_raw: Option<Vec<u8>> = redis_service
-            .hget(&user_id_text, METADATA_FIELD)
-            .await
-            .map_err(Error::Redis)?;
+        let meta_raw: Option<Vec<u8>> = redis_service.hget(&user_id_text, METADATA_FIELD).await?;
         match meta_raw {
             Some(bytes) => serde_json::from_slice(&bytes).map_err(Error::Deser)?,
             None => return Ok(Json(Err(ApiError::MetadataNotFound))),
@@ -379,14 +382,13 @@ pub async fn unregister_device_impl<
         let meta_raw_to_save = serde_json::to_vec(&user_metadata).map_err(Error::Deser)?;
         redis_service
             .hset(&user_id_text, METADATA_FIELD, &meta_raw_to_save)
-            .await
-            .map_err(Error::Redis)?;
+            .await?;
 
         log::info!(
             "Device unregistered successfully in Redis for user: {}",
             user_id_text
         );
-        return Ok(Json(Ok(())));
+        Ok(Json(Ok(())))
     } else {
         log::warn!(
             "Notification key became None unexpectedly during unregister for user: {}",
@@ -421,13 +423,12 @@ async fn send_notification(
     user_principal: Path<Principal>,
     req: Json<SendNotificationReq>,
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
-    let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
-    let redis_service = &mut *redis_conn_pooled;
+    let mut redis_conn_pooled = state.redis.get().await?;
     let firebase_service = &state.firebase;
     send_notification_impl(
         Some(http_req),
         firebase_service,
-        redis_service,
+        &mut redis_conn_pooled,
         user_principal,
         req,
     )
@@ -482,10 +483,7 @@ pub async fn send_notification_impl<F: FcmService, R: RedisConnection, P: UserPr
     }
 
     let user_metadata: UserMetadata = {
-        let meta_raw: Option<Vec<u8>> = redis_service
-            .hget(&user_id_text, METADATA_FIELD)
-            .await
-            .map_err(Error::Redis)?;
+        let meta_raw: Option<Vec<u8>> = redis_service.hget(&user_id_text, METADATA_FIELD).await?;
         match meta_raw {
             Some(bytes) => serde_json::from_slice(&bytes).map_err(Error::Deser)?,
             None => return Ok(Json(Err(ApiError::MetadataNotFound))),

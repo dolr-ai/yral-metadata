@@ -181,8 +181,7 @@ mod tests {
         let mut mock_redis = MockRedisConnection::new();
         let user_principal_text = "gytd5-mqaaa-aaaah-ajwka-cai".to_string();
 
-        let initial_fcm_key =
-            "existing_fcm_key_for_gytd5-mqaaa-aaaah-ajwka-cai".to_string();
+        let initial_fcm_key = "existing_fcm_key_for_gytd5-mqaaa-aaaah-ajwka-cai".to_string();
         let existing_token = "existing_device_token_1".to_string();
 
         let mut initial_metadata = create_actual_user_metadata(

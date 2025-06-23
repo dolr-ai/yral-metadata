@@ -1,6 +1,5 @@
 use candid::Principal;
 use ntex::web::types::Path;
-use redis::RedisResult;
 
 use crate::utils::error::{Error, Result};
 use types::{DeviceRegistrationToken, NotificationKey, SendNotificationReq, Signature};
@@ -31,15 +30,13 @@ pub trait FcmService: Send + Sync {
 // and mocks can serialize/deserialize as needed, or we refine this.
 
 pub trait RedisConnection: Send + Sync {
-    async fn hget<F, RV>(&mut self, key: &str, field: F) -> RedisResult<RV>
+    async fn hget<RV>(&mut self, key: &str, field: &str) -> Result<RV>
     where
-        F: redis::ToRedisArgs + Send + Sync,
         RV: redis::FromRedisValue + Send + Sync;
 
-    async fn hset<K, F, V>(&mut self, key: K, field: F, value: V) -> RedisResult<bool>
+    async fn hset<K, V>(&mut self, key: K, field: &str, value: V) -> Result<()>
     where
-        K: redis::ToRedisArgs + Send + Sync,
-        F: redis::ToRedisArgs + Send + Sync,
+        K: redis::ToRedisArgs + Send + Sync + Clone,
         V: redis::ToRedisArgs + Send + Sync;
 
     // Test-specific hget that returns UserMetadata directly.
