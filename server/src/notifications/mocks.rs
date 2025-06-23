@@ -8,9 +8,8 @@ use crate::{
     },
     utils::error::{Error, Result},
 };
-use redis::{FromRedisValue, RedisError, RedisResult, ToRedisArgs};
+use redis::{FromRedisValue, RedisError, ToRedisArgs};
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::collections::HashMap;
 use std::sync::RwLock;
 use types::{
@@ -102,16 +101,11 @@ impl MockRedisConnection {
 }
 
 impl RedisConnection for MockRedisConnection {
-    async fn hget<F, RV>(&mut self, key: &str, field: F) -> RedisResult<RV>
+    async fn hget<RV>(&mut self, key: &str, field: &str) -> Result<RV>
     where
-        F: ToRedisArgs + Send + Sync,
         RV: FromRedisValue + Send + Sync,
     {
-        let field_bytes = field.to_redis_args();
-        let field_str =
-            String::from_utf8_lossy(field_bytes.get(0).map_or(&Vec::new(), |v| v)).into_owned();
-
-        if field_str != METADATA_FIELD {
+        if field != METADATA_FIELD {
             return Ok(RV::from_redis_value(&redis::Value::Nil)?); // Field mismatch, return nil
         }
 
@@ -125,35 +119,31 @@ impl RedisConnection for MockRedisConnection {
                         e.to_string(),
                     ))
                 })?;
-                RV::from_redis_value(&redis::Value::Data(serialized_data))
+                RV::from_redis_value(&redis::Value::Data(serialized_data)).map_err(|e| e.into())
             }
             None => Ok(RV::from_redis_value(&redis::Value::Nil)?), // Key not found, return nil
         }
     }
 
-    async fn hset<K, F, V>(&mut self, key: K, field: F, value: V) -> RedisResult<bool>
+    async fn hset<K, V>(&mut self, key: K, field: &str, value: V) -> Result<()>
     where
         K: ToRedisArgs + Send + Sync,
-        F: ToRedisArgs + Send + Sync,
         V: ToRedisArgs + Send + Sync,
     {
         let key_args = key.to_redis_args();
         let key_str =
-            String::from_utf8_lossy(key_args.get(0).map_or(&Vec::new(), |v| v)).into_owned();
+            String::from_utf8_lossy(key_args.first().map_or(&Vec::new(), |v| v)).into_owned();
 
-        let field_args = field.to_redis_args();
-        let field_str =
-            String::from_utf8_lossy(field_args.get(0).map_or(&Vec::new(), |v| v)).into_owned();
-
-        if field_str != METADATA_FIELD {
+        if field != METADATA_FIELD {
             return Err(RedisError::from((
                 redis::ErrorKind::TypeError,
                 "Mock hset: Invalid field argument",
-            )));
+            ))
+            .into());
         }
 
         let value_args = value.to_redis_args();
-        let value_bytes = value_args.get(0).ok_or_else(|| {
+        let value_bytes = value_args.first().ok_or_else(|| {
             RedisError::from((
                 redis::ErrorKind::TypeError,
                 "Mock hset: Value is not valid bytes",
@@ -170,7 +160,7 @@ impl RedisConnection for MockRedisConnection {
             })?;
 
         self.users_data.insert(key_str, user_metadata);
-        Ok(true) // Return true for successful set
+        Ok(())
     }
 }
 
@@ -208,7 +198,7 @@ impl FcmService for MockFCM {
         let mut groups = self.notification_groups.write().unwrap();
         let registration_token = request
             .registration_ids
-            .get(0)
+            .first()
             .ok_or_else(|| {
                 Error::Unknown("MockFCM: Missing registration_token in request_ids".to_string())
             })?
