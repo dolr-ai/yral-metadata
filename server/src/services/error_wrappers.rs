@@ -76,7 +76,7 @@ impl From<config::ConfigError> for ConfigErrorDetail {
                 message: format!(
                     "Configuration file could not be parsed. URI: {:?}, Cause: {}",
                     uri,
-                    cause
+                    cause.to_string()
                 ),
             },
             config::ConfigError::Type {
@@ -89,7 +89,7 @@ impl From<config::ConfigError> for ConfigErrorDetail {
                 message: format!(
                     "Configuration type error. Origin: {:?}, Unexpected: {}, Expected: {}, Key: {:?}",
                     origin,
-                    unexpected,
+                    unexpected.to_string(),
                     expected,
                     key
                 ),
@@ -100,7 +100,7 @@ impl From<config::ConfigError> for ConfigErrorDetail {
             },
             config::ConfigError::Foreign(e) => ConfigErrorDetail {
                 kind: "Foreign".to_string(),
-                message: format!("Foreign error: {}", e),
+                message: format!("Foreign error: {}", e.to_string()),
             },
         }
     }
@@ -411,27 +411,27 @@ impl From<ic_agent::AgentError> for AgentErrorDetail {
             },
             ic_agent::AgentError::InvalidCborData(error) => AgentErrorDetail {
                 kind: "InvalidCborData".to_string(),
-                message: format!("Invalid CBOR data, could not deserialize: \"{}\"", error),
+                message: format!("Invalid CBOR data, could not deserialize: \"{}\"", error.to_string()),
             },
             ic_agent::AgentError::CannotCalculateRequestId(error) => AgentErrorDetail {
                 kind: "CannotCalculateRequestId".to_string(),
-                message: format!("Cannot calculate a RequestID: \"{}\"", error),
+                message: format!("Cannot calculate a RequestID: \"{}\"", error.to_string()),
             },
             ic_agent::AgentError::CandidError(error) => AgentErrorDetail {
                 kind: "CandidError".to_string(),
-                message: format!("Candid returned an error: \"{}\"", error),
+                message: format!("Candid returned an error: \"{}\"", error.to_string()),
             },
             ic_agent::AgentError::UrlParseError(error) => AgentErrorDetail {
                 kind: "UrlParseError".to_string(),
-                message: format!("Cannot parse url: \"{}\"", error),
+                message: format!("Cannot parse url: \"{}\"", error.to_string()),
             },
             ic_agent::AgentError::InvalidMethodError(error) => AgentErrorDetail {
                 kind: "InvalidMethodError".to_string(),
-                message: format!("Invalid method: \"{}\"", error),
+                message: format!("Invalid method: \"{}\"", error.to_string()),
             },
             ic_agent::AgentError::PrincipalError(error) => AgentErrorDetail {
                 kind: "PrincipalError".to_string(),
-                message: format!("Cannot parse Principal: \"{}\"", error),
+                message: format!("Cannot parse Principal: \"{}\"", error.to_string()),
             },
             ic_agent::AgentError::CertifiedReject(error) => AgentErrorDetail {
                 kind: "CertifiedReject".to_string(),
@@ -459,11 +459,11 @@ impl From<ic_agent::AgentError> for AgentErrorDetail {
             },
             ic_agent::AgentError::Leb128ReadError(error) => AgentErrorDetail {
                 kind: "Leb128ReadError".to_string(),
-                message: format!("Error reading LEB128 value: \"{}\"", error),
+                message: format!("Error reading LEB128 value: \"{}\"", error.to_string()),
             },
             ic_agent::AgentError::Utf8ReadError(error) => AgentErrorDetail {
                 kind: "Utf8ReadError".to_string(),
-                message: format!("Error in UTF-8 string: \"{}\"", error),
+                message: format!("Error in UTF-8 string: \"{}\"", error.to_string()),
             },
             ic_agent::AgentError::LookupPathAbsent(path) => AgentErrorDetail {
                 kind: "LookupPathAbsent".to_string(),
@@ -527,7 +527,7 @@ impl From<ic_agent::AgentError> for AgentErrorDetail {
             },
             ic_agent::AgentError::NoRootKeyInStatus(status_string) => AgentErrorDetail {
                 kind: "NoRootKeyInStatus".to_string(),
-                message: format!("The status response did not contain a root key. Status: \"{}\"", status_string),
+                message: format!("The status response did not contain a root key. Status: \"{}\"", status_string.to_string()),
             },
             ic_agent::AgentError::WalletCallFailed(error_string) => AgentErrorDetail {
                 kind: "WalletCallFailed".to_string(),
@@ -547,7 +547,7 @@ impl From<ic_agent::AgentError> for AgentErrorDetail {
             },
             ic_agent::AgentError::TransportError(transport_error) => AgentErrorDetail {
                 kind: "TransportError".to_string(),
-                message: format!("An error happened during communication with the replica: \"{}\"", transport_error),
+                message: format!("An error happened during communication with the replica: \"{}\"", transport_error.to_string()),
             },
             ic_agent::AgentError::CallDataMismatch {
                 field,
@@ -562,7 +562,7 @@ impl From<ic_agent::AgentError> for AgentErrorDetail {
             },
             ic_agent::AgentError::InvalidRejectCode(reject_code_val) => AgentErrorDetail {
                 kind: "InvalidRejectCode".to_string(),
-                message: format!("The rejected call had an invalid reject code {}. Valid range is 1-5.", reject_code_val),
+                message: format!("The rejected call had an invalid reject code {}. Valid range is 1-5.", reject_code_val.to_string()),
             },
             ic_agent::AgentError::RouteProviderError(error_string) => AgentErrorDetail {
                 kind: "RouteProviderError".to_string(),
