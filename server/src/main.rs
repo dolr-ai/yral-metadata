@@ -1,9 +1,11 @@
+mod admin;
 mod api;
 mod auth;
 mod config;
 mod consts;
 mod firebase;
 mod notifications;
+mod qstash;
 mod services;
 mod session;
 mod state;
@@ -40,6 +42,7 @@ async fn main() -> Result<()> {
             .service(unregister_device)
             .service(send_notification)
             .service(session::update_session_as_registered)
+            .service(admin::populate_canister_index)
     })
     .bind(conf.bind_address)?
     .run()

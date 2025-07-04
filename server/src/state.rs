@@ -5,6 +5,7 @@ use crate::auth::init_jwt;
 use crate::auth::JwtDetails;
 use crate::config::AppConfig;
 use crate::firebase::Firebase;
+use crate::qstash::QStashVerifier;
 use crate::utils::error::{Error, Result};
 use crate::utils::yral_auth_jwt::YralAuthJwt;
 
@@ -19,6 +20,7 @@ pub struct AppState {
     pub yral_auth_jwt: YralAuthJwt,
     pub firebase: Firebase,
     pub backend_admin_ic_agent: ic_agent::Agent,
+    pub qstash_verifier: QStashVerifier,
 }
 
 impl AppState {
@@ -31,6 +33,10 @@ impl AppState {
                 .await
                 .map_err(|e| Error::FirebaseApiErr(e.to_string()))?,
             backend_admin_ic_agent: init_backend_admin_key(app_config).await?,
+            qstash_verifier: QStashVerifier::new(
+                &app_config.qstash_current_signing_key,
+                &app_config.qstash_next_signing_key,
+            )?,
         })
     }
 }

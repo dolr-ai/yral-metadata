@@ -322,3 +322,10 @@ pub struct CanisterSessionRegisteredRes {
     pub error: Option<String>,
     pub referral_success: bool,
 }
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema, Debug)]
+pub struct PopulateIndexResponse {
+    pub total: usize,
+    pub processed: usize,
+    pub failed: usize,
+}
