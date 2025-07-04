@@ -4,6 +4,7 @@ use candid::Principal;
 use error::ApiError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use utoipa::ToSchema;
 pub use yral_identity::{msg_builder::Message, Error, Signature};
 
@@ -88,6 +89,14 @@ pub struct BulkUsers {
 }
 
 pub type DeleteMetadataBulkRes = ();
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct BulkGetUserMetadataReq {
+    #[schema(value_type = String)]
+    pub users: Vec<Principal>,
+}
+
+pub type BulkGetUserMetadataRes = HashMap<Principal, GetUserMetadataRes>;
 
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
 pub struct RegisterDeviceReq {

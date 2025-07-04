@@ -10,10 +10,11 @@ use reqwest::{
     header::{HeaderMap, HeaderValue, AUTHORIZATION},
     Url,
 };
+use std::collections::HashMap;
 use types::{
-    ApiResult, BulkUsers, GetUserMetadataRes, RegisterDeviceReq, RegisterDeviceRes,
-    SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq,
-    UnregisterDeviceRes,
+    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, GetUserMetadataRes,
+    RegisterDeviceReq, RegisterDeviceRes, SetUserMetadataReq, SetUserMetadataReqMetadata,
+    SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes,
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -92,6 +93,28 @@ impl<const A: bool> MetadataClient<A> {
         let res = self.client.get(api_url).send().await?;
 
         let res: ApiResult<GetUserMetadataRes> = res.json().await?;
+        Ok(res?)
+    }
+
+    pub async fn get_user_metadata_bulk(
+        &self,
+        user_principals: Vec<Principal>,
+    ) -> Result<HashMap<Principal, GetUserMetadataRes>> {
+        let api_url = self
+            .base_url
+            .join("metadata/bulk")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
+        let res = self
+            .client
+            .post(api_url)
+            .json(&BulkGetUserMetadataReq {
+                users: user_principals,
+            })
+            .send()
+            .await?;
+
+        let res: ApiResult<BulkGetUserMetadataRes> = res.json().await?;
         Ok(res?)
     }
 

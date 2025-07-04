@@ -1,13 +1,14 @@
 use candid::Principal;
-use futures::{prelude::*, stream::FuturesUnordered};
+use futures::{stream, StreamExt, TryStreamExt};
 use ntex::web::{
     self,
     types::{Json, Path, State},
 };
-use redis::{AsyncCommands, RedisError};
+use redis::AsyncCommands;
+use std::collections::HashMap;
 use types::{
-    error::ApiError, ApiResult, BulkUsers, GetUserMetadataRes, SetUserMetadataReq,
-    SetUserMetadataRes, UserMetadata,
+    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, GetUserMetadataRes,
+    SetUserMetadataReq, SetUserMetadataRes, UserMetadata,
 };
 
 use crate::{
@@ -131,4 +132,50 @@ async fn delete_metadata_bulk(
     }
 
     Ok(Json(Ok(())))
+}
+
+#[utoipa::path(
+    post,
+    path = "/metadata/bulk",
+    request_body = BulkGetUserMetadataReq,
+    responses(
+        (status = 200, description = "Get user metadata in bulk successfully", body = String, content_type = "application/json"),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<String>)
+    )
+)]
+#[web::post("/metadata/bulk")]
+async fn get_user_metadata_bulk(
+    state: State<AppState>,
+    req: Json<BulkGetUserMetadataReq>,
+) -> Result<Json<ApiResult<BulkGetUserMetadataRes>>> {
+    // Create a stream of futures that fetch metadata for each principal
+    let futures_stream = stream::iter(req.users.iter().cloned())
+        .map(|principal| {
+            let state = state.clone();
+            async move {
+                let user = principal.to_text();
+                
+                // Get a new connection for this operation
+                let mut conn = state.redis.get().await?;
+                let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
+                
+                let metadata = match meta_raw {
+                    Some(raw) => {
+                        let meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
+                        Some(meta)
+                    }
+                    None => None,
+                };
+                
+                Ok::<(Principal, GetUserMetadataRes), Error>((principal, metadata))
+            }
+        })
+        .buffer_unordered(10); // Process up to 10 requests concurrently
+    
+    // Collect all results into a HashMap
+    let results: HashMap<Principal, GetUserMetadataRes> = futures_stream
+        .try_collect()
+        .await?;
+    
+    Ok(Json(Ok(results)))
 }
