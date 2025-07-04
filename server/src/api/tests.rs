@@ -3,7 +3,7 @@ use crate::test_utils::test_helpers::*;
 use crate::utils::canister::CANISTER_TO_PRINCIPAL_KEY;
 use candid::Principal;
 use redis::AsyncCommands;
-use types::{BulkGetUserMetadataReq, BulkUsers};
+use types::{BulkGetUserMetadataReq, BulkUsers, CanisterToPrincipalReq};
 
 #[tokio::test]
 async fn test_set_user_metadata_valid_request() {
@@ -295,4 +295,132 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
     for user in &users {
         cleanup_test_data(&redis_pool, &user.to_text()).await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn test_get_canister_to_principal_bulk_impl() {
+    // Setup
+    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+    let mut conn = redis_pool.get().await.unwrap();
+    
+    // Create test mappings
+    let canister_principals = vec![
+        (generate_test_principal(3000), generate_test_principal(30)),
+        (generate_test_principal(3001), generate_test_principal(31)),
+        (generate_test_principal(3002), generate_test_principal(32)),
+    ];
+    
+    // Store test data in Redis
+    for (canister_id, user_principal) in &canister_principals {
+        let _: () = conn.hset(
+            CANISTER_TO_PRINCIPAL_KEY,
+            canister_id.to_text(),
+            user_principal.to_text()
+        ).await.unwrap();
+    }
+    
+    // Execute - request all canisters
+    let canisters = canister_principals.iter().map(|(c, _)| *c).collect();
+    let req = CanisterToPrincipalReq { canisters };
+    let result = get_canister_to_principal_bulk_impl(&redis_pool, req).await;
+    
+    // Verify
+    assert!(result.is_ok());
+    let res = result.unwrap();
+    assert_eq!(res.mappings.len(), 3);
+    
+    // Check specific mappings
+    for (canister_id, expected_principal) in &canister_principals {
+        assert_eq!(res.mappings.get(canister_id), Some(expected_principal));
+    }
+    
+    // Cleanup
+    for (canister_id, _) in &canister_principals {
+        let _: () = conn.hdel(CANISTER_TO_PRINCIPAL_KEY, canister_id.to_text()).await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn test_get_canister_to_principal_bulk_impl_partial_results() {
+    // Setup
+    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+    let mut conn = redis_pool.get().await.unwrap();
+    
+    // Store only some mappings
+    let _: () = conn.hset(
+        CANISTER_TO_PRINCIPAL_KEY,
+        generate_test_principal(4000).to_text(),
+        generate_test_principal(40).to_text()
+    ).await.unwrap();
+    
+    let _: () = conn.hset(
+        CANISTER_TO_PRINCIPAL_KEY,
+        generate_test_principal(4002).to_text(),
+        generate_test_principal(42).to_text()
+    ).await.unwrap();
+    
+    // Execute - request includes non-existent canister
+    let canisters = vec![
+        generate_test_principal(4000),
+        generate_test_principal(4001), // This one doesn't exist
+        generate_test_principal(4002),
+    ];
+    let req = CanisterToPrincipalReq { canisters };
+    let result = get_canister_to_principal_bulk_impl(&redis_pool, req).await;
+    
+    // Verify
+    assert!(result.is_ok());
+    let res = result.unwrap();
+    assert_eq!(res.mappings.len(), 2); // Only 2 mappings should be returned
+    
+    assert_eq!(res.mappings.get(&generate_test_principal(4000)), Some(&generate_test_principal(40)));
+    assert_eq!(res.mappings.get(&generate_test_principal(4001)), None);
+    assert_eq!(res.mappings.get(&generate_test_principal(4002)), Some(&generate_test_principal(42)));
+    
+    // Cleanup
+    let _: () = conn.hdel(CANISTER_TO_PRINCIPAL_KEY, generate_test_principal(4000).to_text()).await.unwrap();
+    let _: () = conn.hdel(CANISTER_TO_PRINCIPAL_KEY, generate_test_principal(4002).to_text()).await.unwrap();
+}
+
+#[tokio::test]
+async fn test_get_canister_to_principal_bulk_impl_empty_request() {
+    // Setup
+    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+    
+    // Execute with empty request
+    let req = CanisterToPrincipalReq { canisters: vec![] };
+    let result = get_canister_to_principal_bulk_impl(&redis_pool, req).await;
+    
+    // Verify
+    assert!(result.is_ok());
+    let res = result.unwrap();
+    assert!(res.mappings.is_empty());
+}
+
+#[tokio::test]
+async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
+    // Setup
+    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+    let mut conn = redis_pool.get().await.unwrap();
+    
+    let canister_id = generate_test_principal(5000);
+    
+    // Store invalid principal string
+    let _: () = conn.hset(
+        CANISTER_TO_PRINCIPAL_KEY,
+        canister_id.to_text(),
+        "invalid-principal-format"
+    ).await.unwrap();
+    
+    // Execute
+    let req = CanisterToPrincipalReq { canisters: vec![canister_id] };
+    let result = get_canister_to_principal_bulk_impl(&redis_pool, req).await;
+    
+    // Verify - should succeed but return empty mappings since the principal is invalid
+    assert!(result.is_ok());
+    let res = result.unwrap();
+    assert!(res.mappings.is_empty());
+    
+    // Cleanup
+    let _: () = conn.hdel(CANISTER_TO_PRINCIPAL_KEY, canister_id.to_text()).await.unwrap();
 }

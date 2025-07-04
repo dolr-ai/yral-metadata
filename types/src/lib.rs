@@ -98,6 +98,18 @@ pub struct BulkGetUserMetadataReq {
 
 pub type BulkGetUserMetadataRes = HashMap<Principal, GetUserMetadataRes>;
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct CanisterToPrincipalReq {
+    #[schema(value_type = Vec<String>)]
+    pub canisters: Vec<Principal>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, ToSchema)]
+pub struct CanisterToPrincipalRes {
+    #[schema(value_type = HashMap<String, String>)]
+    pub mappings: HashMap<Principal, Principal>,
+}
+
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
 pub struct RegisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,

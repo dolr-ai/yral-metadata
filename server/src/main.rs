@@ -38,6 +38,7 @@ async fn main() -> Result<()> {
             .service(get_user_metadata)
             .service(delete_metadata_bulk)
             .service(get_user_metadata_bulk)
+            .service(get_canister_to_principal_bulk)
             .service(register_device)
             .service(unregister_device)
             .service(send_notification)

@@ -4,14 +4,14 @@ use ntex::web::{
     types::{Json, Path, State},
 };
 use types::{
-    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, GetUserMetadataRes,
-    SetUserMetadataReq, SetUserMetadataRes,
+    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
+    CanisterToPrincipalRes, GetUserMetadataRes, SetUserMetadataReq, SetUserMetadataRes,
 };
 
 use crate::{
     api::implementation::{
-        delete_metadata_bulk_impl, get_user_metadata_bulk_impl, get_user_metadata_impl,
-        set_user_metadata_impl,
+        delete_metadata_bulk_impl, get_canister_to_principal_bulk_impl, get_user_metadata_bulk_impl, 
+        get_user_metadata_impl, set_user_metadata_impl,
     },
     services::error_wrappers::{ErrorWrapper, NullOk, OkWrapper},
     state::AppState,
@@ -113,5 +113,23 @@ async fn get_user_metadata_bulk(
     req: Json<BulkGetUserMetadataReq>,
 ) -> Result<Json<ApiResult<BulkGetUserMetadataRes>>> {
     let result = get_user_metadata_bulk_impl(&state.redis, req.0).await?;
+    Ok(Json(Ok(result)))
+}
+
+#[utoipa::path(
+    post,
+    path = "/canister-to-principal/bulk",
+    request_body = CanisterToPrincipalReq,
+    responses(
+        (status = 200, description = "Get canister to principal mapping in bulk successfully", body = OkWrapper<CanisterToPrincipalRes>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<CanisterToPrincipalRes>)
+    )
+)]
+#[web::post("/canister-to-principal/bulk")]
+async fn get_canister_to_principal_bulk(
+    state: State<AppState>,
+    req: Json<CanisterToPrincipalReq>,
+) -> Result<Json<ApiResult<CanisterToPrincipalRes>>> {
+    let result = get_canister_to_principal_bulk_impl(&state.redis, req.0).await?;
     Ok(Json(Ok(result)))
 }

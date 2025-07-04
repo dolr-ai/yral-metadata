@@ -2,8 +2,9 @@ use candid::Principal;
 use redis::AsyncCommands;
 use std::collections::HashMap;
 use types::{
-    BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, GetUserMetadataRes,
-    SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UserMetadata,
+    BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
+    CanisterToPrincipalRes, GetUserMetadataRes, SetUserMetadataReq, SetUserMetadataReqMetadata,
+    SetUserMetadataRes, UserMetadata,
 };
 use futures::{stream, StreamExt, TryStreamExt};
 
@@ -159,4 +160,35 @@ pub async fn get_user_metadata_bulk_impl(
         .await?;
     
     Ok(results)
+}
+
+/// Core implementation for bulk canister to principal lookup
+pub async fn get_canister_to_principal_bulk_impl(
+    redis_pool: &RedisPool,
+    req: CanisterToPrincipalReq,
+) -> Result<CanisterToPrincipalRes> {
+    // Handle empty request
+    if req.canisters.is_empty() {
+        return Ok(CanisterToPrincipalRes { mappings: HashMap::new() });
+    }
+    
+    let mut conn = redis_pool.get().await?;
+    
+    // Convert canister IDs to strings for Redis
+    let canister_ids: Vec<String> = req.canisters.iter().map(|c| c.to_text()).collect();
+    
+    // Use HMGET to fetch multiple values at once from the Redis hash
+    let values: Vec<Option<String>> = conn.hget(CANISTER_TO_PRINCIPAL_KEY, &canister_ids).await?;
+    
+    // Build the result HashMap
+    let mut mappings = HashMap::new();
+    for (i, canister_id) in req.canisters.into_iter().enumerate() {
+        if let Some(Some(principal_str)) = values.get(i) {
+            if let Ok(user_principal) = Principal::from_text(principal_str) {
+                mappings.insert(canister_id, user_principal);
+            }
+        }
+    }
+    
+    Ok(CanisterToPrincipalRes { mappings })
 }
