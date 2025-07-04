@@ -424,3 +424,46 @@ async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
     // Cleanup
     let _: () = conn.hdel(CANISTER_TO_PRINCIPAL_KEY, canister_id.to_text()).await.unwrap();
 }
+
+#[tokio::test]
+async fn test_get_canister_to_principal_bulk_impl_large_batch() {
+    // Setup
+    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+    let mut conn = redis_pool.get().await.unwrap();
+    
+    // Create 2500 test mappings (more than BATCH_SIZE of 1000)
+    let canister_principals: Vec<(Principal, Principal)> = (0..2500)
+        .map(|i| (generate_test_principal(10000 + i), generate_test_principal(100 + i)))
+        .collect();
+    
+    // Store test data in Redis
+    for (canister_id, user_principal) in &canister_principals {
+        let _: () = conn.hset(
+            CANISTER_TO_PRINCIPAL_KEY,
+            canister_id.to_text(),
+            user_principal.to_text()
+        ).await.unwrap();
+    }
+    
+    // Execute - request all canisters
+    let canisters = canister_principals.iter().map(|(c, _)| *c).collect();
+    let req = CanisterToPrincipalReq { canisters };
+    let result = get_canister_to_principal_bulk_impl(&redis_pool, req).await;
+    
+    // Verify
+    assert!(result.is_ok());
+    let res = result.unwrap();
+    assert_eq!(res.mappings.len(), 2500);
+    
+    // Spot check some mappings across different batches
+    assert_eq!(res.mappings.get(&generate_test_principal(10000)), Some(&generate_test_principal(100)));
+    assert_eq!(res.mappings.get(&generate_test_principal(10500)), Some(&generate_test_principal(600)));
+    assert_eq!(res.mappings.get(&generate_test_principal(11000)), Some(&generate_test_principal(1100)));
+    assert_eq!(res.mappings.get(&generate_test_principal(11500)), Some(&generate_test_principal(1600)));
+    assert_eq!(res.mappings.get(&generate_test_principal(12499)), Some(&generate_test_principal(2599)));
+    
+    // Cleanup
+    for (canister_id, _) in &canister_principals {
+        let _: () = conn.hdel(CANISTER_TO_PRINCIPAL_KEY, canister_id.to_text()).await.unwrap();
+    }
+}

@@ -173,19 +173,24 @@ pub async fn get_canister_to_principal_bulk_impl(
     }
     
     let mut conn = redis_pool.get().await?;
-    
-    // Convert canister IDs to strings for Redis
-    let canister_ids: Vec<String> = req.canisters.iter().map(|c| c.to_text()).collect();
-    
-    // Use HMGET to fetch multiple values at once from the Redis hash
-    let values: Vec<Option<String>> = conn.hget(CANISTER_TO_PRINCIPAL_KEY, &canister_ids).await?;
-    
-    // Build the result HashMap
     let mut mappings = HashMap::new();
-    for (i, canister_id) in req.canisters.into_iter().enumerate() {
-        if let Some(Some(principal_str)) = values.get(i) {
-            if let Ok(user_principal) = Principal::from_text(principal_str) {
-                mappings.insert(canister_id, user_principal);
+    
+    // Process in batches to avoid potential issues with very large requests
+    const BATCH_SIZE: usize = 1000;
+    
+    for batch in req.canisters.chunks(BATCH_SIZE) {
+        // Convert canister IDs to strings for Redis
+        let canister_ids: Vec<String> = batch.iter().map(|c| c.to_text()).collect();
+        
+        // Use HMGET to fetch multiple values at once from the Redis hash
+        let values: Vec<Option<String>> = conn.hget(CANISTER_TO_PRINCIPAL_KEY, &canister_ids).await?;
+        
+        // Process results for this batch
+        for (i, canister_id) in batch.iter().enumerate() {
+            if let Some(Some(principal_str)) = values.get(i) {
+                if let Ok(user_principal) = Principal::from_text(principal_str) {
+                    mappings.insert(*canister_id, user_principal);
+                }
             }
         }
     }
