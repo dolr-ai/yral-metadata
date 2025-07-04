@@ -1,24 +1,22 @@
 use candid::Principal;
-use futures::{stream, StreamExt, TryStreamExt};
 use ntex::web::{
     self,
     types::{Json, Path, State},
 };
-use redis::AsyncCommands;
-use std::collections::HashMap;
 use types::{
     ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, GetUserMetadataRes,
-    SetUserMetadataReq, SetUserMetadataRes, UserMetadata,
+    SetUserMetadataReq, SetUserMetadataRes,
 };
 
 use crate::{
-    auth::verify_token,
+    api::implementation::{
+        delete_metadata_bulk_impl, get_user_metadata_bulk_impl, get_user_metadata_impl,
+        set_user_metadata_impl,
+    },
     services::error_wrappers::{ErrorWrapper, NullOk, OkWrapper},
     state::AppState,
     utils::error::{Error, Result},
 };
-
-pub const METADATA_FIELD: &str = "metadata";
 
 #[utoipa::path(
     post,
@@ -40,22 +38,8 @@ async fn set_user_metadata(
     user_principal: Path<Principal>,
     req: Json<SetUserMetadataReq>,
 ) -> Result<Json<ApiResult<SetUserMetadataRes>>> {
-    let signature = req.0.signature;
-    let metadata = req.0.metadata;
-    signature.verify_identity(
-        *user_principal,
-        metadata
-            .clone()
-            .try_into()
-            .map_err(|_| Error::AuthTokenMissing)?,
-    )?;
-
-    let user = user_principal.to_text();
-    let mut conn = state.redis.get().await?;
-    let meta_raw = serde_json::to_vec(&metadata).map_err(Error::Deser)?;
-    let _replaced: bool = conn.hset(user, METADATA_FIELD, &meta_raw).await?;
-
-    Ok(Json(Ok(())))
+    let result = set_user_metadata_impl(&state.redis, *user_principal, req.0).await?;
+    Ok(Json(Ok(result)))
 }
 
 #[utoipa::path(
@@ -75,16 +59,8 @@ async fn get_user_metadata(
     state: State<AppState>,
     path: Path<Principal>,
 ) -> Result<Json<ApiResult<GetUserMetadataRes>>> {
-    let user = path.to_text();
-
-    let mut conn = state.redis.get().await?;
-    let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
-    let Some(meta_raw) = meta_raw else {
-        return Ok(Json(Ok(None)));
-    };
-    let meta: UserMetadata = serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
-
-    Ok(Json(Ok(Some(meta))))
+    let result = get_user_metadata_impl(&state.redis, *path).await?;
+    Ok(Json(Ok(result)))
 }
 
 #[utoipa::path(
@@ -114,23 +90,11 @@ async fn delete_metadata_bulk(
         .to_str()
         .map_err(|_| Error::AuthTokenInvalid)?;
     let token = token.trim_start_matches("Bearer ");
-    verify_token(token, &state.jwt_details)?;
 
-    let keys = req.users.iter().map(|k| k.to_text()).collect::<Vec<_>>();
+    // Verify JWT token
+    crate::auth::verify_token(token, &state.jwt_details)?;
 
-    let mut conn = state.redis.get().await?;
-
-    let chunk_size = 1000;
-    let mut failed = 0;
-    for chunk in keys.chunks(chunk_size) {
-        let res: usize = conn.del(chunk).await?;
-        failed += chunk.len() - res as usize;
-    }
-
-    if failed > 0 {
-        return Err(Error::Unknown(format!("failed to delete {} keys", failed)));
-    }
-
+    delete_metadata_bulk_impl(&state.redis, req.0).await?;
     Ok(Json(Ok(())))
 }
 
@@ -148,34 +112,6 @@ async fn get_user_metadata_bulk(
     state: State<AppState>,
     req: Json<BulkGetUserMetadataReq>,
 ) -> Result<Json<ApiResult<BulkGetUserMetadataRes>>> {
-    // Create a stream of futures that fetch metadata for each principal
-    let futures_stream = stream::iter(req.users.iter().cloned())
-        .map(|principal| {
-            let state = state.clone();
-            async move {
-                let user = principal.to_text();
-                
-                // Get a new connection for this operation
-                let mut conn = state.redis.get().await?;
-                let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
-                
-                let metadata = match meta_raw {
-                    Some(raw) => {
-                        let meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
-                        Some(meta)
-                    }
-                    None => None,
-                };
-                
-                Ok::<(Principal, GetUserMetadataRes), Error>((principal, metadata))
-            }
-        })
-        .buffer_unordered(10); // Process up to 10 requests concurrently
-    
-    // Collect all results into a HashMap
-    let results: HashMap<Principal, GetUserMetadataRes> = futures_stream
-        .try_collect()
-        .await?;
-    
-    Ok(Json(Ok(results)))
+    let result = get_user_metadata_bulk_impl(&state.redis, req.0).await?;
+    Ok(Json(Ok(result)))
 }

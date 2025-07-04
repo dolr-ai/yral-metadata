@@ -8,6 +8,9 @@ mod services;
 mod session;
 mod state;
 mod utils;
+
+#[cfg(test)]
+mod test_utils;
 use api::*;
 use config::AppConfig;
 use notifications::*;

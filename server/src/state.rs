@@ -55,3 +55,11 @@ pub async fn init_redis(conf: &AppConfig) -> Result<RedisPool> {
         .await
         .map_err(Error::Redis)
 }
+
+pub async fn init_redis_with_url(redis_url: &str) -> Result<RedisPool> {
+    let manager = bb8_redis::RedisConnectionManager::new(redis_url)?;
+    RedisPool::builder()
+        .build(manager)
+        .await
+        .map_err(Error::Redis)
+}
