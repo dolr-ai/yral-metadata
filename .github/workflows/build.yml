@@ -33,6 +33,8 @@ jobs:
 
       - name: Run tests
         run: cargo test
+        env:
+          TEST_REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
 
       - name: Build the project to `musl` output
         working-directory: ./server
