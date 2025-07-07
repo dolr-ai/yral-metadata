@@ -31,7 +31,7 @@ pub mod test_helpers {
     pub fn create_test_user_metadata(user_id: u64, canister_id: u64) -> UserMetadata {
         UserMetadata {
             user_canister_id: generate_test_principal(canister_id),
-            user_name: format!("test_user_{}", user_id),
+            user_name: format!("testuser{}", user_id),
             notification_key: None,
             is_migrated: false,
         }
