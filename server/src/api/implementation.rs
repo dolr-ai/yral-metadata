@@ -1,4 +1,5 @@
 use candid::Principal;
+use futures::{stream, StreamExt, TryStreamExt};
 use redis::AsyncCommands;
 use std::collections::HashMap;
 use types::{
@@ -6,7 +7,6 @@ use types::{
     CanisterToPrincipalRes, GetUserMetadataRes, SetUserMetadataReq, SetUserMetadataReqMetadata,
     SetUserMetadataRes, UserMetadata,
 };
-use futures::{stream, StreamExt, TryStreamExt};
 
 use crate::{
     state::RedisPool,
@@ -27,13 +27,13 @@ pub async fn set_user_metadata_core(
 ) -> Result<SetUserMetadataRes> {
     let user = user_principal.to_text();
     let mut conn = redis_pool.get().await?;
-    
+
     // Serialize metadata
     let meta_raw = serde_json::to_vec(metadata).map_err(Error::Deser)?;
-    
+
     // Store user metadata
     let _replaced: bool = conn.hset(&user, METADATA_FIELD, &meta_raw).await?;
-    
+
     // Update reverse index: canister_id -> user_principal
     let _: bool = conn
         .hset(
@@ -72,9 +72,9 @@ pub async fn get_user_metadata_impl(
 ) -> Result<GetUserMetadataRes> {
     let user = user_principal.to_text();
     let mut conn = redis_pool.get().await?;
-    
+
     let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
-    
+
     match meta_raw {
         Some(raw) => {
             let meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
@@ -85,27 +85,46 @@ pub async fn get_user_metadata_impl(
 }
 
 /// Core implementation for bulk delete of user metadata
-pub async fn delete_metadata_bulk_impl(
-    redis_pool: &RedisPool,
-    users: BulkUsers,
-) -> Result<()> {
+pub async fn delete_metadata_bulk_impl(redis_pool: &RedisPool, users: BulkUsers) -> Result<()> {
     let keys = users.users.iter().map(|k| k.to_text()).collect::<Vec<_>>();
-    let mut conn = redis_pool.get().await?;
 
-    // First, collect canister IDs before deletion
-    let mut canister_ids = Vec::new();
-    for user_principal in &users.users {
-        let user = user_principal.to_text();
-        if let Ok(Some(meta_raw)) = conn.hget::<_, _, Option<Box<[u8]>>>(&user, METADATA_FIELD).await {
-            if let Ok(meta) = serde_json::from_slice::<UserMetadata>(&meta_raw) {
-                canister_ids.push(meta.user_canister_id.to_text());
+    // First, collect canister IDs before deletion concurrently
+    let canister_ids_stream = stream::iter(users.users.iter().cloned())
+        .map(|user_principal| {
+            let redis_pool = redis_pool.clone();
+            async move {
+                let user = user_principal.to_text();
+
+                // Get a new connection for this operation
+                let mut conn = redis_pool.get().await?;
+                let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
+
+                let canister_id = match meta_raw {
+                    Some(raw) => {
+                        let meta: UserMetadata =
+                            serde_json::from_slice(&raw).map_err(Error::Deser)?;
+                        Some(meta.user_canister_id.to_text())
+                    }
+                    None => None,
+                };
+
+                Ok::<Option<String>, Error>(canister_id)
             }
-        }
-    }
+        })
+        .buffer_unordered(10); // Process up to 10 requests concurrently (being conservative here)
+
+    // Collect all canister IDs, filtering out None values
+    let canister_ids: Vec<String> = canister_ids_stream
+        .try_collect::<Vec<_>>()
+        .await?
+        .into_iter()
+        .filter_map(|id| id)
+        .collect();
 
     // Delete user metadata
     let chunk_size = 1000;
     let mut failed = 0;
+    let mut conn = redis_pool.get().await?;
     for chunk in keys.chunks(chunk_size) {
         let res: usize = conn.del(chunk).await?;
         failed += chunk.len() - res as usize;
@@ -136,29 +155,28 @@ pub async fn get_user_metadata_bulk_impl(
             let redis_pool = redis_pool.clone();
             async move {
                 let user = principal.to_text();
-                
+
                 // Get a new connection for this operation
                 let mut conn = redis_pool.get().await?;
                 let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
-                
+
                 let metadata = match meta_raw {
                     Some(raw) => {
-                        let meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
+                        let meta: UserMetadata =
+                            serde_json::from_slice(&raw).map_err(Error::Deser)?;
                         Some(meta)
                     }
                     None => None,
                 };
-                
+
                 Ok::<(Principal, GetUserMetadataRes), Error>((principal, metadata))
             }
         })
         .buffer_unordered(10); // Process up to 10 requests concurrently
-    
+
     // Collect all results into a HashMap
-    let results: HashMap<Principal, GetUserMetadataRes> = futures_stream
-        .try_collect()
-        .await?;
-    
+    let results: HashMap<Principal, GetUserMetadataRes> = futures_stream.try_collect().await?;
+
     Ok(results)
 }
 
@@ -169,22 +187,25 @@ pub async fn get_canister_to_principal_bulk_impl(
 ) -> Result<CanisterToPrincipalRes> {
     // Handle empty request
     if req.canisters.is_empty() {
-        return Ok(CanisterToPrincipalRes { mappings: HashMap::new() });
+        return Ok(CanisterToPrincipalRes {
+            mappings: HashMap::new(),
+        });
     }
-    
+
     let mut conn = redis_pool.get().await?;
     let mut mappings = HashMap::new();
-    
+
     // Process in batches to avoid potential issues with very large requests
     const BATCH_SIZE: usize = 1000;
-    
+
     for batch in req.canisters.chunks(BATCH_SIZE) {
         // Convert canister IDs to strings for Redis
         let canister_ids: Vec<String> = batch.iter().map(|c| c.to_text()).collect();
-        
+
         // Use HMGET to fetch multiple values at once from the Redis hash
-        let values: Vec<Option<String>> = conn.hget(CANISTER_TO_PRINCIPAL_KEY, &canister_ids).await?;
-        
+        let values: Vec<Option<String>> =
+            conn.hget(CANISTER_TO_PRINCIPAL_KEY, &canister_ids).await?;
+
         // Process results for this batch
         for (i, canister_id) in batch.iter().enumerate() {
             if let Some(Some(principal_str)) = values.get(i) {
@@ -194,6 +215,6 @@ pub async fn get_canister_to_principal_bulk_impl(
             }
         }
     }
-    
+
     Ok(CanisterToPrincipalRes { mappings })
 }
