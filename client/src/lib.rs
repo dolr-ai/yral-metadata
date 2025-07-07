@@ -97,6 +97,7 @@ impl<const A: bool> MetadataClient<A> {
         Ok(res?)
     }
 
+    #[deprecated(note = "Use `get_user_metadata_v2` instead")]
     pub async fn get_user_metadata(&self, user_principal: Principal) -> Result<GetUserMetadataV2Res> {
         self.get_user_metadata_inner(user_principal.to_text())
             .await
