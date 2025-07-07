@@ -15,7 +15,6 @@ pub struct AppConfig {
     pub yral_auth_public_key: String,
     pub backend_admin_identity: String,
     pub qstash_current_signing_key: String,
-    pub qstash_next_signing_key: String,
 }
 
 impl AppConfig {

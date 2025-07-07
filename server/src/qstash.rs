@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use base64::{engine::general_purpose::URL_SAFE, Engine as _};
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use ntex::web;
@@ -18,73 +20,45 @@ pub struct QStashClaims {
 }
 
 #[derive(Clone)]
-pub struct QStashVerifier {
-    current_signing_key: String,
-    next_signing_key: String,
+pub struct QStashState {
+    decoding_key: Arc<DecodingKey>,
+    validation: Arc<Validation>,
 }
 
-impl QStashVerifier {
-    pub fn new(current_signing_key: &str, next_signing_key: &str) -> Result<Self> {
-        // Validate that keys are valid base64
-        DecodingKey::from_base64_secret(current_signing_key)
-            .map_err(|_| Error::Unknown("Invalid current QStash signing key".to_string()))?;
-        DecodingKey::from_base64_secret(next_signing_key)
-            .map_err(|_| Error::Unknown("Invalid next QStash signing key".to_string()))?;
-        
-        Ok(Self {
-            current_signing_key: current_signing_key.to_string(),
-            next_signing_key: next_signing_key.to_string(),
-        })
+impl QStashState {
+    pub fn init(verification_key: String) -> Self {
+        let decoding_key = DecodingKey::from_secret(verification_key.as_bytes());
+        let mut validation = Validation::new(Algorithm::HS256);
+        validation.set_issuer(&["Upstash"]);
+        validation.set_audience(&[""]);
+        Self {
+            decoding_key: Arc::new(decoding_key),
+            validation: Arc::new(validation),
+        }
     }
-    
-    pub async fn verify_request(
-        &self,
-        req: &web::HttpRequest,
-        body: &[u8],
-    ) -> Result<QStashClaims> {
-        // Extract signature from header
+
+    pub async fn verify_qstash_message(&self, req: &web::HttpRequest, body: &[u8]) -> Result<()> {
         let signature = req
             .headers()
             .get("Upstash-Signature")
             .ok_or(Error::AuthTokenMissing)?
             .to_str()
             .map_err(|_| Error::AuthTokenInvalid)?;
-        
-        // Decode header to check algorithm
-        let header = decode_header(signature)
+
+        let jwt =
+            jsonwebtoken::decode::<QStashClaims>(signature, &self.decoding_key, &self.validation)
+                .map_err(|_| Error::AuthTokenInvalid)?;
+
+        let sig_body_hash = URL_SAFE
+            .decode(jwt.claims.body)
             .map_err(|_| Error::AuthTokenInvalid)?;
-        
-        if header.alg != Algorithm::HS256 {
+
+        let derived_hash = Sha256::digest(&body);
+
+        if derived_hash.as_slice() != sig_body_hash.as_slice() {
             return Err(Error::AuthTokenInvalid);
         }
-        
-        // Create validation
-        let mut validation = Validation::new(Algorithm::HS256);
-        validation.set_issuer(&["Upstash"]);
-        validation.validate_exp = true;
-        
-        // Create decoding keys
-        let current_key = DecodingKey::from_base64_secret(&self.current_signing_key)
-            .map_err(|_| Error::Unknown("Invalid current key".to_string()))?;
-        let next_key = DecodingKey::from_base64_secret(&self.next_signing_key)
-            .map_err(|_| Error::Unknown("Invalid next key".to_string()))?;
-        
-        // Try current key first, then next key
-        let token_data = decode::<QStashClaims>(signature, &current_key, &validation)
-            .or_else(|_| decode::<QStashClaims>(signature, &next_key, &validation))
-            .map_err(|_| Error::AuthTokenInvalid)?;
-        
-        // Verify body hash
-        let expected_body_hash = URL_SAFE
-            .decode(&token_data.claims.body)
-            .map_err(|_| Error::AuthTokenInvalid)?;
-        
-        let actual_body_hash = Sha256::digest(body);
-        
-        if expected_body_hash != actual_body_hash.as_slice() {
-            return Err(Error::AuthTokenInvalid);
-        }
-        
-        Ok(token_data.claims)
+
+        Ok(())
     }
 }
