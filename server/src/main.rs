@@ -44,6 +44,7 @@ async fn main() -> Result<()> {
             .service(send_notification)
             .service(session::update_session_as_registered)
             .service(admin::populate_canister_index)
+            .service(admin::qstash_verify_test)
     })
     .bind(conf.bind_address)?
     .run()
