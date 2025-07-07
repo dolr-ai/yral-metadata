@@ -102,8 +102,8 @@ impl<const A: bool> MetadataClient<A> {
             .await
     }
 
-    pub async fn get_user_metadata_by_username(&self, username: String) -> Result<GetUserMetadataV2Res> {
-        self.get_user_metadata_inner(username)
+    pub async fn get_user_metadata_v2(&self, username_or_principal: String) -> Result<GetUserMetadataV2Res> {
+        self.get_user_metadata_inner(username_or_principal)
             .await
     }
 
