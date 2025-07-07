@@ -106,7 +106,7 @@ async fn test_get_user_metadata_existing() {
         .unwrap();
 
     // Execute
-    let result = get_user_metadata_impl(&redis_pool, user_principal).await;
+    let result = get_user_metadata_impl(&redis_pool, user_principal.to_text()).await;
 
     // Verify
     assert!(result.is_ok());
@@ -129,7 +129,7 @@ async fn test_get_user_metadata_not_found() {
     let user_principal = generate_test_principal(4);
 
     // Execute
-    let result = get_user_metadata_impl(&redis_pool, user_principal).await;
+    let result = get_user_metadata_impl(&redis_pool, user_principal.to_text()).await;
 
     // Verify
     assert!(result.is_ok());

@@ -4,8 +4,7 @@ use ntex::web::{
     types::{Json, Path, State},
 };
 use types::{
-    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
-    CanisterToPrincipalRes, GetUserMetadataRes, SetUserMetadataReq, SetUserMetadataRes,
+    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq, CanisterToPrincipalRes, GetUserMetadataV2Res, SetUserMetadataReq, SetUserMetadataRes
 };
 
 use crate::{
@@ -46,20 +45,20 @@ async fn set_user_metadata(
     get,
     path = "/metadata/{user_principal}",
     params(
-        ("user_principal" = String, Path, description = "User principal ID")
+        ("username_or_principal" = String, Path, description = "Username or principal ID")
     ),
     responses(
-        (status = 200, description = "Get user metadata successfully", body = OkWrapper<GetUserMetadataRes>),
-        (status = 404, description = "User metadata not found", body = ErrorWrapper<GetUserMetadataRes>),
-        (status = 500, description = "Internal server error", body = ErrorWrapper<GetUserMetadataRes>)
+        (status = 200, description = "Get user metadata successfully", body = OkWrapper<GetUserMetadataV2Res>),
+        (status = 404, description = "User metadata not found", body = ErrorWrapper<GetUserMetadataV2Res>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<GetUserMetadataV2Res>)
     )
 )]
-#[web::get("/metadata/{user_principal}")]
+#[web::get("/metadata/{username_or_principal}")]
 async fn get_user_metadata(
     state: State<AppState>,
-    path: Path<Principal>,
-) -> Result<Json<ApiResult<GetUserMetadataRes>>> {
-    let result = get_user_metadata_impl(&state.redis, *path).await?;
+    path: Path<String>,
+) -> Result<Json<ApiResult<GetUserMetadataV2Res>>> {
+    let result = get_user_metadata_impl(&state.redis, path.into_inner()).await?;
     Ok(Json(Ok(result)))
 }
 
