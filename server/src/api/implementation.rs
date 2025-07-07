@@ -72,12 +72,12 @@ pub async fn set_user_metadata_core(
         let mut existing: UserMetadata = serde_json::from_slice(&existing_meta)
             .map_err(Error::Deser)?;
         existing.user_canister_id = set_metadata.user_canister_id;
-        existing.user_name = set_metadata.user_name.clone();
 
         if !existing.user_name.is_empty() {
             let key = username_info_key(&existing.user_name);
             let _del: usize = conn.hdel(&key, METADATA_FIELD).await?;
         }
+        existing.user_name = set_metadata.user_name.clone();
  
         existing
     } else {
