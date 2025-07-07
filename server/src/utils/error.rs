@@ -64,6 +64,10 @@ pub enum Error {
     UpdateSession(String),
     #[error("swagger ui error {0}")]
     SwaggerUi(String),
+    #[error("invalid username, must be 3-15 characters long, alphanumeric")]
+    InvalidUsername,
+    #[error("user with this username already exists")]
+    DuplicateUsername,
 }
 
 impl From<&Error> for ApiResult<()> {
@@ -110,6 +114,8 @@ impl From<&Error> for ApiResult<()> {
                 log::warn!("swagger ui error {e}");
                 ApiError::Unknown(format!("Swagger UI error: {}", e))
             }
+            Error::InvalidUsername => ApiError::InvalidUsername,
+            Error::DuplicateUsername => ApiError::DuplicateUsername,
         };
         ApiResult::Err(err)
     }
@@ -141,8 +147,9 @@ impl web::error::WebResponseError for Error {
             | Error::AuthTokenMissing => StatusCode::UNAUTHORIZED,
             Error::EnvironmentVariable(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::EnvironmentVariableMissing(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::UserAlreadyRegistered(_) | Error::InvalidPrincipal(_) => StatusCode::BAD_REQUEST,
+            Error::UserAlreadyRegistered(_) | Error::InvalidPrincipal(_) | Error::InvalidUsername => StatusCode::BAD_REQUEST,
             Error::SwaggerUi(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::DuplicateUsername => StatusCode::CONFLICT,
         }
     }
 }

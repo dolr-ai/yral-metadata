@@ -1,3 +1,7 @@
+use std::sync::LazyLock;
+
+use bb8::PooledConnection;
+use bb8_redis::RedisConnectionManager;
 use candid::Principal;
 use futures::{prelude::*, stream::FuturesUnordered};
 use ntex::web::{
@@ -5,9 +9,9 @@ use ntex::web::{
     types::{Json, Path, State},
 };
 use redis::{AsyncCommands, RedisError};
+use regex::Regex;
 use types::{
-    error::ApiError, ApiResult, BulkUsers, GetUserMetadataRes, SetUserMetadataReq,
-    SetUserMetadataRes, UserMetadata,
+    error::ApiError, ApiResult, BulkUsers, GetUserMetadataRes, SetUserMetadataReq, SetUserMetadataRes, UserMetadata, UserMetadataByUsername, UserMetadataV2
 };
 
 use crate::{
@@ -18,6 +22,33 @@ use crate::{
 };
 
 pub const METADATA_FIELD: &str = "metadata";
+
+fn username_info_key(user_name: &str) -> String {
+    format!("username-info:{}", user_name)
+}
+
+async fn set_metadata_for_username(
+    conn: &mut PooledConnection<'_, RedisConnectionManager>,
+    user_principal: Principal,
+    user_name: String,
+) -> Result<()> {
+    static USERNAME_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([a-zA-Z0-9]){3,15}$").unwrap());
+    if !USERNAME_REGEX.is_match(&user_name) {
+        return Err(Error::InvalidUsername);
+    }
+
+    let key = username_info_key(&user_name);
+    let meta = UserMetadataByUsername {
+        user_principal,
+    };
+    let meta_raw = serde_json::to_vec(&meta).map_err(Error::Deser)?;
+    let inserted: usize = conn.hset_nx(&key, METADATA_FIELD, &meta_raw).await?;
+    if inserted != 1 {
+        return Err(Error::DuplicateUsername);
+    }
+
+    Ok(())
+}
 
 #[utoipa::path(
     post,
@@ -40,10 +71,10 @@ async fn set_user_metadata(
     req: Json<SetUserMetadataReq>,
 ) -> Result<Json<ApiResult<SetUserMetadataRes>>> {
     let signature = req.0.signature;
-    let metadata = req.0.metadata;
+    let set_metadata = req.0.metadata;
     signature.verify_identity(
         *user_principal,
-        metadata
+        set_metadata
             .clone()
             .try_into()
             .map_err(|_| Error::AuthTokenMissing)?,
@@ -51,17 +82,69 @@ async fn set_user_metadata(
 
     let user = user_principal.to_text();
     let mut conn = state.redis.get().await?;
-    let meta_raw = serde_json::to_vec(&metadata).map_err(Error::Deser)?;
+
+    let existing_meta: Option<Box<[u8]>> = conn
+        .hget(&user, METADATA_FIELD)
+        .await?;
+
+    let new_meta = if let Some(existing_meta) = existing_meta {
+        let mut existing: UserMetadata = serde_json::from_slice(&existing_meta)
+            .map_err(Error::Deser)?;
+        existing.user_canister_id = set_metadata.user_canister_id;
+
+        if set_metadata.user_name.is_empty() {
+            let meta_raw = serde_json::to_vec(&existing).map_err(Error::Deser)?;
+            let _replaced: bool = conn.hset(user, METADATA_FIELD, &meta_raw).await?;
+            return Ok(Json(Ok(())));
+        }
+
+        set_metadata_for_username(&mut conn, *user_principal, set_metadata.user_name.clone())
+            .await?;
+        if !existing.user_name.is_empty() {
+            let key = username_info_key(&existing.user_name);
+            let _del: usize = conn.hdel(&key, METADATA_FIELD).await?;
+        }
+        existing.user_name = set_metadata.user_name.clone();
+        existing
+    } else {
+        if !set_metadata.user_name.is_empty() {
+            set_metadata_for_username(&mut conn, *user_principal, set_metadata.user_name.clone())
+                .await?;
+        }
+
+        let meta: UserMetadata = UserMetadata { 
+            user_canister_id: set_metadata.user_canister_id,
+            user_name: set_metadata.user_name,
+            notification_key: None,
+            is_migrated: false
+        };
+        meta
+    };
+
+    let meta_raw = serde_json::to_vec(&new_meta).map_err(Error::Deser)?;
     let _replaced: bool = conn.hset(user, METADATA_FIELD, &meta_raw).await?;
 
     Ok(Json(Ok(())))
 }
 
+async fn get_user_metadata_inner(
+    conn: &mut PooledConnection<'_, RedisConnectionManager>,
+    user: &str,
+) -> Result<Option<UserMetadata>> {
+    let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
+    let Some(meta_raw) = meta_raw else {
+        return Ok(None);
+    };
+    let meta: UserMetadata = serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
+
+    Ok(Some(meta))
+}
+
 #[utoipa::path(
     get,
-    path = "/metadata/{user_principal}",
+    path = "/metadata/{user_principal_or_principal}",
     params(
-        ("user_principal" = String, Path, description = "User principal ID")
+        ("username_or_principal" = String, Path, description = "Username or principal ID")
     ),
     responses(
         (status = 200, description = "Get user metadata successfully", body = OkWrapper<GetUserMetadataRes>),
@@ -69,21 +152,29 @@ async fn set_user_metadata(
         (status = 500, description = "Internal server error", body = ErrorWrapper<GetUserMetadataRes>)
     )
 )]
-#[web::get("/metadata/{user_principal}")]
+#[web::get("/metadata/{username_or_principal}")]
 async fn get_user_metadata(
     state: State<AppState>,
-    path: Path<Principal>,
+    username_or_principal: Path<String>,
 ) -> Result<Json<ApiResult<GetUserMetadataRes>>> {
-    let user = path.to_text();
-
     let mut conn = state.redis.get().await?;
-    let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
-    let Some(meta_raw) = meta_raw else {
+    let user_principal = if let Ok(principal) = Principal::from_text(username_or_principal.as_str()) {
+        principal
+    } else {
+       let key = username_info_key(username_or_principal.as_str());
+       let meta_raw: Option<Box<[u8]>> = conn.hget(&key, METADATA_FIELD).await?;
+       let Some(meta_raw) = meta_raw else {
+            return Ok(Json(Ok(None)));
+       };
+       let meta: UserMetadataByUsername = serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
+       meta.user_principal
+    };
+
+    let Some(metadata) = get_user_metadata_inner(&mut conn, &user_principal.to_text()).await? else {
         return Ok(Json(Ok(None)));
     };
-    let meta: UserMetadata = serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
 
-    Ok(Json(Ok(Some(meta))))
+    Ok(Json(Ok(Some(UserMetadataV2::from_metadata(user_principal, metadata)))))
 }
 
 #[utoipa::path(

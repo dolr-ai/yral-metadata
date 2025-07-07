@@ -43,7 +43,7 @@ impl Modify for BearerAuth {
         AppError,
         DeviceRegistrationToken,
         NotificationKey,
-        UserMetadata,
+        UserMetadataV2,
         SetUserMetadataReqMetadata,
         SetUserMetadataReq,
         BulkUsers,

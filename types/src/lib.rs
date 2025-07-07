@@ -30,9 +30,8 @@ pub struct NotificationKey {
     pub registration_tokens: Vec<DeviceRegistrationToken>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UserMetadata {
-    #[schema(value_type = String)]
     pub user_canister_id: Principal,
     pub user_name: String,
 
@@ -41,6 +40,32 @@ pub struct UserMetadata {
 
     #[serde(default)]
     pub is_migrated: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct UserMetadataV2 {
+    #[schema(value_type = String)]
+    pub user_principal: Principal,
+    #[schema(value_type = String)]
+    pub user_canister_id: Principal,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notification_key: Option<NotificationKey>,
+    #[serde(default)]
+    pub is_migrated: bool,
+}
+
+impl UserMetadataV2 {
+    pub fn from_metadata(
+        user_principal: Principal,
+        metadata: UserMetadata,
+    ) -> Self {
+        UserMetadataV2 {
+            user_principal,
+            user_canister_id: metadata.user_canister_id,
+            notification_key: metadata.notification_key,
+            is_migrated: metadata.is_migrated,
+        }
+    }
 }
 
 impl TryFrom<UserMetadata> for Message {
@@ -58,6 +83,12 @@ pub struct SetUserMetadataReqMetadata {
     #[schema(value_type = String)]
     pub user_canister_id: Principal,
     pub user_name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct UserMetadataByUsername {
+    #[schema(value_type = String)]
+    pub user_principal: Principal,
 }
 
 impl TryFrom<SetUserMetadataReqMetadata> for Message {
@@ -79,7 +110,7 @@ pub struct SetUserMetadataReq {
 
 pub type SetUserMetadataRes = ();
 
-pub type GetUserMetadataRes = Option<UserMetadata>;
+pub type GetUserMetadataRes = Option<UserMetadataV2>;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct BulkUsers {

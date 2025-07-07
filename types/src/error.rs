@@ -45,4 +45,8 @@ pub enum ApiError {
     InvalidPrincipal,
     #[error("failed to update session: {0}")]
     UpdateSession(String),
+    #[error("invalid username, must be 3-15 characters long, alphanumeric")]
+    InvalidUsername,
+    #[error("user with this username already exists")]
+    DuplicateUsername,
 }
