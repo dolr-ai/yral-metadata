@@ -4,6 +4,7 @@ use candid::Principal;
 use error::ApiError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use utoipa::ToSchema;
 pub use yral_identity::{msg_builder::Message, Error, Signature};
 
@@ -88,6 +89,26 @@ pub struct BulkUsers {
 }
 
 pub type DeleteMetadataBulkRes = ();
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct BulkGetUserMetadataReq {
+    #[schema(value_type = String)]
+    pub users: Vec<Principal>,
+}
+
+pub type BulkGetUserMetadataRes = HashMap<Principal, GetUserMetadataRes>;
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct CanisterToPrincipalReq {
+    #[schema(value_type = Vec<String>)]
+    pub canisters: Vec<Principal>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, ToSchema)]
+pub struct CanisterToPrincipalRes {
+    #[schema(value_type = HashMap<String, String>)]
+    pub mappings: HashMap<Principal, Principal>,
+}
 
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
 pub struct RegisterDeviceReq {
@@ -312,4 +333,11 @@ pub struct CanisterSessionRegisteredRes {
     pub success: bool,
     pub error: Option<String>,
     pub referral_success: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema, Debug)]
+pub struct PopulateIndexResponse {
+    pub total: usize,
+    pub processed: usize,
+    pub failed: usize,
 }

@@ -1,13 +1,18 @@
+mod admin;
 mod api;
 mod auth;
 mod config;
 mod consts;
 mod firebase;
 mod notifications;
+mod qstash;
 mod services;
 mod session;
 mod state;
 mod utils;
+
+#[cfg(test)]
+mod test_utils;
 use api::*;
 use config::AppConfig;
 use notifications::*;
@@ -32,10 +37,13 @@ async fn main() -> Result<()> {
             .service(set_user_metadata)
             .service(get_user_metadata)
             .service(delete_metadata_bulk)
+            .service(get_user_metadata_bulk)
+            .service(get_canister_to_principal_bulk)
             .service(register_device)
             .service(unregister_device)
             .service(send_notification)
             .service(session::update_session_as_registered)
+            .service(admin::populate_canister_index)
     })
     .bind(conf.bind_address)?
     .run()

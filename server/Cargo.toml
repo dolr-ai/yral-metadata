@@ -30,6 +30,8 @@ yral-identity = { workspace = true, default-features = false, features = [
     "ic-git",
 ] }
 jsonwebtoken = { version = "9.3.0", features = ["use_pem"] }
+base64 = "0.22"
+sha2 = "0.10"
 futures = "0.3.30"
 once_cell = "1.19.0"
 reqwest = { workspace = true, default-features = false, features = [
@@ -45,7 +47,7 @@ hyper-rustls = { version = "0.27.5", features = [
     "ring",
 ] }
 rustls = { version = "0.23.26" }
-yral-canisters-client = {git = "https://github.com/dolr-ai/yral-common.git", branch = "master", features = ["individual-user", "user-index"]}
+yral-canisters-client = {git = "https://github.com/dolr-ai/yral-common.git", branch = "master", features = ["individual-user", "user-index", "full"]}
 yral-types = {git = "https://github.com/dolr-ai/yral-common.git", branch = "master"}
 ic-agent.workspace = true
 utoipa = { version = "5.3.1" }
@@ -53,3 +55,5 @@ utoipa-swagger-ui = { version = "9.0.2", features = ["reqwest"]}
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+k256 = "0.13"
+rand = "0.8"

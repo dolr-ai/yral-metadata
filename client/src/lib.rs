@@ -10,8 +10,10 @@ use reqwest::{
     header::{HeaderMap, HeaderValue, AUTHORIZATION},
     Url,
 };
+use std::collections::HashMap;
 use types::{
-    ApiResult, BulkUsers, GetUserMetadataRes, RegisterDeviceReq, RegisterDeviceRes,
+    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
+    CanisterToPrincipalRes, GetUserMetadataRes, RegisterDeviceReq, RegisterDeviceRes,
     SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq,
     UnregisterDeviceRes,
 };
@@ -93,6 +95,48 @@ impl<const A: bool> MetadataClient<A> {
 
         let res: ApiResult<GetUserMetadataRes> = res.json().await?;
         Ok(res?)
+    }
+
+    pub async fn get_user_metadata_bulk(
+        &self,
+        user_principals: Vec<Principal>,
+    ) -> Result<HashMap<Principal, GetUserMetadataRes>> {
+        let api_url = self
+            .base_url
+            .join("metadata/bulk")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
+        let res = self
+            .client
+            .post(api_url)
+            .json(&BulkGetUserMetadataReq {
+                users: user_principals,
+            })
+            .send()
+            .await?;
+
+        let res: ApiResult<BulkGetUserMetadataRes> = res.json().await?;
+        Ok(res?)
+    }
+
+    pub async fn get_canister_to_principal_bulk(
+        &self,
+        canisters: Vec<Principal>,
+    ) -> Result<HashMap<Principal, Principal>> {
+        let api_url = self
+            .base_url
+            .join("canister-to-principal/bulk")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
+        let res = self
+            .client
+            .post(api_url)
+            .json(&CanisterToPrincipalReq { canisters })
+            .send()
+            .await?;
+
+        let res: ApiResult<CanisterToPrincipalRes> = res.json().await?;
+        Ok(res?.mappings)
     }
 
     pub async fn register_device(

@@ -5721,6 +5721,7 @@ dependencies = [
 name = "yral-metadata-server"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "bb8",
  "bb8-redis",
  "candid",
@@ -5731,16 +5732,19 @@ dependencies = [
  "hyper-util",
  "ic-agent",
  "jsonwebtoken",
+ "k256",
  "log",
  "ntex",
  "ntex-cors",
  "once_cell",
+ "rand 0.8.5",
  "redis",
  "reqwest",
  "rustls 0.23.27",
  "serde",
  "serde_json",
  "serde_with 3.12.0",
+ "sha2 0.10.9",
  "thiserror 1.0.69",
  "tokio",
  "utoipa",
