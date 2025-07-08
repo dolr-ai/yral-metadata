@@ -21,7 +21,7 @@ pub async fn populate_canister_index(
     body: Bytes,
 ) -> Result<web::HttpResponse> {
     // Verify QStash signature
-    state.qstash_verifier.verify_request(&req, &body).await?;
+    state.qstash.verify_qstash_message(&req, &body).await?;
 
     // Call the populate function
     let (total, processed) =

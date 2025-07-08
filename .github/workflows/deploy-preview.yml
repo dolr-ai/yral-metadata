@@ -56,6 +56,8 @@ jobs:
           flyctl secrets set BACKEND_ADMIN_IDENTITY="$BACKEND_ADMIN_IDENTITY" --app "$APP_NAME" --stage
           flyctl secrets set YRAL_AUTH_PUBLIC_KEY="$YRAL_AUTH_PUBLIC_KEY" --app "$APP_NAME" --stage
           flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID="$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID" --app "$APP_NAME" --stage
+          flyctl secrets set QSTASH_CURRENT_SIGNING_KEY="$QSTASH_CURRENT_SIGNING_KEY" --app "$APP_NAME" --stage
+          flyctl secrets set QSTASH_NEXT_SIGNING_KEY="$QSTASH_NEXT_SIGNING_KEY" --app "$APP_NAME" --stage
 
           echo "Redeploying preview app to apply secrets..."
           flyctl deploy --app "$APP_NAME" --remote-only --detach
@@ -69,3 +71,5 @@ jobs:
           YRAL_AUTH_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_JWT_VERIFY_PUBLIC_KEY }}
           GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID }}
           GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
+          QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
+          QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}

@@ -10,12 +10,15 @@ use types::{
 
 use crate::{
     api::implementation::{
-        delete_metadata_bulk_impl, get_canister_to_principal_bulk_impl, get_user_metadata_bulk_impl, 
-        get_user_metadata_impl, set_user_metadata_impl,
+        delete_metadata_bulk_impl, get_canister_to_principal_bulk_impl,
+        get_user_metadata_bulk_impl, get_user_metadata_impl, set_user_metadata_impl,
     },
     services::error_wrappers::{ErrorWrapper, NullOk, OkWrapper},
     state::AppState,
-    utils::error::{Error, Result},
+    utils::{
+        canister::CANISTER_TO_PRINCIPAL_KEY,
+        error::{Error, Result},
+    },
 };
 
 #[utoipa::path(
@@ -38,7 +41,13 @@ async fn set_user_metadata(
     user_principal: Path<Principal>,
     req: Json<SetUserMetadataReq>,
 ) -> Result<Json<ApiResult<SetUserMetadataRes>>> {
-    let result = set_user_metadata_impl(&state.redis, *user_principal, req.0).await?;
+    let result = set_user_metadata_impl(
+        &state.redis,
+        *user_principal,
+        req.0,
+        CANISTER_TO_PRINCIPAL_KEY,
+    )
+    .await?;
     Ok(Json(Ok(result)))
 }
 
@@ -94,7 +103,7 @@ async fn delete_metadata_bulk(
     // Verify JWT token
     crate::auth::verify_token(token, &state.jwt_details)?;
 
-    delete_metadata_bulk_impl(&state.redis, req.0).await?;
+    delete_metadata_bulk_impl(&state.redis, req.0, CANISTER_TO_PRINCIPAL_KEY).await?;
     Ok(Json(Ok(())))
 }
 
@@ -130,6 +139,7 @@ async fn get_canister_to_principal_bulk(
     state: State<AppState>,
     req: Json<CanisterToPrincipalReq>,
 ) -> Result<Json<ApiResult<CanisterToPrincipalRes>>> {
-    let result = get_canister_to_principal_bulk_impl(&state.redis, req.0).await?;
+    let result =
+        get_canister_to_principal_bulk_impl(&state.redis, req.0, CANISTER_TO_PRINCIPAL_KEY).await?;
     Ok(Json(Ok(result)))
 }
