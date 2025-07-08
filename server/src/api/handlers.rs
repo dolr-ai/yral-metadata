@@ -121,7 +121,6 @@ async fn get_user_metadata_bulk(
     state: State<AppState>,
     req: Json<BulkGetUserMetadataReq>,
 ) -> Result<Json<ApiResult<BulkGetUserMetadataRes>>> {
-    log::info!("metadata bulk");
     let result = get_user_metadata_bulk_impl(&state.redis, req.0)
         .await
         .map_err(|e| {
