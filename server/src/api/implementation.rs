@@ -159,8 +159,6 @@ pub async fn get_user_metadata_bulk_impl(
                 let mut conn = redis_pool.get().await?;
                 let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
 
-                log::info!("Fetched metadata for user: {}", user);
-
                 let metadata = match meta_raw {
                     Some(raw) => {
                         let meta: UserMetadata =
@@ -170,19 +168,13 @@ pub async fn get_user_metadata_bulk_impl(
                     None => None,
                 };
 
-                log::info!("Returning metadata for user: {} - {:?}", user, metadata);
-
                 Ok::<(Principal, GetUserMetadataRes), Error>((principal, metadata))
             }
         })
         .buffer_unordered(10); // Process up to 10 requests concurrently
 
-    log::info!("Starting bulk metadata fetch for {} users", req.users.len());
-
     // Collect all results into a HashMap
     let results: HashMap<Principal, GetUserMetadataRes> = futures_stream.try_collect().await?;
-
-    log::info!("Bulk metadata fetch completed for {} users", results.len());
 
     Ok(results)
 }

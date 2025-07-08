@@ -84,7 +84,7 @@ pub type GetUserMetadataRes = Option<UserMetadata>;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct BulkUsers {
-    #[schema(value_type = String)]
+    #[schema(value_type = Vec<String>)]
     pub users: Vec<Principal>,
 }
 
@@ -92,7 +92,7 @@ pub type DeleteMetadataBulkRes = ();
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct BulkGetUserMetadataReq {
-    #[schema(value_type = String)]
+    #[schema(value_type = Vec<String>)]
     pub users: Vec<Principal>,
 }
 
