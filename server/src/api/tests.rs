@@ -1,6 +1,5 @@
 use super::implementation::*;
 use crate::test_utils::test_helpers::*;
-use crate::utils::canister::CANISTER_TO_PRINCIPAL_KEY;
 use candid::Principal;
 use redis::AsyncCommands;
 use types::{BulkGetUserMetadataReq, BulkUsers, CanisterToPrincipalReq};
@@ -11,9 +10,10 @@ async fn test_set_user_metadata_valid_request() {
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
     let user_principal = generate_test_principal(1);
     let metadata = create_test_metadata_req(100, "testuser");
+    let unique_key = generate_unique_test_key_prefix();
 
     // Execute - using core implementation that skips signature verification
-    let result = set_user_metadata_core(&redis_pool, user_principal, &metadata).await;
+    let result = set_user_metadata_core(&redis_pool, user_principal, &metadata, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
@@ -28,10 +28,7 @@ async fn test_set_user_metadata_valid_request() {
 
     // Check reverse index was updated
     let reverse_lookup: Option<String> = conn
-        .hget(
-            CANISTER_TO_PRINCIPAL_KEY,
-            generate_test_principal(100).to_text(),
-        )
+        .hget(unique_key.clone(), generate_test_principal(100).to_text())
         .await
         .unwrap();
     assert_eq!(reverse_lookup, Some(user_principal.to_text()));
@@ -41,10 +38,7 @@ async fn test_set_user_metadata_valid_request() {
         .await
         .unwrap();
     let _: () = conn
-        .hdel(
-            CANISTER_TO_PRINCIPAL_KEY,
-            generate_test_principal(100).to_text(),
-        )
+        .hdel(unique_key.clone(), generate_test_principal(100).to_text())
         .await
         .unwrap();
 }
@@ -54,16 +48,17 @@ async fn test_set_user_metadata_updates_existing() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
     let user_principal = generate_test_principal(2);
+    let unique_key = generate_unique_test_key_prefix();
 
     // First request
     let metadata1 = create_test_metadata_req(200, "originalname");
-    set_user_metadata_core(&redis_pool, user_principal, &metadata1)
+    set_user_metadata_core(&redis_pool, user_principal, &metadata1, &unique_key)
         .await
         .unwrap();
 
     // Second request with updated name
     let metadata2 = create_test_metadata_req(200, "updatedname");
-    let result = set_user_metadata_core(&redis_pool, user_principal, &metadata2).await;
+    let result = set_user_metadata_core(&redis_pool, user_principal, &metadata2, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
@@ -82,10 +77,7 @@ async fn test_set_user_metadata_updates_existing() {
         .await
         .unwrap();
     let _: () = conn
-        .hdel(
-            CANISTER_TO_PRINCIPAL_KEY,
-            generate_test_principal(200).to_text(),
-        )
+        .hdel(unique_key, generate_test_principal(200).to_text())
         .await
         .unwrap();
 }
@@ -140,7 +132,7 @@ async fn test_get_user_metadata_not_found() {
 async fn test_delete_metadata_bulk() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-
+    let unique_key = generate_unique_test_key_prefix();
     // Create test users
     let users = vec![
         generate_test_principal(5),
@@ -159,7 +151,7 @@ async fn test_delete_metadata_bulk() {
             .unwrap();
         let _: () = conn
             .hset(
-                CANISTER_TO_PRINCIPAL_KEY,
+                unique_key.clone(),
                 metadata.user_canister_id.to_text(),
                 user.to_text(),
             )
@@ -171,7 +163,7 @@ async fn test_delete_metadata_bulk() {
     let bulk_users = BulkUsers {
         users: users.clone(),
     };
-    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users).await;
+    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
@@ -186,7 +178,7 @@ async fn test_delete_metadata_bulk() {
     for i in 0..3 {
         let canister_id = generate_test_principal(500 + i);
         let exists: Option<String> = conn
-            .hget(CANISTER_TO_PRINCIPAL_KEY, canister_id.to_text())
+            .hget(unique_key.clone(), canister_id.to_text())
             .await
             .unwrap();
         assert!(exists.is_none());
@@ -197,11 +189,11 @@ async fn test_delete_metadata_bulk() {
 async fn test_delete_metadata_bulk_empty_list() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-
+    let unique_key = generate_unique_test_key_prefix();
     let bulk_users = BulkUsers { users: vec![] };
 
     // Execute
-    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users).await;
+    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
@@ -211,35 +203,47 @@ async fn test_delete_metadata_bulk_empty_list() {
 async fn test_delete_metadata_bulk_large_batch() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+    let unique_key = generate_unique_test_key_prefix();
 
     // Create 1500 test users (more than chunk size of 1000)
     let users: Vec<Principal> = (0..1500)
-        .map(|i| generate_test_principal(1000 + i))
+        .map(|_| generate_unique_test_principal())
         .collect();
 
-    // Store test data
+    // Store test data concurrently using futures
+    use futures::future::join_all;
     let mut conn = redis_pool.get().await.unwrap();
-    for (i, user) in users.iter().enumerate() {
-        let metadata = create_test_user_metadata(1000 + i as u64, 100000 + i as u64);
-        let meta_bytes = serde_json::to_vec(&metadata).unwrap();
-        let _: () = conn
-            .hset(user.to_text(), METADATA_FIELD, &meta_bytes)
-            .await
-            .unwrap();
-    }
+
+    let tasks: Vec<_> = users
+        .iter()
+        .enumerate()
+        .map(|(i, user)| {
+            let user_key = user.to_text();
+            let mut conn = conn.clone();
+            async move {
+                let metadata = create_test_user_metadata(i as u64, i as u64);
+                let meta_bytes = serde_json::to_vec(&metadata).unwrap();
+                let _: () = conn
+                    .hset(user_key, METADATA_FIELD, &meta_bytes)
+                    .await
+                    .unwrap();
+            }
+        })
+        .collect();
+
+    join_all(tasks).await;
 
     // Execute
     let bulk_users = BulkUsers {
         users: users.clone(),
     };
-    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users).await;
+    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
 
     // Spot check some users were deleted
-    for i in (0..1500).step_by(100) {
-        let user = generate_test_principal(1000 + i);
+    for user in users.iter().step_by(100) {
         let exists: Option<Vec<u8>> = conn.hget(user.to_text(), METADATA_FIELD).await.unwrap();
         assert!(exists.is_none());
     }
@@ -328,12 +332,12 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
 
     // Create 20 test users to test concurrent processing
-    let users: Vec<Principal> = (0..20).map(|i| generate_test_principal(100 + i)).collect();
+    let users: Vec<Principal> = (0..20).map(|_| generate_unique_test_principal()).collect();
 
     // Store test data
     let mut conn = redis_pool.get().await.unwrap();
     for (i, user) in users.iter().enumerate() {
-        let metadata = create_test_user_metadata(100 + i as u64, 1000 + i as u64);
+        let metadata = create_test_user_metadata(i as u64, i as u64);
         let meta_bytes = serde_json::to_vec(&metadata).unwrap();
         let _: () = conn
             .hset(user.to_text(), METADATA_FIELD, &meta_bytes)
@@ -370,30 +374,39 @@ async fn test_get_canister_to_principal_bulk_impl() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
     let mut conn = redis_pool.get().await.unwrap();
+    let unique_key = generate_unique_test_key_prefix();
 
-    // Create test mappings
+    // Create test mappings with unique principals
     let canister_principals = vec![
-        (generate_test_principal(3000), generate_test_principal(30)),
-        (generate_test_principal(3001), generate_test_principal(31)),
-        (generate_test_principal(3002), generate_test_principal(32)),
+        (
+            generate_unique_test_principal(),
+            generate_unique_test_principal(),
+        ),
+        (
+            generate_unique_test_principal(),
+            generate_unique_test_principal(),
+        ),
+        (
+            generate_unique_test_principal(),
+            generate_unique_test_principal(),
+        ),
     ];
 
+    let canister_principals_text: Vec<(String, String)> = canister_principals
+        .iter()
+        .map(|(c, p)| (c.to_text(), p.to_text()))
+        .collect();
+
     // Store test data in Redis
-    for (canister_id, user_principal) in &canister_principals {
-        let _: () = conn
-            .hset(
-                CANISTER_TO_PRINCIPAL_KEY,
-                canister_id.to_text(),
-                user_principal.to_text(),
-            )
-            .await
-            .unwrap();
-    }
+    let _: () = conn
+        .hset_multiple(unique_key.clone(), &canister_principals_text)
+        .await
+        .unwrap();
 
     // Execute - request all canisters
     let canisters = canister_principals.iter().map(|(c, _)| *c).collect();
     let req = CanisterToPrincipalReq { canisters };
-    let result = get_canister_to_principal_bulk_impl(&redis_pool, req).await;
+    let result = get_canister_to_principal_bulk_impl(&redis_pool, req, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
@@ -406,12 +419,7 @@ async fn test_get_canister_to_principal_bulk_impl() {
     }
 
     // Cleanup
-    for (canister_id, _) in &canister_principals {
-        let _: () = conn
-            .hdel(CANISTER_TO_PRINCIPAL_KEY, canister_id.to_text())
-            .await
-            .unwrap();
-    }
+    let _: () = conn.del(unique_key).await.unwrap();
 }
 
 #[tokio::test]
@@ -419,75 +427,56 @@ async fn test_get_canister_to_principal_bulk_impl_partial_results() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
     let mut conn = redis_pool.get().await.unwrap();
+    let unique_key = generate_unique_test_key_prefix();
+
+    // Create unique test principals for this test
+    let canister1 = generate_unique_test_principal();
+    let canister2 = generate_unique_test_principal();
+    let canister3 = generate_unique_test_principal(); // This one won't exist
+    let user1 = generate_unique_test_principal();
+    let user2 = generate_unique_test_principal();
 
     // Store only some mappings
     let _: () = conn
-        .hset(
-            CANISTER_TO_PRINCIPAL_KEY,
-            generate_test_principal(4000).to_text(),
-            generate_test_principal(40).to_text(),
-        )
+        .hset(unique_key.clone(), canister1.to_text(), user1.to_text())
         .await
         .unwrap();
 
     let _: () = conn
-        .hset(
-            CANISTER_TO_PRINCIPAL_KEY,
-            generate_test_principal(4002).to_text(),
-            generate_test_principal(42).to_text(),
-        )
+        .hset(unique_key.clone(), canister2.to_text(), user2.to_text())
         .await
         .unwrap();
 
     // Execute - request includes non-existent canister
     let canisters = vec![
-        generate_test_principal(4000),
-        generate_test_principal(4001), // This one doesn't exist
-        generate_test_principal(4002),
+        canister1, canister3, // This one doesn't exist
+        canister2,
     ];
     let req = CanisterToPrincipalReq { canisters };
-    let result = get_canister_to_principal_bulk_impl(&redis_pool, req).await;
+    let result = get_canister_to_principal_bulk_impl(&redis_pool, req, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
     let res = result.unwrap();
     assert_eq!(res.mappings.len(), 2); // Only 2 mappings should be returned
 
-    assert_eq!(
-        res.mappings.get(&generate_test_principal(4000)),
-        Some(&generate_test_principal(40))
-    );
-    assert_eq!(res.mappings.get(&generate_test_principal(4001)), None);
-    assert_eq!(
-        res.mappings.get(&generate_test_principal(4002)),
-        Some(&generate_test_principal(42))
-    );
+    assert_eq!(res.mappings.get(&canister1), Some(&user1));
+    assert_eq!(res.mappings.get(&canister3), None);
+    assert_eq!(res.mappings.get(&canister2), Some(&user2));
 
     // Cleanup
-    let _: () = conn
-        .hdel(
-            CANISTER_TO_PRINCIPAL_KEY,
-            generate_test_principal(4000).to_text(),
-        )
-        .await
-        .unwrap();
-    let _: () = conn
-        .hdel(
-            CANISTER_TO_PRINCIPAL_KEY,
-            generate_test_principal(4002).to_text(),
-        )
-        .await
-        .unwrap();
+    let _: () = conn.del(unique_key).await.unwrap();
 }
 
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_empty_request() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+    let unique_key = generate_unique_test_key_prefix();
 
     // Execute with empty request
     let req = CanisterToPrincipalReq { canisters: vec![] };
-    let result = get_canister_to_principal_bulk_impl(&redis_pool, req).await;
+    let result = get_canister_to_principal_bulk_impl(&redis_pool, req, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
@@ -500,13 +489,14 @@ async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
     let mut conn = redis_pool.get().await.unwrap();
+    let unique_key = generate_unique_test_key_prefix();
 
     let canister_id = generate_test_principal(5000);
 
     // Store invalid principal string
     let _: () = conn
         .hset(
-            CANISTER_TO_PRINCIPAL_KEY,
+            unique_key.clone(),
             canister_id.to_text(),
             "invalid-principal-format",
         )
@@ -517,7 +507,7 @@ async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
     let req = CanisterToPrincipalReq {
         canisters: vec![canister_id],
     };
-    let result = get_canister_to_principal_bulk_impl(&redis_pool, req).await;
+    let result = get_canister_to_principal_bulk_impl(&redis_pool, req, &unique_key).await;
 
     // Verify - should succeed but return empty mappings since the principal is invalid
     assert!(result.is_ok());
@@ -525,10 +515,7 @@ async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
     assert!(res.mappings.is_empty());
 
     // Cleanup
-    let _: () = conn
-        .hdel(CANISTER_TO_PRINCIPAL_KEY, canister_id.to_text())
-        .await
-        .unwrap();
+    let _: () = conn.del(unique_key).await.unwrap();
 }
 
 #[tokio::test]
@@ -536,33 +523,35 @@ async fn test_get_canister_to_principal_bulk_impl_large_batch() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
     let mut conn = redis_pool.get().await.unwrap();
+    let unique_key = generate_unique_test_key_prefix();
+    // clean
+    let _: () = conn.del(unique_key.clone()).await.unwrap();
 
     // Create 2500 test mappings (more than BATCH_SIZE of 1000)
     let canister_principals: Vec<(Principal, Principal)> = (0..2500)
-        .map(|i| {
+        .map(|_| {
             (
-                generate_test_principal(10000 + i),
-                generate_test_principal(100 + i),
+                generate_unique_test_principal(),
+                generate_unique_test_principal(),
             )
         })
         .collect();
 
+    let canister_principals_txt: Vec<(String, String)> = canister_principals
+        .iter()
+        .map(|(c, p)| (c.to_text(), p.to_text()))
+        .collect();
+
     // Store test data in Redis
-    for (canister_id, user_principal) in &canister_principals {
-        let _: () = conn
-            .hset(
-                CANISTER_TO_PRINCIPAL_KEY,
-                canister_id.to_text(),
-                user_principal.to_text(),
-            )
-            .await
-            .unwrap();
-    }
+    let _: () = conn
+        .hset_multiple(unique_key.clone(), &canister_principals_txt)
+        .await
+        .unwrap();
 
     // Execute - request all canisters
     let canisters = canister_principals.iter().map(|(c, _)| *c).collect();
     let req = CanisterToPrincipalReq { canisters };
-    let result = get_canister_to_principal_bulk_impl(&redis_pool, req).await;
+    let result = get_canister_to_principal_bulk_impl(&redis_pool, req, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
@@ -570,32 +559,13 @@ async fn test_get_canister_to_principal_bulk_impl_large_batch() {
     assert_eq!(res.mappings.len(), 2500);
 
     // Spot check some mappings across different batches
-    assert_eq!(
-        res.mappings.get(&generate_test_principal(10000)),
-        Some(&generate_test_principal(100))
-    );
-    assert_eq!(
-        res.mappings.get(&generate_test_principal(10500)),
-        Some(&generate_test_principal(600))
-    );
-    assert_eq!(
-        res.mappings.get(&generate_test_principal(11000)),
-        Some(&generate_test_principal(1100))
-    );
-    assert_eq!(
-        res.mappings.get(&generate_test_principal(11500)),
-        Some(&generate_test_principal(1600))
-    );
-    assert_eq!(
-        res.mappings.get(&generate_test_principal(12499)),
-        Some(&generate_test_principal(2599))
-    );
+    let sample_indices = [0, 500, 1000, 1500, 2499];
+    for &idx in sample_indices.iter() {
+        if let Some((canister_id, user_principal)) = canister_principals.get(idx) {
+            assert_eq!(res.mappings.get(canister_id), Some(user_principal));
+        }
+    }
 
     // Cleanup
-    for (canister_id, _) in &canister_principals {
-        let _: () = conn
-            .hdel(CANISTER_TO_PRINCIPAL_KEY, canister_id.to_text())
-            .await
-            .unwrap();
-    }
+    let _: () = conn.del(unique_key).await.unwrap();
 }

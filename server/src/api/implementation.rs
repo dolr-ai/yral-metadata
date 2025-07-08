@@ -12,10 +12,7 @@ use types::{
 
 use crate::{
     state::RedisPool,
-    utils::{
-        canister::{CANISTER_TO_PRINCIPAL_KEY},
-        error::{Error, Result},
-    },
+    utils::error::{Error, Result},
 };
 
 pub const METADATA_FIELD: &str = "metadata";
@@ -55,6 +52,7 @@ pub async fn set_user_metadata_core(
     redis_pool: &RedisPool,
     user_principal: Principal,
     set_metadata: &SetUserMetadataReqMetadata,
+    can2prin_key: &str,
 ) -> Result<SetUserMetadataRes> {
     let user = user_principal.to_text();
     let mut conn = redis_pool.get().await?;
@@ -99,7 +97,7 @@ pub async fn set_user_metadata_core(
     // Update reverse index: canister_id -> user_principal
     let _: bool = conn
         .hset(
-            CANISTER_TO_PRINCIPAL_KEY,
+            can2prin_key,
             new_meta.user_canister_id.to_text(),
             &user,
         )
@@ -113,6 +111,7 @@ pub async fn set_user_metadata_impl(
     redis_pool: &RedisPool,
     user_principal: Principal,
     req: SetUserMetadataReq,
+    can2prin_key: &str,
 ) -> Result<SetUserMetadataRes> {
     // Verify signature
     req.signature.verify_identity(
@@ -124,7 +123,7 @@ pub async fn set_user_metadata_impl(
     )?;
 
     // Call core implementation
-    set_user_metadata_core(redis_pool, user_principal, &req.metadata).await
+    set_user_metadata_core(redis_pool, user_principal, &req.metadata, can2prin_key).await
 }
 
 /// Core implementation for getting user metadata
@@ -158,7 +157,11 @@ pub async fn get_user_metadata_impl(
 }
 
 /// Core implementation for bulk delete of user metadata
-pub async fn delete_metadata_bulk_impl(redis_pool: &RedisPool, users: BulkUsers) -> Result<()> {
+pub async fn delete_metadata_bulk_impl(
+    redis_pool: &RedisPool,
+    users: BulkUsers,
+    can2prin_key: &str,
+) -> Result<()> {
     let keys = users.users.iter().map(|k| k.to_text()).collect::<Vec<_>>();
 
     let canister_ids: Rc<FrozenVec<String>> = Rc::new(FrozenVec::new());
@@ -184,7 +187,7 @@ pub async fn delete_metadata_bulk_impl(redis_pool: &RedisPool, users: BulkUsers)
                 }
 
                 Ok(())
-        }}).buffer_unordered(10); // Process up to 10 requests concurrently (being conservative here)
+        }}).buffer_unordered(25); // Process up to 25 requests concurrently (being conservative here)
 
     while let Some(_) = inner_stream.try_next().await? {}
     std::mem::drop(inner_stream);
@@ -211,7 +214,7 @@ pub async fn delete_metadata_bulk_impl(redis_pool: &RedisPool, users: BulkUsers)
     // Also remove from reverse index
     if !canister_ids.is_empty() {
         for chunk in canister_ids.chunks(chunk_size) {
-            let _: usize = conn.hdel(CANISTER_TO_PRINCIPAL_KEY, chunk).await?;
+            let _: usize = conn.hdel(can2prin_key, chunk).await?;
         }
     }
 
@@ -269,6 +272,7 @@ pub async fn get_user_metadata_bulk_impl(
 pub async fn get_canister_to_principal_bulk_impl(
     redis_pool: &RedisPool,
     req: CanisterToPrincipalReq,
+    can2prin_key: &str,
 ) -> Result<CanisterToPrincipalRes> {
     // Handle empty request
     if req.canisters.is_empty() {
@@ -288,8 +292,7 @@ pub async fn get_canister_to_principal_bulk_impl(
         let canister_ids: Vec<String> = batch.iter().map(|c| c.to_text()).collect();
 
         // Use HMGET to fetch multiple values at once from the Redis hash
-        let values: Vec<Option<String>> =
-            conn.hget(CANISTER_TO_PRINCIPAL_KEY, &canister_ids).await?;
+        let values: Vec<Option<String>> = conn.hget(can2prin_key, &canister_ids).await?;
 
         // Process results for this batch
         for (i, canister_id) in batch.iter().enumerate() {
