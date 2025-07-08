@@ -103,7 +103,7 @@ impl<const A: bool> MetadataClient<A> {
     ) -> Result<HashMap<Principal, GetUserMetadataRes>> {
         let api_url = self
             .base_url
-            .join("metadata/bulk")
+            .join("metadata/bulk-get")
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
 
         let res = self

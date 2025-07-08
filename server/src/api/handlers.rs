@@ -109,14 +109,14 @@ async fn delete_metadata_bulk(
 
 #[utoipa::path(
     post,
-    path = "/metadata/bulk",
+    path = "/metadata/bulk-get",
     request_body = BulkGetUserMetadataReq,
     responses(
         (status = 200, description = "Get user metadata in bulk successfully", body = String, content_type = "application/json"),
         (status = 500, description = "Internal server error", body = ErrorWrapper<String>)
     )
 )]
-#[web::post("/metadata/bulk")]
+#[web::post("/metadata/bulk-get")]
 async fn get_user_metadata_bulk(
     state: State<AppState>,
     req: Json<BulkGetUserMetadataReq>,
