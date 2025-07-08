@@ -35,19 +35,3 @@ pub async fn populate_canister_index(
 
     Ok(web::HttpResponse::Ok().json(&response))
 }
-
-#[web::post("/admin/qstash-verify-test")]
-pub async fn qstash_verify_test(
-    state: web::types::State<AppState>,
-    req: web::HttpRequest,
-    body: Bytes,
-) -> Result<web::HttpResponse> {
-    // Verify QStash signature
-    state.qstash.verify_qstash_message(&req, &body).await?;
-
-    // Return success response indicating QStash verification worked
-    Ok(web::HttpResponse::Ok().json(&serde_json::json!({
-        "status": "success",
-        "message": "QStash verification successful"
-    })))
-}
