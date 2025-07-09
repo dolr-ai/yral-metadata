@@ -46,6 +46,7 @@ impl Modify for BearerAuth {
         DeviceRegistrationToken,
         NotificationKey,
         UserMetadata,
+        UserMetadataV2,
         SetUserMetadataReqMetadata,
         SetUserMetadataReq,
         BulkUsers,

@@ -55,6 +55,39 @@ impl TryFrom<UserMetadata> for Message {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct UserMetadataV2 {
+    #[schema(value_type = String)]
+    pub user_principal: Principal,
+    #[schema(value_type = String)]
+    pub user_canister_id: Principal,
+    pub user_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notification_key: Option<NotificationKey>,
+    #[serde(default)]
+    pub is_migrated: bool,
+}
+
+impl UserMetadataV2 {
+    pub fn from_metadata(
+        user_principal: Principal,
+        metadata: UserMetadata,
+    ) -> Self {
+        UserMetadataV2 {
+            user_principal,
+            user_name: metadata.user_name,
+            user_canister_id: metadata.user_canister_id,
+            notification_key: metadata.notification_key,
+            is_migrated: metadata.is_migrated,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct UserMetadataByUsername {
+    pub user_principal: Principal,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct SetUserMetadataReqMetadata {
     #[schema(value_type = String)]
     pub user_canister_id: Principal,
@@ -81,6 +114,7 @@ pub struct SetUserMetadataReq {
 pub type SetUserMetadataRes = ();
 
 pub type GetUserMetadataRes = Option<UserMetadata>;
+pub type GetUserMetadataV2Res = Option<UserMetadataV2>;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct BulkUsers {

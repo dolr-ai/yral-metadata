@@ -9,7 +9,7 @@ async fn test_set_user_metadata_valid_request() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
     let user_principal = generate_test_principal(1);
-    let metadata = create_test_metadata_req(100, "test_user");
+    let metadata = create_test_metadata_req(100, "testuser");
     let unique_key = generate_unique_test_key_prefix();
 
     // Execute - using core implementation that skips signature verification
@@ -51,13 +51,13 @@ async fn test_set_user_metadata_updates_existing() {
     let unique_key = generate_unique_test_key_prefix();
 
     // First request
-    let metadata1 = create_test_metadata_req(200, "original_name");
+    let metadata1 = create_test_metadata_req(200, "originalname");
     set_user_metadata_core(&redis_pool, user_principal, &metadata1, &unique_key)
         .await
         .unwrap();
 
     // Second request with updated name
-    let metadata2 = create_test_metadata_req(200, "updated_name");
+    let metadata2 = create_test_metadata_req(200, "updatedname");
     let result = set_user_metadata_core(&redis_pool, user_principal, &metadata2, &unique_key).await;
 
     // Verify
@@ -70,7 +70,7 @@ async fn test_set_user_metadata_updates_existing() {
         .await
         .unwrap();
     let metadata: types::UserMetadata = serde_json::from_slice(&stored.unwrap()).unwrap();
-    assert_eq!(metadata.user_name, "updated_name");
+    assert_eq!(metadata.user_name, "updatedname");
 
     // Cleanup
     cleanup_test_data(&redis_pool, &user_principal.to_text())
@@ -98,14 +98,14 @@ async fn test_get_user_metadata_existing() {
         .unwrap();
 
     // Execute
-    let result = get_user_metadata_impl(&redis_pool, user_principal).await;
+    let result = get_user_metadata_impl(&redis_pool, user_principal.to_text()).await;
 
     // Verify
     assert!(result.is_ok());
     let metadata = result.unwrap();
     assert!(metadata.is_some());
     let metadata = metadata.unwrap();
-    assert_eq!(metadata.user_name, "test_user_3");
+    assert_eq!(metadata.user_name, "testuser3");
     assert_eq!(metadata.user_canister_id, generate_test_principal(300));
 
     // Cleanup
@@ -121,7 +121,7 @@ async fn test_get_user_metadata_not_found() {
     let user_principal = generate_test_principal(4);
 
     // Execute
-    let result = get_user_metadata_impl(&redis_pool, user_principal).await;
+    let result = get_user_metadata_impl(&redis_pool, user_principal.to_text()).await;
 
     // Verify
     assert!(result.is_ok());
@@ -292,7 +292,7 @@ async fn test_get_user_metadata_bulk_multiple_users() {
     assert!(results.get(&users[0]).unwrap().is_some());
     assert_eq!(
         results.get(&users[0]).unwrap().as_ref().unwrap().user_name,
-        "test_user_20"
+        "testuser20"
     );
 
     assert!(results.get(&users[1]).unwrap().is_none());
@@ -300,7 +300,7 @@ async fn test_get_user_metadata_bulk_multiple_users() {
     assert!(results.get(&users[2]).unwrap().is_some());
     assert_eq!(
         results.get(&users[2]).unwrap().as_ref().unwrap().user_name,
-        "test_user_22"
+        "testuser22"
     );
 
     // Cleanup

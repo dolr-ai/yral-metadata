@@ -12,10 +12,7 @@ use reqwest::{
 };
 use std::collections::HashMap;
 use types::{
-    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
-    CanisterToPrincipalRes, GetUserMetadataRes, RegisterDeviceReq, RegisterDeviceRes,
-    SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq,
-    UnregisterDeviceRes,
+    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq, CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq, RegisterDeviceRes, SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -83,18 +80,32 @@ impl<const A: bool> MetadataClient<A> {
         Ok(res?)
     }
 
-    pub async fn get_user_metadata(&self, user_principal: Principal) -> Result<GetUserMetadataRes> {
+    async fn get_user_metadata_inner(
+        &self,
+        username_or_principal: String,
+    ) -> Result<GetUserMetadataV2Res> {
         let api_url = self
             .base_url
             .join("metadata/")
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
-            .join(&user_principal.to_text())
+            .join(&&username_or_principal)
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
 
         let res = self.client.get(api_url).send().await?;
 
-        let res: ApiResult<GetUserMetadataRes> = res.json().await?;
+        let res: ApiResult<GetUserMetadataV2Res> = res.json().await?;
         Ok(res?)
+    }
+
+    #[deprecated(note = "Use `get_user_metadata_v2` instead")]
+    pub async fn get_user_metadata(&self, user_principal: Principal) -> Result<GetUserMetadataV2Res> {
+        self.get_user_metadata_inner(user_principal.to_text())
+            .await
+    }
+
+    pub async fn get_user_metadata_v2(&self, username_or_principal: String) -> Result<GetUserMetadataV2Res> {
+        self.get_user_metadata_inner(username_or_principal)
+            .await
     }
 
     pub async fn get_user_metadata_bulk(

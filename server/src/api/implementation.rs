@@ -1,11 +1,13 @@
+use bb8::PooledConnection;
+use bb8_redis::RedisConnectionManager;
 use candid::Principal;
+use elsa::FrozenVec;
 use futures::{stream, StreamExt, TryStreamExt};
 use redis::AsyncCommands;
-use std::collections::HashMap;
+use regex::Regex;
+use std::{collections::HashMap, rc::Rc, sync::LazyLock};
 use types::{
-    BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
-    CanisterToPrincipalRes, GetUserMetadataRes, SetUserMetadataReq, SetUserMetadataReqMetadata,
-    SetUserMetadataRes, UserMetadata,
+    BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq, CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UserMetadata, UserMetadataByUsername, UserMetadataV2
 };
 
 use crate::{
@@ -15,26 +17,90 @@ use crate::{
 
 pub const METADATA_FIELD: &str = "metadata";
 
+fn username_info_key(user_name: &str) -> String {
+    format!("username-info:{}", user_name)
+}
+
+async fn set_metadata_for_username(
+    conn: &mut PooledConnection<'_, RedisConnectionManager>,
+    user_principal: Principal,
+    user_name: String,
+) -> Result<()> {
+    static USERNAME_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([a-zA-Z0-9]){3,15}$").unwrap());
+
+    if !USERNAME_REGEX.is_match(&user_name) {
+        return Err(Error::InvalidUsername);
+    }
+
+    let key = username_info_key(&user_name);
+    let meta = UserMetadataByUsername {
+        user_principal,
+    };
+    let meta_raw = serde_json::to_vec(&meta).map_err(Error::Deser)?;
+
+    let inserted: usize = conn.hset_nx(&key, METADATA_FIELD, &meta_raw).await?;
+    if inserted != 1 {
+        return Err(Error::DuplicateUsername);
+    }
+
+    Ok(())
+}
+
 /// Core implementation for setting user metadata (without signature verification)
 /// This is the actual business logic after authentication/authorization
 pub async fn set_user_metadata_core(
     redis_pool: &RedisPool,
     user_principal: Principal,
-    metadata: &SetUserMetadataReqMetadata,
+    set_metadata: &SetUserMetadataReqMetadata,
     can2prin_key: &str,
 ) -> Result<SetUserMetadataRes> {
     let user = user_principal.to_text();
     let mut conn = redis_pool.get().await?;
 
+    let existing_meta: Option<Box<[u8]>> = conn
+        .hget(&user, METADATA_FIELD)
+        .await?;
+
+    if !set_metadata.user_name.is_empty() {
+        set_metadata_for_username(&mut conn, user_principal, set_metadata.user_name.clone())
+            .await?;
+    }
+
+    let new_meta = if let Some(existing_meta) = existing_meta {
+        let mut existing: UserMetadata = serde_json::from_slice(&existing_meta)
+            .map_err(Error::Deser)?;
+        existing.user_canister_id = set_metadata.user_canister_id;
+
+        if !existing.user_name.is_empty() {
+            let key = username_info_key(&existing.user_name);
+            let _del: usize = conn.hdel(&key, METADATA_FIELD).await?;
+        }
+        existing.user_name = set_metadata.user_name.clone();
+ 
+        existing
+    } else {
+        UserMetadata { 
+            user_canister_id: set_metadata.user_canister_id,
+            user_name: set_metadata.user_name.clone(),
+            notification_key: None,
+            is_migrated: false
+        }
+    };
+
+
     // Serialize metadata
-    let meta_raw = serde_json::to_vec(metadata).map_err(Error::Deser)?;
+    let meta_raw = serde_json::to_vec(&new_meta).map_err(Error::Deser)?;
 
     // Store user metadata
     let _replaced: bool = conn.hset(&user, METADATA_FIELD, &meta_raw).await?;
 
     // Update reverse index: canister_id -> user_principal
     let _: bool = conn
-        .hset(can2prin_key, metadata.user_canister_id.to_text(), &user)
+        .hset(
+            can2prin_key,
+            new_meta.user_canister_id.to_text(),
+            &user,
+        )
         .await?;
 
     Ok(())
@@ -63,17 +129,28 @@ pub async fn set_user_metadata_impl(
 /// Core implementation for getting user metadata
 pub async fn get_user_metadata_impl(
     redis_pool: &RedisPool,
-    user_principal: Principal,
-) -> Result<GetUserMetadataRes> {
-    let user = user_principal.to_text();
+    username_or_principal: String,
+) -> Result<GetUserMetadataV2Res> {
     let mut conn = redis_pool.get().await?;
+    let user_principal = if let Ok(principal) = Principal::from_text(username_or_principal.as_str()) {
+        principal
+    } else {
+       let key = username_info_key(username_or_principal.as_str());
+       let meta_raw: Option<Box<[u8]>> = conn.hget(&key, METADATA_FIELD).await?;
+       let Some(meta_raw) = meta_raw else {
+            return Ok(None);
+       };
+       let meta: UserMetadataByUsername = serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
+       meta.user_principal
+    };
 
-    let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
+
+    let meta_raw: Option<Box<[u8]>> = conn.hget(&user_principal.to_text(), METADATA_FIELD).await?;
 
     match meta_raw {
         Some(raw) => {
             let meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
-            Ok(Some(meta))
+            Ok(Some(UserMetadataV2::from_metadata(user_principal, meta)))
         }
         None => Ok(None),
     }
@@ -87,38 +164,43 @@ pub async fn delete_metadata_bulk_impl(
 ) -> Result<()> {
     let keys = users.users.iter().map(|k| k.to_text()).collect::<Vec<_>>();
 
-    // Get a new connection for this operation
-    let mut conn = redis_pool.get().await?;
-    // First, collect canister IDs before deletion concurrently
-    let canister_ids_stream = stream::iter(users.users.iter().cloned())
+    let canister_ids: Rc<FrozenVec<String>> = Rc::new(FrozenVec::new());
+    let usernames: Rc<FrozenVec<String>> = Rc::new(FrozenVec::new());
+
+    let conn = redis_pool.get().await?;
+    let mut inner_stream = stream::iter(users.users.iter().copied())
         .map(|user_principal| {
             let mut conn = conn.clone();
+            let canister_ids = canister_ids.clone();
+            let usernames = usernames.clone();
             async move {
                 let user = user_principal.to_text();
-
                 let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
-
-                let canister_id = match meta_raw {
-                    Some(raw) => {
-                        let meta: UserMetadata =
-                            serde_json::from_slice(&raw).map_err(Error::Deser)?;
-                        Some(meta.user_canister_id.to_text())
-                    }
-                    None => None,
+                let Some(meta_raw) = meta_raw else {
+                    return Ok::<(), Error>(());
                 };
 
-                Ok::<Option<String>, Error>(canister_id)
-            }
-        })
-        .buffer_unordered(25); // Process up to 25 requests concurrently (being conservative here)
+                let meta: UserMetadata = serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
+                canister_ids.push(meta.user_canister_id.to_text());
+                if !meta.user_name.is_empty() {
+                    usernames.push(username_info_key(meta.user_name.as_str()));
+                }
 
-    // Collect all canister IDs, filtering out None values
-    let canister_ids: Vec<String> = canister_ids_stream
-        .try_collect::<Vec<_>>()
-        .await?
-        .into_iter()
-        .filter_map(|id| id)
-        .collect();
+                Ok(())
+        }}).buffer_unordered(25); // Process up to 25 requests concurrently (being conservative here)
+
+    while let Some(_) = inner_stream.try_next().await? {}
+    std::mem::drop(inner_stream);
+
+    let canister_ids = Rc::try_unwrap(canister_ids)
+        .map_err(|_| ())
+        .expect("[BUG] CONCURRENCY: All refs to canister_ids should be dropped before this point")
+        .into_vec();
+    let usernames = Rc::try_unwrap(usernames)
+        .map_err(|_| ())
+        .expect("[BUG] CONCURRENCY: All refs to usernames should be dropped before this point")
+        .into_vec();
+
 
     // Delete user metadata
     let chunk_size = 1000;
@@ -133,6 +215,13 @@ pub async fn delete_metadata_bulk_impl(
     if !canister_ids.is_empty() {
         for chunk in canister_ids.chunks(chunk_size) {
             let _: usize = conn.hdel(can2prin_key, chunk).await?;
+        }
+    }
+
+    // remove unused usernames
+    if !usernames.is_empty() {
+        for chunk in usernames.chunks(chunk_size) {
+            let _: usize = conn.del(chunk).await?;
         }
     }
 
