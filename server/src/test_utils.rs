@@ -23,8 +23,7 @@ pub mod test_helpers {
 
     /// Create a test Redis pool
     pub async fn create_test_redis_pool() -> Result<RedisPool> {
-        let redis_url = std::env::var("TEST_REDIS_URL")
-            .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        let redis_url = std::env::var("TEST_REDIS_URL").unwrap();
 
         init_redis_with_url(&redis_url).await
     }
