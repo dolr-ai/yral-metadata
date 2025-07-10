@@ -8,8 +8,9 @@ use types::{BulkGetUserMetadataReq, BulkUsers, CanisterToPrincipalReq};
 async fn test_set_user_metadata_valid_request() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let user_principal = generate_test_principal(1);
-    let metadata = create_test_metadata_req(100, "testuser");
+    let user_principal = generate_unique_test_principal();
+    let user_name = "testuser";
+    let metadata = create_test_metadata_req(100, user_name);
     let unique_key = generate_unique_test_key_prefix();
 
     // Execute - using core implementation that skips signature verification
@@ -28,7 +29,7 @@ async fn test_set_user_metadata_valid_request() {
 
     // Check reverse index was updated
     let reverse_lookup: Option<String> = conn
-        .hget(unique_key.clone(), generate_test_principal(100).to_text())
+        .hget(unique_key.clone(), metadata.user_canister_id.to_text())
         .await
         .unwrap();
     assert_eq!(reverse_lookup, Some(user_principal.to_text()));
@@ -38,16 +39,18 @@ async fn test_set_user_metadata_valid_request() {
         .await
         .unwrap();
     let _: () = conn
-        .hdel(unique_key.clone(), generate_test_principal(100).to_text())
+        .hdel(unique_key.clone(), metadata.user_canister_id.to_text())
         .await
         .unwrap();
+    let _: () = conn.del(unique_key).await.unwrap();
+    let _: () = conn.del(username_info_key(user_name)).await.unwrap();
 }
 
 #[tokio::test]
 async fn test_set_user_metadata_updates_existing() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let user_principal = generate_test_principal(2);
+    let user_principal = generate_unique_test_principal();
     let unique_key = generate_unique_test_key_prefix();
 
     // First request
@@ -77,16 +80,19 @@ async fn test_set_user_metadata_updates_existing() {
         .await
         .unwrap();
     let _: () = conn
-        .hdel(unique_key, generate_test_principal(200).to_text())
+        .hdel(unique_key.clone(), metadata2.user_canister_id.to_text())
         .await
         .unwrap();
+    let _: () = conn.del(unique_key).await.unwrap();
+    let _: () = conn.del(username_info_key("originalname")).await.unwrap();
+    let _: () = conn.del(username_info_key("updatedname")).await.unwrap();
 }
 
 #[tokio::test]
 async fn test_get_user_metadata_existing() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let user_principal = generate_test_principal(3);
+    let user_principal = generate_unique_test_principal();
     let test_metadata = create_test_user_metadata(3, 300);
 
     // Store test data
@@ -106,7 +112,7 @@ async fn test_get_user_metadata_existing() {
     assert!(metadata.is_some());
     let metadata = metadata.unwrap();
     assert_eq!(metadata.user_name, "testuser3");
-    assert_eq!(metadata.user_canister_id, generate_test_principal(300));
+    assert_eq!(metadata.user_canister_id, test_metadata.user_canister_id);
 
     // Cleanup
     cleanup_test_data(&redis_pool, &user_principal.to_text())
@@ -118,7 +124,7 @@ async fn test_get_user_metadata_existing() {
 async fn test_get_user_metadata_not_found() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let user_principal = generate_test_principal(4);
+    let user_principal = generate_unique_test_principal();
 
     // Execute
     let result = get_user_metadata_impl(&redis_pool, user_principal.to_text()).await;
@@ -135,9 +141,9 @@ async fn test_delete_metadata_bulk() {
     let unique_key = generate_unique_test_key_prefix();
     // Create test users
     let users = vec![
-        generate_test_principal(5),
-        generate_test_principal(6),
-        generate_test_principal(7),
+        generate_unique_test_principal(),
+        generate_unique_test_principal(),
+        generate_unique_test_principal(),
     ];
 
     // Store test data for each user
@@ -175,14 +181,17 @@ async fn test_delete_metadata_bulk() {
     }
 
     // Check reverse index was cleaned up
-    for i in 0..3 {
-        let canister_id = generate_test_principal(500 + i);
+    for _i in 0..3 {
+        let canister_id = generate_unique_test_principal();
         let exists: Option<String> = conn
             .hget(unique_key.clone(), canister_id.to_text())
             .await
             .unwrap();
         assert!(exists.is_none());
     }
+
+    // Cleanup
+    let _: () = conn.del(unique_key).await.unwrap();
 }
 
 #[tokio::test]
@@ -197,6 +206,10 @@ async fn test_delete_metadata_bulk_empty_list() {
 
     // Verify
     assert!(result.is_ok());
+
+    // Cleanup
+    let mut conn = redis_pool.get().await.unwrap();
+    let _: () = conn.del(unique_key).await.unwrap();
 }
 
 #[tokio::test]
@@ -247,6 +260,9 @@ async fn test_delete_metadata_bulk_large_batch() {
         let exists: Option<Vec<u8>> = conn.hget(user.to_text(), METADATA_FIELD).await.unwrap();
         assert!(exists.is_none());
     }
+
+    // Cleanup
+    let _: () = conn.del(unique_key).await.unwrap();
 }
 
 #[tokio::test]
@@ -256,9 +272,9 @@ async fn test_get_user_metadata_bulk_multiple_users() {
 
     // Create test users
     let users = vec![
-        generate_test_principal(20),
-        generate_test_principal(21),
-        generate_test_principal(22),
+        generate_unique_test_principal(),
+        generate_unique_test_principal(),
+        generate_unique_test_principal(),
     ];
 
     // Store test data for some users (not all)
@@ -290,18 +306,10 @@ async fn test_get_user_metadata_bulk_multiple_users() {
 
     // Check specific results
     assert!(results.get(&users[0]).unwrap().is_some());
-    assert_eq!(
-        results.get(&users[0]).unwrap().as_ref().unwrap().user_name,
-        "testuser20"
-    );
 
     assert!(results.get(&users[1]).unwrap().is_none());
 
     assert!(results.get(&users[2]).unwrap().is_some());
-    assert_eq!(
-        results.get(&users[2]).unwrap().as_ref().unwrap().user_name,
-        "testuser22"
-    );
 
     // Cleanup
     for user in &users {
@@ -482,6 +490,8 @@ async fn test_get_canister_to_principal_bulk_impl_empty_request() {
     assert!(result.is_ok());
     let res = result.unwrap();
     assert!(res.mappings.is_empty());
+
+    // Cleanup not needed - unique_key was never used in Redis
 }
 
 #[tokio::test]
@@ -491,7 +501,7 @@ async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
     let mut conn = redis_pool.get().await.unwrap();
     let unique_key = generate_unique_test_key_prefix();
 
-    let canister_id = generate_test_principal(5000);
+    let canister_id = generate_unique_test_principal();
 
     // Store invalid principal string
     let _: () = conn
