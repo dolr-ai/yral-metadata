@@ -18,6 +18,7 @@
                             rustup
                             curl
                             openssl
+                            pkg-config
                         ];
                     };
                 }
