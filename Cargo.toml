@@ -7,10 +7,10 @@ serde = { version = "^1.0.128", features = ["derive"] }
 thiserror = "1.0.58"
 candid = "^0.10.10"
 log = "0.4.21"
-yral-identity = { git = "https://github.com/yral-dapp/yral-identity.git", default-features = false, rev = "156bc0e7a4bc3d9a3b4faab4b9b3048e88a0c701" }
+yral-identity = { git = "https://github.com/yral-dapp/yral-common.git", default-features = false, branch = "rupansh/bump-ic-agent" }
 reqwest = { version = "0.12", default-features = false, features = [
   "json",
   "http2",
 ] }
 serde_json = "1.0.115"
-ic-agent = { version = "0.38.1", default-features = false, features = ["pem"]}
+ic-agent = { version = "0.41.0", default-features = false, features = ["pem"]}

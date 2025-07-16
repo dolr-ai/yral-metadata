@@ -88,7 +88,7 @@ pub async fn update_session_as_registered(
         .update_session_type(SessionType::RegisteredSession)
         .await?;
 
-    if let yral_canisters_client::individual_user_template::Result22::Err(e) = update_session_res {
+    if let yral_canisters_client::individual_user_template::Result15::Err(e) = update_session_res {
         return Err(Error::UpdateSession(e));
     }
 

@@ -433,13 +433,13 @@ impl From<ic_agent::AgentError> for AgentErrorDetail {
                 kind: "PrincipalError".to_string(),
                 message: format!("Cannot parse Principal: \"{}\"", error.to_string()),
             },
-            ic_agent::AgentError::CertifiedReject(error) => AgentErrorDetail {
+            ic_agent::AgentError::CertifiedReject { reject, .. } => AgentErrorDetail {
                 kind: "CertifiedReject".to_string(),
-                message: format!("The replica returned a certified rejection error: {:?}", error),
+                message: format!("The replica returned a certified rejection error: {:?}", reject.reject_message),
             },
-            ic_agent::AgentError::UncertifiedReject(error) => AgentErrorDetail {
+            ic_agent::AgentError::UncertifiedReject { reject, .. } => AgentErrorDetail {
                 kind: "UncertifiedReject".to_string(),
-                message: format!("The replica returned an uncertified rejection error: {:?}", error),
+                message: format!("The replica returned an uncertified rejection error: {:?}", reject.reject_message),
             },
             ic_agent::AgentError::HttpError(error) => AgentErrorDetail {
                 kind: "HttpError".to_string(),
