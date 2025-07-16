@@ -47,8 +47,8 @@ hyper-rustls = { version = "0.27.5", features = [
     "ring",
 ] }
 rustls = { version = "0.23.26" }
-yral-canisters-client = {git = "https://github.com/dolr-ai/yral-common.git", branch = "rupansh/bump-ic-agent", features = ["individual-user", "user-index", "full"]}
-yral-types = {git = "https://github.com/dolr-ai/yral-common.git", branch = "rupansh/bump-ic-agent"}
+yral-canisters-client = {git = "https://github.com/dolr-ai/yral-common.git", branch = "master", features = ["individual-user", "user-index", "full"]}
+yral-types = {git = "https://github.com/dolr-ai/yral-common.git", branch = "master"}
 ic-agent.workspace = true
 utoipa = { version = "5.3.1" }
 utoipa-swagger-ui = { version = "9.0.2", features = ["reqwest"]}
