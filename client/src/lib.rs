@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use types::{
     ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
     CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq,
-    RegisterDeviceRes, SetKycMetadataReq, SetUserMetadataReq, SetUserMetadataReqMetadata,
-    SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes,
+    RegisterDeviceRes, SetKycMetadataReq, SetKycMetadataRes, SetUserMetadataReq,
+    SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes,
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -160,8 +160,16 @@ impl<const A: bool> MetadataClient<A> {
     pub async fn mark_kyc_completed(
         &self,
         identity: &impl Identity,
-        metadata: SetKycMetadataReq,
+        metadata: SetUserMetadataReqMetadata,
+        inquiry_id: String,
     ) -> Result<()> {
+        let signature = sign_message(
+            identity,
+            metadata
+                .clone()
+                .try_into()
+                .map_err(|_| Error::Api(types::error::ApiError::MetadataNotFound))?,
+        )?;
         let sender = identity
             .sender()
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
@@ -172,9 +180,18 @@ impl<const A: bool> MetadataClient<A> {
             .join(&sender.to_text())
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
 
-        let res = self.client.post(api_url).json(&metadata).send().await?;
+        let res = self
+            .client
+            .post(api_url)
+            .json(&SetKycMetadataReq {
+                metadata,
+                signature,
+                inquiry_id,
+            })
+            .send()
+            .await?;
 
-        let res: ApiResult<()> = res.json().await?;
+        let res: ApiResult<SetKycMetadataRes> = res.json().await?;
         Ok(res?)
     }
 
