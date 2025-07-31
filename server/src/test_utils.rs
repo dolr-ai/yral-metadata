@@ -94,6 +94,7 @@ pub mod test_helpers {
             user_name: format!("testuser{}", user_id),
             notification_key: None,
             is_migrated: false,
+            kyc_completed: false,
         }
     }
 

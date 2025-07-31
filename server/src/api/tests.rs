@@ -250,7 +250,9 @@ async fn test_delete_metadata_bulk_large_batch() {
     let bulk_users = BulkUsers {
         users: users.clone(),
     };
-    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users, &unique_key).await.expect("delete_metadata_bulk_impl shoud not fail");
+    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users, &unique_key)
+        .await
+        .expect("delete_metadata_bulk_impl shoud not fail");
 
     // Spot check some users were deleted
     for user in users.iter().step_by(100) {

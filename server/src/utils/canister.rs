@@ -5,7 +5,10 @@ use yral_canisters_client::{
     user_index::UserIndex,
 };
 
-use crate::{state::RedisPool, utils::error::{Error, Result}};
+use crate::{
+    state::RedisPool,
+    utils::error::{Error, Result},
+};
 
 pub const CANISTER_TO_PRINCIPAL_KEY: &str = "canister2principal";
 
@@ -49,7 +52,9 @@ pub async fn get_user_principal_canister_list_v2(
         let user_principal_canister_ids = subnet_orch
             .get_user_id_and_canister_list()
             .await
-            .map_err(|e| Error::Unknown(format!("Failed to get user id and canister list: {}", e)))?;
+            .map_err(|e| {
+                Error::Unknown(format!("Failed to get user id and canister list: {}", e))
+            })?;
         user_principal_canister_list.extend(user_principal_canister_ids);
     }
 
@@ -65,27 +70,25 @@ pub async fn populate_canister_to_principal_index(
     let total = user_principal_canister_list.len();
     let mut processed = 0;
     let mut failed = 0;
-    
+
     // Process in batches of 1000
     let batch_size = 1000;
-    
+
     for batch in user_principal_canister_list.chunks(batch_size) {
         // Convert to format needed for Redis
         let items: Vec<(String, String)> = batch
             .iter()
-            .map(|(user_principal, canister_id)| {
-                (canister_id.to_text(), user_principal.to_text())
-            })
+            .map(|(user_principal, canister_id)| (canister_id.to_text(), user_principal.to_text()))
             .collect();
 
         // Get Redis connection
         let mut conn = redis_pool.get().await?;
-        
+
         // Use hset_multiple for efficient bulk insertion
-        match conn.hset_multiple::<_, _, _, ()>(
-            CANISTER_TO_PRINCIPAL_KEY,
-            &items
-        ).await {
+        match conn
+            .hset_multiple::<_, _, _, ()>(CANISTER_TO_PRINCIPAL_KEY, &items)
+            .await
+        {
             Ok(_) => {
                 processed += batch.len();
             }
@@ -98,7 +101,9 @@ pub async fn populate_canister_to_principal_index(
 
     log::info!(
         "Canister to principal index population complete: {} processed, {} failed out of {} total",
-        processed, failed, total
+        processed,
+        failed,
+        total
     );
 
     Ok((processed, failed))

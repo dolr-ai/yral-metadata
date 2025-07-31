@@ -42,6 +42,9 @@ pub struct UserMetadata {
 
     #[serde(default)]
     pub is_migrated: bool,
+
+    #[serde(default)]
+    pub kyc_completed: bool,
 }
 
 impl TryFrom<UserMetadata> for Message {
@@ -65,19 +68,19 @@ pub struct UserMetadataV2 {
     pub notification_key: Option<NotificationKey>,
     #[serde(default)]
     pub is_migrated: bool,
+    #[serde(default)]
+    pub kyc_completed: bool,
 }
 
 impl UserMetadataV2 {
-    pub fn from_metadata(
-        user_principal: Principal,
-        metadata: UserMetadata,
-    ) -> Self {
+    pub fn from_metadata(user_principal: Principal, metadata: UserMetadata) -> Self {
         UserMetadataV2 {
             user_principal,
             user_name: metadata.user_name,
             user_canister_id: metadata.user_canister_id,
             notification_key: metadata.notification_key,
             is_migrated: metadata.is_migrated,
+            kyc_completed: metadata.kyc_completed,
         }
     }
 }
@@ -110,8 +113,16 @@ pub struct SetUserMetadataReq {
     #[schema(value_type = String)]
     pub signature: Signature,
 }
-
 pub type SetUserMetadataRes = ();
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema)]
+pub struct SetKycMetadataReq {
+    pub metadata: SetUserMetadataReqMetadata,
+    pub inquiry_id: String,
+    #[schema(value_type = String)]
+    pub signature: Signature,
+}
+pub type SetKycMetadataRes = ();
 
 pub type GetUserMetadataRes = Option<UserMetadata>;
 pub type GetUserMetadataV2Res = Option<UserMetadataV2>;

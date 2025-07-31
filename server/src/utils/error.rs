@@ -147,7 +147,9 @@ impl web::error::WebResponseError for Error {
             | Error::AuthTokenMissing => StatusCode::UNAUTHORIZED,
             Error::EnvironmentVariable(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::EnvironmentVariableMissing(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::UserAlreadyRegistered(_) | Error::InvalidPrincipal(_) | Error::InvalidUsername => StatusCode::BAD_REQUEST,
+            Error::UserAlreadyRegistered(_)
+            | Error::InvalidPrincipal(_)
+            | Error::InvalidUsername => StatusCode::BAD_REQUEST,
             Error::SwaggerUi(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::DuplicateUsername => StatusCode::CONFLICT,
         }

@@ -4,6 +4,7 @@ mod auth;
 mod config;
 mod consts;
 mod firebase;
+mod kyc;
 mod notifications;
 mod qstash;
 mod services;

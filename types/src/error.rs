@@ -49,4 +49,8 @@ pub enum ApiError {
     InvalidUsername,
     #[error("duplicate username")]
     DuplicateUsername,
+    #[error("Reqwest error: {0}")]
+    ReqwestError(String),
+    #[error("KYC API error: {0}")]
+    KycApiError(String),
 }
