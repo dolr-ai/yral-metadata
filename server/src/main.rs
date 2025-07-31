@@ -22,6 +22,8 @@ use ntex_cors::Cors;
 use state::AppState;
 use utils::error::*;
 
+use crate::kyc::store::mark_kyc_completed;
+
 #[ntex::main]
 async fn main() -> Result<()> {
     env_logger::init();
@@ -43,6 +45,7 @@ async fn main() -> Result<()> {
             .service(register_device)
             .service(unregister_device)
             .service(send_notification)
+            .service(mark_kyc_completed)
             .service(session::update_session_as_registered)
             .service(admin::populate_canister_index)
     })
