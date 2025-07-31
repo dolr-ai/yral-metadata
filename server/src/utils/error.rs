@@ -68,6 +68,8 @@ pub enum Error {
     InvalidUsername,
     #[error("duplicate username")]
     DuplicateUsername,
+    #[error("user not found {0}")]
+    UserNotFound(String),
 }
 
 impl From<&Error> for ApiResult<()> {
@@ -115,6 +117,7 @@ impl From<&Error> for ApiResult<()> {
                 ApiError::Unknown(format!("Swagger UI error: {}", e))
             }
             Error::InvalidUsername => ApiError::InvalidUsername,
+            Error::UserNotFound(e) => ApiError::UserNotFound(e.clone()),
             Error::DuplicateUsername => ApiError::DuplicateUsername,
         };
         ApiResult::Err(err)
@@ -149,6 +152,7 @@ impl web::error::WebResponseError for Error {
             Error::EnvironmentVariableMissing(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::UserAlreadyRegistered(_)
             | Error::InvalidPrincipal(_)
+            | Error::UserNotFound(_)
             | Error::InvalidUsername => StatusCode::BAD_REQUEST,
             Error::SwaggerUi(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::DuplicateUsername => StatusCode::CONFLICT,

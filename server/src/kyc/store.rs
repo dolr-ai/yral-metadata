@@ -45,19 +45,31 @@ pub async fn mark_kyc_completed_impl(
     user_principal: Principal,
     inquiry_id: String,
 ) -> Result<()> {
-    let user = user_principal.to_text();
-    let mut conn = redis_pool.get().await?;
+    let user_key = user_principal.to_text();
+
+    // 1. Confirm the KYC was successfully completed via your KYC service
     check_kyc_completed(user_principal, inquiry_id)
         .await
         .map_err(|e| Error::Unknown(e.to_string()))?;
-    let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
 
-    if let Some(raw) = meta_raw {
-        let mut meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
+    // 2. Get Redis connection
+    let mut conn = redis_pool.get().await?;
+
+    // 3. Fetch user metadata from Redis
+    let meta_raw: Option<Box<[u8]>> = conn.hget(&user_key, METADATA_FIELD).await?;
+
+    // 4. If metadata exists, update the KYC flag
+    let Some(raw) = meta_raw else {
+        return Err(Error::UserNotFound(format!("User `{}` not found", user_key)));
+    };
+
+    let mut meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
+
+    // 5. Update KYC flag only if needed
+    if !meta.kyc_completed {
         meta.kyc_completed = true;
-
-        let meta_raw = serde_json::to_vec(&meta).map_err(Error::Deser)?;
-        let _: bool = conn.hset(&user, METADATA_FIELD, &meta_raw).await?;
+        let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
+        let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;
     }
 
     Ok(())
