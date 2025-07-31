@@ -117,10 +117,7 @@ pub type SetUserMetadataRes = ();
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema)]
 pub struct SetKycMetadataReq {
-    pub metadata: SetUserMetadataReqMetadata,
     pub inquiry_id: String,
-    #[schema(value_type = String)]
-    pub signature: Signature,
 }
 pub type SetKycMetadataRes = ();
 

@@ -36,29 +36,11 @@ async fn mark_kyc_completed(
     user_principal: Path<Principal>,
     req: Json<SetKycMetadataReq>,
 ) -> Result<Json<ApiResult<()>>> {
-    let result = mark_kyc_completed_impl(&state.redis, *user_principal, req.0).await?;
+    let result = mark_kyc_completed_impl(&state.redis, *user_principal, req.0.inquiry_id).await?;
     Ok(Json(Ok(result)))
 }
 
 pub async fn mark_kyc_completed_impl(
-    redis_pool: &RedisPool,
-    user_principal: Principal,
-    req: SetKycMetadataReq,
-) -> Result<SetKycMetadataRes> {
-    // Verify signature
-    req.signature.verify_identity(
-        user_principal,
-        req.metadata
-            .clone()
-            .try_into()
-            .map_err(|_| Error::AuthTokenMissing)?,
-    )?;
-
-    // Call core implementation
-    mark_kyc_completed_core(redis_pool, user_principal, req.inquiry_id).await
-}
-
-pub async fn mark_kyc_completed_core(
     redis_pool: &RedisPool,
     user_principal: Principal,
     inquiry_id: String,

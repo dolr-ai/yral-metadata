@@ -159,35 +159,20 @@ impl<const A: bool> MetadataClient<A> {
 
     pub async fn mark_kyc_completed(
         &self,
-        identity: &impl Identity,
-        metadata: SetUserMetadataReqMetadata,
+        user_principal: Principal,
         inquiry_id: String,
     ) -> Result<()> {
-        let signature = sign_message(
-            identity,
-            metadata
-                .clone()
-                .try_into()
-                .map_err(|_| Error::Api(types::error::ApiError::MetadataNotFound))?,
-        )?;
-        let sender = identity
-            .sender()
-            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
         let api_url = self
             .base_url
             .join("kyc/")
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
-            .join(&sender.to_text())
+            .join(&user_principal.to_text())
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
 
         let res = self
             .client
             .post(api_url)
-            .json(&SetKycMetadataReq {
-                metadata,
-                signature,
-                inquiry_id,
-            })
+            .json(&SetKycMetadataReq { inquiry_id })
             .send()
             .await?;
 
