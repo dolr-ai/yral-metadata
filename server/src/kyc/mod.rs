@@ -58,7 +58,7 @@ impl KycService {
         let status = data.data.attributes.status.to_lowercase();
 
         let res_reference_id = data.data.attributes.reference_id;
-        if status == "approved" && res_reference_id == Some(user_principal.to_text()) {
+        if (status == "approved" || status == "completed") && res_reference_id == Some(user_principal.to_text()) {
             Ok(())
         } else {
             Err(ApiError::KycApiError(format!(
