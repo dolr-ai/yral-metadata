@@ -14,3 +14,4 @@ reqwest = { version = "0.12", default-features = false, features = [
 ] }
 serde_json = "1.0.115"
 ic-agent = { version = "0.41.0", default-features = false, features = ["pem"]}
+chrono = "0.4"

@@ -12,7 +12,7 @@ use reqwest::{
 };
 use std::collections::HashMap;
 use types::{
-    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq, CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq, RegisterDeviceRes, SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes
+    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq, CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq, RegisterDeviceRes, SetUserEmailMetadataReq, SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -148,6 +148,50 @@ impl<const A: bool> MetadataClient<A> {
 
         let res: ApiResult<CanisterToPrincipalRes> = res.json().await?;
         Ok(res?.mappings)
+    }
+
+    pub async fn set_signup_datetime(
+        &self,
+        user_principal: Principal,
+    ) -> Result<()> {
+        let api_url = self
+            .base_url
+            .join("signup/")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
+            .join(&user_principal.to_text())
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
+        let res = self
+            .client
+            .post(api_url)
+            .send()
+            .await?;
+
+        let res: ApiResult<()> = res.json().await?;
+        Ok(res?)
+    }
+
+    pub async fn set_user_email(
+        &self,
+        user_principal: Principal,
+        email: String,
+    ) -> Result<()> {
+        let api_url = self
+            .base_url
+            .join("email/")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
+            .join(&user_principal.to_text())
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
+        let res = self
+            .client
+            .post(api_url)
+            .json(&SetUserEmailMetadataReq { email })
+            .send()
+            .await?;
+
+        let res: ApiResult<()> = res.json().await?;
+        Ok(res?)
     }
 
     pub async fn register_device(

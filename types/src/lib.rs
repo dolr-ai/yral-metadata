@@ -40,6 +40,12 @@ pub struct UserMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification_key: Option<NotificationKey>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signup_at: Option<i64>,
+
     #[serde(default)]
     pub is_migrated: bool,
 }
@@ -63,6 +69,10 @@ pub struct UserMetadataV2 {
     pub user_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification_key: Option<NotificationKey>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signup_at: Option<String>,
     #[serde(default)]
     pub is_migrated: bool,
 }
@@ -78,6 +88,8 @@ impl UserMetadataV2 {
             user_canister_id: metadata.user_canister_id,
             notification_key: metadata.notification_key,
             is_migrated: metadata.is_migrated,
+            signup_at: None,
+            email: None,
         }
     }
 }
@@ -92,6 +104,12 @@ pub struct SetUserMetadataReqMetadata {
     #[schema(value_type = String)]
     pub user_canister_id: Principal,
     pub user_name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct SetUserEmailMetadataReq {
+    #[schema(value_type = String)]
+    pub email: String,
 }
 
 impl TryFrom<SetUserMetadataReqMetadata> for Message {
@@ -112,6 +130,7 @@ pub struct SetUserMetadataReq {
 }
 
 pub type SetUserMetadataRes = ();
+pub type SetUserEmailMetadataRes = ();
 
 pub type GetUserMetadataRes = Option<UserMetadata>;
 pub type GetUserMetadataV2Res = Option<UserMetadataV2>;

@@ -68,6 +68,8 @@ pub enum Error {
     InvalidUsername,
     #[error("duplicate username")]
     DuplicateUsername,
+    #[error("Invalid email")]
+    InvalidEmail(String),
 }
 
 impl From<&Error> for ApiResult<()> {
@@ -115,6 +117,7 @@ impl From<&Error> for ApiResult<()> {
                 ApiError::Unknown(format!("Swagger UI error: {}", e))
             }
             Error::InvalidUsername => ApiError::InvalidUsername,
+            Error::InvalidEmail(email) => ApiError::InvalidEmail(email.clone()),
             Error::DuplicateUsername => ApiError::DuplicateUsername,
         };
         ApiResult::Err(err)
@@ -147,7 +150,10 @@ impl web::error::WebResponseError for Error {
             | Error::AuthTokenMissing => StatusCode::UNAUTHORIZED,
             Error::EnvironmentVariable(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::EnvironmentVariableMissing(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Error::UserAlreadyRegistered(_) | Error::InvalidPrincipal(_) | Error::InvalidUsername => StatusCode::BAD_REQUEST,
+            Error::UserAlreadyRegistered(_)
+            | Error::InvalidPrincipal(_)
+            | Error::InvalidEmail(_)
+            | Error::InvalidUsername => StatusCode::BAD_REQUEST,
             Error::SwaggerUi(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::DuplicateUsername => StatusCode::CONFLICT,
         }

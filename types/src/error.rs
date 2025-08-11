@@ -29,6 +29,8 @@ pub enum ApiError {
     FirebaseApiError(String),
     #[error("unknown: {0}")]
     Unknown(String),
+    #[error("invalid email: {0}")]
+    InvalidEmail(String),
     #[error("device already registered")]
     DeviceAlreadyRegistered,
     #[error("unauthorized")]
