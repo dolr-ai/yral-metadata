@@ -40,10 +40,10 @@ pub struct UserMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification_key: Option<NotificationKey>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub email: Option<String>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub signup_at: Option<i64>,
 
     #[serde(default)]
