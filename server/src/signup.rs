@@ -94,6 +94,12 @@ pub async fn set_user_email_impl(
         let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;
     }
 
+    if meta.signup_at.is_none() {
+        meta.signup_at = Some(chrono::Utc::now().timestamp());
+        let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
+        let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;
+    }
+
     Ok(meta)
 }
 
