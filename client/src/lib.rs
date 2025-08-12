@@ -15,7 +15,7 @@ use types::{
     ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
     CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq,
     RegisterDeviceRes, SetUserEmailMetadataReq, SetUserMetadataReq, SetUserMetadataReqMetadata,
-    SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes, UserMetadataV2,
+    SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes, UserMetadata, UserMetadataV2,
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -167,8 +167,9 @@ impl<const A: bool> MetadataClient<A> {
 
         let res = self.client.post(api_url).send().await?;
 
-        let res: ApiResult<UserMetadataV2> = res.json().await?;
-        Ok(res?)
+        let res: ApiResult<UserMetadata> = res.json().await?;
+
+        Ok(UserMetadataV2::from_metadata(user_principal, res?))
     }
 
     pub async fn set_user_email(
@@ -190,8 +191,9 @@ impl<const A: bool> MetadataClient<A> {
             .send()
             .await?;
 
-        let res: ApiResult<UserMetadataV2> = res.json().await?;
-        Ok(res?)
+        let res: ApiResult<UserMetadata> = res.json().await?;
+
+        Ok(UserMetadataV2::from_metadata(user_principal, res?))
     }
 
     pub async fn register_device(
