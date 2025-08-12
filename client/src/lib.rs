@@ -157,7 +157,10 @@ impl<const A: bool> MetadataClient<A> {
         Ok(res?.mappings)
     }
 
-    pub async fn set_signup_datetime(&self, user_principal: Principal) -> Result<()> {
+    pub async fn set_signup_datetime(
+        &self,
+        user_principal: Principal,
+    ) -> Result<GetUserMetadataV2Res> {
         let api_url = self
             .base_url
             .join("signup/")
@@ -167,11 +170,15 @@ impl<const A: bool> MetadataClient<A> {
 
         let res = self.client.post(api_url).send().await?;
 
-        let res: ApiResult<()> = res.json().await?;
+        let res: ApiResult<GetUserMetadataV2Res> = res.json().await?;
         Ok(res?)
     }
 
-    pub async fn set_user_email(&self, user_principal: Principal, email: String) -> Result<()> {
+    pub async fn set_user_email(
+        &self,
+        user_principal: Principal,
+        email: String,
+    ) -> Result<GetUserMetadataV2Res> {
         let api_url = self
             .base_url
             .join("email/")
@@ -186,7 +193,7 @@ impl<const A: bool> MetadataClient<A> {
             .send()
             .await?;
 
-        let res: ApiResult<()> = res.json().await?;
+        let res: ApiResult<GetUserMetadataV2Res> = res.json().await?;
         Ok(res?)
     }
 
