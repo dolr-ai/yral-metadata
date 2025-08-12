@@ -12,7 +12,10 @@ use reqwest::{
 };
 use std::collections::HashMap;
 use types::{
-    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq, CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq, RegisterDeviceRes, SetUserEmailMetadataReq, SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes
+    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
+    CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq,
+    RegisterDeviceRes, SetUserEmailMetadataReq, SetUserMetadataReq, SetUserMetadataReqMetadata,
+    SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes,
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -98,14 +101,18 @@ impl<const A: bool> MetadataClient<A> {
     }
 
     #[deprecated(note = "Use `get_user_metadata_v2` instead")]
-    pub async fn get_user_metadata(&self, user_principal: Principal) -> Result<GetUserMetadataV2Res> {
-        self.get_user_metadata_inner(user_principal.to_text())
-            .await
+    pub async fn get_user_metadata(
+        &self,
+        user_principal: Principal,
+    ) -> Result<GetUserMetadataV2Res> {
+        self.get_user_metadata_inner(user_principal.to_text()).await
     }
 
-    pub async fn get_user_metadata_v2(&self, username_or_principal: String) -> Result<GetUserMetadataV2Res> {
-        self.get_user_metadata_inner(username_or_principal)
-            .await
+    pub async fn get_user_metadata_v2(
+        &self,
+        username_or_principal: String,
+    ) -> Result<GetUserMetadataV2Res> {
+        self.get_user_metadata_inner(username_or_principal).await
     }
 
     pub async fn get_user_metadata_bulk(
@@ -150,10 +157,7 @@ impl<const A: bool> MetadataClient<A> {
         Ok(res?.mappings)
     }
 
-    pub async fn set_signup_datetime(
-        &self,
-        user_principal: Principal,
-    ) -> Result<()> {
+    pub async fn set_signup_datetime(&self, user_principal: Principal) -> Result<()> {
         let api_url = self
             .base_url
             .join("signup/")
@@ -161,21 +165,13 @@ impl<const A: bool> MetadataClient<A> {
             .join(&user_principal.to_text())
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
 
-        let res = self
-            .client
-            .post(api_url)
-            .send()
-            .await?;
+        let res = self.client.post(api_url).send().await?;
 
         let res: ApiResult<()> = res.json().await?;
         Ok(res?)
     }
 
-    pub async fn set_user_email(
-        &self,
-        user_principal: Principal,
-        email: String,
-    ) -> Result<()> {
+    pub async fn set_user_email(&self, user_principal: Principal, email: String) -> Result<()> {
         let api_url = self
             .base_url
             .join("email/")

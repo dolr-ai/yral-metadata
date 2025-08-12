@@ -69,19 +69,16 @@ pub struct UserMetadataV2 {
     pub user_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification_key: Option<NotificationKey>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub email: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub signup_at: Option<String>,
     #[serde(default)]
     pub is_migrated: bool,
 }
 
 impl UserMetadataV2 {
-    pub fn from_metadata(
-        user_principal: Principal,
-        metadata: UserMetadata,
-    ) -> Self {
+    pub fn from_metadata(user_principal: Principal, metadata: UserMetadata) -> Self {
         UserMetadataV2 {
             user_principal,
             user_name: metadata.user_name,
