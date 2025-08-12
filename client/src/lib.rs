@@ -15,7 +15,7 @@ use types::{
     ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
     CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq,
     RegisterDeviceRes, SetUserEmailMetadataReq, SetUserMetadataReq, SetUserMetadataReqMetadata,
-    SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes,
+    SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes, UserMetadataV2,
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -157,10 +157,7 @@ impl<const A: bool> MetadataClient<A> {
         Ok(res?.mappings)
     }
 
-    pub async fn set_signup_datetime(
-        &self,
-        user_principal: Principal,
-    ) -> Result<GetUserMetadataV2Res> {
+    pub async fn set_signup_datetime(&self, user_principal: Principal) -> Result<UserMetadataV2> {
         let api_url = self
             .base_url
             .join("signup/")
@@ -170,7 +167,7 @@ impl<const A: bool> MetadataClient<A> {
 
         let res = self.client.post(api_url).send().await?;
 
-        let res: ApiResult<GetUserMetadataV2Res> = res.json().await?;
+        let res: ApiResult<UserMetadataV2> = res.json().await?;
         Ok(res?)
     }
 
@@ -178,7 +175,7 @@ impl<const A: bool> MetadataClient<A> {
         &self,
         user_principal: Principal,
         email: String,
-    ) -> Result<GetUserMetadataV2Res> {
+    ) -> Result<UserMetadataV2> {
         let api_url = self
             .base_url
             .join("email/")
@@ -193,7 +190,7 @@ impl<const A: bool> MetadataClient<A> {
             .send()
             .await?;
 
-        let res: ApiResult<GetUserMetadataV2Res> = res.json().await?;
+        let res: ApiResult<UserMetadataV2> = res.json().await?;
         Ok(res?)
     }
 
