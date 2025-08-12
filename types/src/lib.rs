@@ -72,7 +72,7 @@ pub struct UserMetadataV2 {
     #[serde(default)]
     pub email: Option<String>,
     #[serde(default)]
-    pub signup_at: Option<String>,
+    pub signup_at: Option<i64>,
     #[serde(default)]
     pub is_migrated: bool,
 }
@@ -85,8 +85,8 @@ impl UserMetadataV2 {
             user_canister_id: metadata.user_canister_id,
             notification_key: metadata.notification_key,
             is_migrated: metadata.is_migrated,
-            signup_at: None,
-            email: None,
+            signup_at: metadata.signup_at,
+            email: metadata.email,
         }
     }
 }
