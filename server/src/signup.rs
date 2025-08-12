@@ -35,7 +35,7 @@ async fn set_user_email(
     state: State<AppState>,
     user_principal: Path<Principal>,
     req: Json<SetUserEmailMetadataReq>,
-) -> Result<Json<ApiResult<()>>> {
+) -> Result<Json<ApiResult<UserMetadata>>> {
     let result = set_user_email_impl(&state.redis, *user_principal, req.0.email).await?;
     Ok(Json(Ok(result)))
 }
@@ -57,16 +57,16 @@ async fn set_user_email(
 async fn set_signup_datetime(
     state: State<AppState>,
     user_principal: Path<Principal>,
-) -> Result<Json<ApiResult<()>>> {
-    let _ = set_signup_datetime_impl(&state.redis, *user_principal).await?;
-    Ok(Json(Ok(())))
+) -> Result<Json<ApiResult<UserMetadata>>> {
+    let res = set_signup_datetime_impl(&state.redis, *user_principal).await?;
+    Ok(Json(Ok(res)))
 }
 
 pub async fn set_user_email_impl(
     redis_pool: &RedisPool,
     user_principal: Principal,
     email: String,
-) -> Result<()> {
+) -> Result<UserMetadata> {
     let user_key = user_principal.to_text();
 
     // 1. Confirm the email is valid
@@ -94,13 +94,13 @@ pub async fn set_user_email_impl(
         let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;
     }
 
-    Ok(())
+    Ok(meta)
 }
 
 pub async fn set_signup_datetime_impl(
     redis_pool: &RedisPool,
     user_principal: Principal,
-) -> Result<()> {
+) -> Result<UserMetadata> {
     let user_key = user_principal.to_text();
 
     // 2. Get Redis connection
@@ -123,7 +123,7 @@ pub async fn set_signup_datetime_impl(
         let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;
     }
 
-    Ok(())
+    Ok(meta)
 }
 
 fn is_valid_email(email: &str) -> bool {
