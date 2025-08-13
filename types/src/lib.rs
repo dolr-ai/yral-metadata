@@ -109,6 +109,12 @@ pub struct SetUserEmailMetadataReq {
     pub email: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct SetUserSignedInMetadataReq {
+    #[schema(value_type = bool)]
+    pub already_signed_in: bool,
+}
+
 impl TryFrom<SetUserMetadataReqMetadata> for Message {
     type Error = Error;
     fn try_from(value: SetUserMetadataReqMetadata) -> Result<Self, Self::Error> {

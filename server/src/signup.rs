@@ -14,7 +14,7 @@ use ntex::web::{
     self,
     types::{Json, Path, State},
 };
-use types::{ApiResult, SetUserEmailMetadataReq, SetUserEmailMetadataRes, UserMetadata};
+use types::{ApiResult, SetUserEmailMetadataReq, SetUserSignedInMetadataReq, UserMetadata};
 
 #[utoipa::path(
     post,
@@ -24,7 +24,7 @@ use types::{ApiResult, SetUserEmailMetadataReq, SetUserEmailMetadataRes, UserMet
     ),
     request_body = SetUserEmailMetadataReq,
     responses(
-        (status = 200, description = "Set user metadata successfully", body = OkWrapper<SetUserEmailMetadataRes>),
+        (status = 200, description = "Set user metadata successfully", body = OkWrapper<UserMetadata>),
         (status = 400, description = "Invalid request", body = ErrorWrapper<Error>),
         (status = 401, description = "Unauthorized", body = ErrorWrapper<Error>),
         (status = 500, description = "Internal server error", body = ErrorWrapper<Error>)
@@ -46,9 +46,9 @@ async fn set_user_email(
     params(
         ("user_principal" = String, Path, description = "User principal ID")
     ),
-    request_body = SetUserEmailMetadataReq,
+    request_body = SetUserSignedInMetadataReq,
     responses(
-        (status = 200, description = "Set user metadata successfully", body = OkWrapper<SetUserEmailMetadataRes>),
+        (status = 200, description = "Set user metadata successfully", body = OkWrapper<UserMetadata>),
         (status = 401, description = "Unauthorized", body = ErrorWrapper<Error>),
         (status = 500, description = "Internal server error", body = ErrorWrapper<Error>)
     )
@@ -57,8 +57,10 @@ async fn set_user_email(
 async fn set_signup_datetime(
     state: State<AppState>,
     user_principal: Path<Principal>,
+    req: Json<SetUserSignedInMetadataReq>,
 ) -> Result<Json<ApiResult<UserMetadata>>> {
-    let res = set_signup_datetime_impl(&state.redis, *user_principal).await?;
+    let res =
+        set_signup_datetime_impl(&state.redis, *user_principal, req.0.already_signed_in).await?;
     Ok(Json(Ok(res)))
 }
 
@@ -106,6 +108,7 @@ pub async fn set_user_email_impl(
 pub async fn set_signup_datetime_impl(
     redis_pool: &RedisPool,
     user_principal: Principal,
+    already_signed_id: bool,
 ) -> Result<UserMetadata> {
     let user_key = user_principal.to_text();
 
@@ -124,7 +127,11 @@ pub async fn set_signup_datetime_impl(
 
     // 5. Update email only if needed
     if meta.signup_at.is_none() {
-        meta.signup_at = Some(chrono::Utc::now().timestamp());
+        if already_signed_id {
+            meta.signup_at = Some((chrono::Utc::now() - chrono::Duration::hours(24)).timestamp());
+        } else {
+            meta.signup_at = Some(chrono::Utc::now().timestamp());
+        }
         let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
         let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;
     }

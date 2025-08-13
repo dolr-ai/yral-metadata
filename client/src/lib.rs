@@ -15,7 +15,8 @@ use types::{
     ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
     CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq,
     RegisterDeviceRes, SetUserEmailMetadataReq, SetUserMetadataReq, SetUserMetadataReqMetadata,
-    SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes, UserMetadata, UserMetadataV2,
+    SetUserMetadataRes, SetUserSignedInMetadataReq, UnregisterDeviceReq, UnregisterDeviceRes,
+    UserMetadata, UserMetadataV2,
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -157,7 +158,11 @@ impl<const A: bool> MetadataClient<A> {
         Ok(res?.mappings)
     }
 
-    pub async fn set_signup_datetime(&self, user_principal: Principal) -> Result<UserMetadataV2> {
+    pub async fn set_signup_datetime(
+        &self,
+        user_principal: Principal,
+        already_signed_in: bool,
+    ) -> Result<UserMetadataV2> {
         let api_url = self
             .base_url
             .join("signup/")
@@ -165,7 +170,12 @@ impl<const A: bool> MetadataClient<A> {
             .join(&user_principal.to_text())
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
 
-        let res = self.client.post(api_url).send().await?;
+        let res = self
+            .client
+            .post(api_url)
+            .json(&SetUserSignedInMetadataReq { already_signed_in })
+            .send()
+            .await?;
 
         let res: ApiResult<UserMetadata> = res.json().await?;
 
