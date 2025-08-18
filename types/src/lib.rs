@@ -107,6 +107,7 @@ pub struct SetUserMetadataReqMetadata {
 pub struct SetUserEmailMetadataReq {
     #[schema(value_type = String)]
     pub email: String,
+    pub already_signed_in: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]

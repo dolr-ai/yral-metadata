@@ -186,6 +186,7 @@ impl<const A: bool> MetadataClient<A> {
         &self,
         user_principal: Principal,
         email: String,
+        already_signed_in: bool,
     ) -> Result<UserMetadataV2> {
         let api_url = self
             .base_url
@@ -197,7 +198,7 @@ impl<const A: bool> MetadataClient<A> {
         let res = self
             .client
             .post(api_url)
-            .json(&SetUserEmailMetadataReq { email })
+            .json(&SetUserEmailMetadataReq { email, already_signed_in })
             .send()
             .await?;
 
