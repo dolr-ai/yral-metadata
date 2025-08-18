@@ -128,7 +128,7 @@ pub async fn set_signup_datetime_impl(
     // 5. Update email only if needed
     if meta.signup_at.is_none() {
         if already_signed_id {
-            meta.signup_at = Some((chrono::Utc::now() - chrono::Duration::hours(24)).timestamp());
+            meta.signup_at = Some((chrono::Utc::now() - chrono::Duration::hours(48)).timestamp());
         } else {
             meta.signup_at = Some(chrono::Utc::now().timestamp());
         }
