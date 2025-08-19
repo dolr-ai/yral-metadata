@@ -36,7 +36,20 @@ async fn set_user_email(
     user_principal: Path<Principal>,
     req: Json<SetUserEmailMetadataReq>,
 ) -> Result<Json<ApiResult<UserMetadata>>> {
-    let result = set_user_email_impl(&state.redis, *user_principal, req.0.email, req.0.already_signed_in).await?;
+    req.signature.clone().verify_identity(
+        user_principal.clone(),
+        req.payload
+            .clone()
+            .try_into()
+            .map_err(|_| Error::AuthTokenMissing)?,
+    )?;
+    let result = set_user_email_impl(
+        &state.redis,
+        user_principal.into_inner(),
+        req.0.payload.email,
+        req.0.payload.already_signed_in,
+    )
+    .await?;
     Ok(Json(Ok(result)))
 }
 
@@ -60,7 +73,7 @@ async fn set_signup_datetime(
     req: Json<SetUserSignedInMetadataReq>,
 ) -> Result<Json<ApiResult<UserMetadata>>> {
     let res =
-        set_signup_datetime_impl(&state.redis, *user_principal, req.0.already_signed_in,).await?;
+        set_signup_datetime_impl(&state.redis, *user_principal, req.0.already_signed_in).await?;
     Ok(Json(Ok(res)))
 }
 
@@ -97,7 +110,7 @@ pub async fn set_user_email_impl(
         let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;
     }
 
-    if !already_signed_in {
+    if !already_signed_in && meta.signup_at.is_none() {
         meta.signup_at = Some(chrono::Utc::now().timestamp());
         let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
         let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;

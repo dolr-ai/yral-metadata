@@ -105,7 +105,13 @@ pub struct SetUserMetadataReqMetadata {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
 pub struct SetUserEmailMetadataReq {
+    pub payload: SetUserEmailReq,
     #[schema(value_type = String)]
+    pub signature: Signature,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct SetUserEmailReq {
     pub email: String,
     pub already_signed_in: bool,
 }
@@ -114,6 +120,16 @@ pub struct SetUserEmailMetadataReq {
 pub struct SetUserSignedInMetadataReq {
     #[schema(value_type = bool)]
     pub already_signed_in: bool,
+}
+
+impl TryFrom<SetUserEmailReq> for Message {
+    type Error = Error;
+    fn try_from(value: SetUserEmailReq) -> Result<Self, Self::Error> {
+        Message::default()
+            .method_name("set_user_email".into())
+            .args((value.email, value.already_signed_in))
+            .map_err(|_| Error::InvalidMessage("Failed to serialize arguments".to_string()))
+    }
 }
 
 impl TryFrom<SetUserMetadataReqMetadata> for Message {
