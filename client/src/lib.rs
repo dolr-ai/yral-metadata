@@ -185,8 +185,13 @@ impl<const A: bool> MetadataClient<A> {
     pub async fn set_user_email(
         &self,
         identity: &impl Identity,
-        payload: SetUserEmailReq,
+        email: String,
+        already_signed_in: bool,
     ) -> Result<UserMetadataV2> {
+        let payload = SetUserEmailReq {
+            email,
+            already_signed_in,
+        };
         let signature = sign_message(
             identity,
             payload
