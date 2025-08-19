@@ -41,6 +41,12 @@ pub struct UserMetadata {
     pub notification_key: Option<NotificationKey>,
 
     #[serde(default)]
+    pub email: Option<String>,
+
+    #[serde(default)]
+    pub signup_at: Option<i64>,
+
+    #[serde(default)]
     pub is_migrated: bool,
 }
 
@@ -64,20 +70,23 @@ pub struct UserMetadataV2 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification_key: Option<NotificationKey>,
     #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub signup_at: Option<i64>,
+    #[serde(default)]
     pub is_migrated: bool,
 }
 
 impl UserMetadataV2 {
-    pub fn from_metadata(
-        user_principal: Principal,
-        metadata: UserMetadata,
-    ) -> Self {
+    pub fn from_metadata(user_principal: Principal, metadata: UserMetadata) -> Self {
         UserMetadataV2 {
             user_principal,
             user_name: metadata.user_name,
             user_canister_id: metadata.user_canister_id,
             notification_key: metadata.notification_key,
             is_migrated: metadata.is_migrated,
+            signup_at: metadata.signup_at,
+            email: metadata.email,
         }
     }
 }
@@ -92,6 +101,35 @@ pub struct SetUserMetadataReqMetadata {
     #[schema(value_type = String)]
     pub user_canister_id: Principal,
     pub user_name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct SetUserEmailMetadataReq {
+    pub payload: SetUserEmailReq,
+    #[schema(value_type = String)]
+    pub signature: Signature,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct SetUserEmailReq {
+    pub email: String,
+    pub already_signed_in: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash, ToSchema)]
+pub struct SetUserSignedInMetadataReq {
+    #[schema(value_type = bool)]
+    pub already_signed_in: bool,
+}
+
+impl TryFrom<SetUserEmailReq> for Message {
+    type Error = Error;
+    fn try_from(value: SetUserEmailReq) -> Result<Self, Self::Error> {
+        Message::default()
+            .method_name("set_user_email".into())
+            .args((value.email, value.already_signed_in))
+            .map_err(|_| Error::InvalidMessage("Failed to serialize arguments".to_string()))
+    }
 }
 
 impl TryFrom<SetUserMetadataReqMetadata> for Message {
@@ -112,6 +150,7 @@ pub struct SetUserMetadataReq {
 }
 
 pub type SetUserMetadataRes = ();
+pub type SetUserEmailMetadataRes = ();
 
 pub type GetUserMetadataRes = Option<UserMetadata>;
 pub type GetUserMetadataV2Res = Option<UserMetadataV2>;

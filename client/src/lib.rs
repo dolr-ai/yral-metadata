@@ -12,7 +12,11 @@ use reqwest::{
 };
 use std::collections::HashMap;
 use types::{
-    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq, CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq, RegisterDeviceRes, SetUserMetadataReq, SetUserMetadataReqMetadata, SetUserMetadataRes, UnregisterDeviceReq, UnregisterDeviceRes
+    ApiResult, BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
+    CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, RegisterDeviceReq,
+    RegisterDeviceRes, SetUserEmailMetadataReq, SetUserEmailReq, SetUserMetadataReq,
+    SetUserMetadataReqMetadata, SetUserMetadataRes, SetUserSignedInMetadataReq,
+    UnregisterDeviceReq, UnregisterDeviceRes, UserMetadata, UserMetadataV2,
 };
 use yral_identity::ic_agent::sign_message;
 
@@ -98,14 +102,18 @@ impl<const A: bool> MetadataClient<A> {
     }
 
     #[deprecated(note = "Use `get_user_metadata_v2` instead")]
-    pub async fn get_user_metadata(&self, user_principal: Principal) -> Result<GetUserMetadataV2Res> {
-        self.get_user_metadata_inner(user_principal.to_text())
-            .await
+    pub async fn get_user_metadata(
+        &self,
+        user_principal: Principal,
+    ) -> Result<GetUserMetadataV2Res> {
+        self.get_user_metadata_inner(user_principal.to_text()).await
     }
 
-    pub async fn get_user_metadata_v2(&self, username_or_principal: String) -> Result<GetUserMetadataV2Res> {
-        self.get_user_metadata_inner(username_or_principal)
-            .await
+    pub async fn get_user_metadata_v2(
+        &self,
+        username_or_principal: String,
+    ) -> Result<GetUserMetadataV2Res> {
+        self.get_user_metadata_inner(username_or_principal).await
     }
 
     pub async fn get_user_metadata_bulk(
@@ -148,6 +156,69 @@ impl<const A: bool> MetadataClient<A> {
 
         let res: ApiResult<CanisterToPrincipalRes> = res.json().await?;
         Ok(res?.mappings)
+    }
+
+    pub async fn set_signup_datetime(
+        &self,
+        user_principal: Principal,
+        already_signed_in: bool,
+    ) -> Result<UserMetadataV2> {
+        let api_url = self
+            .base_url
+            .join("signup/")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
+            .join(&user_principal.to_text())
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
+        let res = self
+            .client
+            .post(api_url)
+            .json(&SetUserSignedInMetadataReq { already_signed_in })
+            .send()
+            .await?;
+
+        let res: ApiResult<UserMetadata> = res.json().await?;
+
+        Ok(UserMetadataV2::from_metadata(user_principal, res?))
+    }
+
+    pub async fn set_user_email(
+        &self,
+        identity: &impl Identity,
+        email: String,
+        already_signed_in: bool,
+    ) -> Result<UserMetadataV2> {
+        let payload = SetUserEmailReq {
+            email,
+            already_signed_in,
+        };
+        let signature = sign_message(
+            identity,
+            payload
+                .clone()
+                .try_into()
+                .map_err(|_| Error::Api(types::error::ApiError::MetadataNotFound))?,
+        )?;
+        let sender = identity
+            .sender()
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+        let api_url = self
+            .base_url
+            .join("email/")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
+            .join(&sender.to_text())
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
+        let res = self
+            .client
+            .post(api_url)
+            .json(&SetUserEmailMetadataReq { payload, signature })
+            .send()
+            .await?;
+
+        let res: ApiResult<UserMetadata> = res.json().await?;
+
+        Ok(UserMetadataV2::from_metadata(sender, res?))
     }
 
     pub async fn register_device(

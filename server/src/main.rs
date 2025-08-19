@@ -8,6 +8,7 @@ mod notifications;
 mod qstash;
 mod services;
 mod session;
+mod signup;
 mod state;
 mod utils;
 
@@ -20,6 +21,8 @@ use ntex::web;
 use ntex_cors::Cors;
 use state::AppState;
 use utils::error::*;
+
+use crate::signup::{set_signup_datetime, set_user_email};
 
 #[ntex::main]
 async fn main() -> Result<()> {
@@ -35,6 +38,8 @@ async fn main() -> Result<()> {
             .state(state.clone())
             .configure(services::openapi::ntex_config)
             .service(set_user_metadata)
+            .service(set_user_email)
+            .service(set_signup_datetime)
             .service(get_user_metadata)
             .service(delete_metadata_bulk)
             .service(get_user_metadata_bulk)

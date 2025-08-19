@@ -588,8 +588,10 @@ checksum = "c469d952047f47f91b68d1cba3f10d63c11d73e4636f24f08daf0278abf01c4d"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -1165,6 +1167,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9abf33c656a7256451ebb7d0082c5a471820c31269e49d807c538c252352186e"
 dependencies = [
  "stable_deref_trait",
+]
+
+[[package]]
+name = "email_address"
+version = "0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e079f19b08ca6239f47f8ba8509c11cf3ea30095831f7fed61441475edd8c449"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -5825,8 +5836,10 @@ dependencies = [
  "bb8",
  "bb8-redis",
  "candid",
+ "chrono",
  "config",
  "elsa",
+ "email_address",
  "env_logger",
  "futures",
  "hyper-rustls",
@@ -5863,6 +5876,7 @@ name = "yral-metadata-types"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "chrono",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

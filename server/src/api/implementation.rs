@@ -84,6 +84,8 @@ pub async fn set_user_metadata_core(
             user_name: set_metadata.user_name.clone(),
             notification_key: None,
             is_migrated: false,
+            email: None,
+            signup_at: None,
         }
     };
 

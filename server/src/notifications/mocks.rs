@@ -44,6 +44,8 @@ impl From<MockUserMetadata> for ActualUserMetadata {
             user_name: mock.user_name,
             notification_key: mock.notification_key,
             is_migrated: false,
+            email: None,
+            signup_at: None,
         }
     }
 }
