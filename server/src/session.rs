@@ -9,10 +9,9 @@ use serde::{Deserialize, Serialize};
 use types::ApiResult;
 use utoipa::ToSchema;
 use yral_canisters_client::{
-    individual_user_template::{
+    ic::USER_INFO_SERVICE_ID, individual_user_template::{
         self, IndividualUserTemplate, SessionType, UserProfileDetailsForFrontendV2,
-    },
-    user_index::UserIndex,
+    }, user_index::{ UserIndex}, user_info_service::{UserInfoService, Result_, SessionType as UserServiceSessionType}
 };
 
 use crate::{
@@ -21,6 +20,12 @@ use crate::{
 };
 
 use crate::state::AppState;
+
+#[derive(Serialize, Deserialize, Clone, ToSchema)]
+pub struct  UpdateUserSessionRequest {
+    user_principal: String,
+    user_canister: String,
+}
 
 #[derive(Serialize, Deserialize, ToSchema)]
 pub struct YralAuthClaim {
@@ -32,6 +37,71 @@ pub struct YralAuthClaim {
     nonce: Option<String>,
     ext_is_anonymous: bool,
 }
+
+
+#[utoipa::path(
+    post,
+    path = "/v2/update_session_as_registered",
+    request_body = UpdateUserSessionRequest,
+    responses(
+        (status = 200, description = "Session updated successfully", body = NullOk), // OkWrapper<()> panics for some reason
+        (status = 400, description = "Invalid request or canister ID", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 401, description = "Unauthorized - Auth token missing or invalid", body = ErrorWrapper<crate::utils::error::Error>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<crate::utils::error::Error>)
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
+#[web::post("/v2/update_session_as_registered")]
+pub async fn update_session_as_registered_v2(app_state: State<AppState>, req_payload: Json<UpdateUserSessionRequest>, http_request: HttpRequest,) -> Result<Json<ApiResult<()>>> {
+    
+    let headers = http_request.headers();
+
+    let Some(auth_header) = headers.get(AUTHORIZATION) else {
+        return Err(Error::AuthTokenMissing);
+    };
+
+    let auth_jwt_token = auth_header
+        .to_str()
+        .map_err(|_| Error::AuthTokenInvalid)?
+        .trim_start_matches("Bearer ");
+
+    let _jwt_claim = app_state.yral_auth_jwt.verify_token(auth_jwt_token)?;
+
+    let ic_agent = &app_state.backend_admin_ic_agent;
+
+    let user_canister = Principal::from_text(req_payload.user_canister.clone())?;
+    let user_principal = Principal::from_text(req_payload.user_principal.clone())?;
+
+
+    match user_canister {
+        USER_INFO_SERVICE_ID => {
+            let user_info_service = UserInfoService(user_canister, ic_agent);
+
+            let result = user_info_service.update_session_type(user_principal, UserServiceSessionType::RegisteredSession).await?;
+
+            if let Result_::Err(e) = result {
+                return Err(Error::UpdateSession(e))
+            }
+
+            Ok(Json(Ok(())))
+        },
+        _ => {
+
+            let individual_user_template_service = IndividualUserTemplate(user_canister, ic_agent);
+            let result = individual_user_template_service.update_session_type(SessionType::RegisteredSession).await?;
+
+            if let yral_canisters_client::individual_user_template::Result15::Err(e) = result {
+                    return Err(Error::UpdateSession(e));
+            }
+
+            Ok(Json(Ok(())))
+        }
+    }
+
+}
+
 
 #[utoipa::path(
     post,

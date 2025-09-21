@@ -5786,7 +5786,7 @@ dependencies = [
 [[package]]
 name = "yral-canisters-client"
 version = "0.1.0"
-source = "git+https://github.com/dolr-ai/yral-common.git?branch=master#9360407769f25d2d4b7f49391dae12afd98af4a1"
+source = "git+https://github.com/dolr-ai/yral-common.git?branch=master#5397d2a20d852fe077698e0a9c6f61aa1ab1e1d0"
 dependencies = [
  "anyhow",
  "candid",
@@ -5888,11 +5888,14 @@ dependencies = [
 [[package]]
 name = "yral-types"
 version = "0.1.0"
-source = "git+https://github.com/dolr-ai/yral-common.git?branch=master#9360407769f25d2d4b7f49391dae12afd98af4a1"
+source = "git+https://github.com/dolr-ai/yral-common.git?branch=master#5397d2a20d852fe077698e0a9c6f61aa1ab1e1d0"
 dependencies = [
  "ic-agent",
  "k256",
  "serde",
+ "serde_json",
+ "utoipa",
+ "utoipa-swagger-ui",
 ]
 
 [[package]]
