@@ -47,6 +47,7 @@ async fn main() -> Result<()> {
             .service(register_device)
             .service(unregister_device)
             .service(send_notification)
+            .service(session::update_session_as_registered_v2)
             .service(session::update_session_as_registered)
             .service(admin::populate_canister_index)
     })
