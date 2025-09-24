@@ -75,6 +75,7 @@ pub async fn set_user_metadata_core(
             let key = username_info_key(&existing.user_name);
             let _del: usize = conn.hdel(&key, METADATA_FIELD).await?;
         }
+        existing.user_name = set_metadata.user_name.clone();
 
         existing
     } else {
