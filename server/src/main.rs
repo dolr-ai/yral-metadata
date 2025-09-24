@@ -37,6 +37,7 @@ async fn main() -> Result<()> {
             .wrap(Cors::default())
             .state(state.clone())
             .configure(services::openapi::ntex_config)
+            .service(admin_set_user_metadata)
             .service(set_user_metadata)
             .service(set_user_email)
             .service(set_signup_datetime)
