@@ -1,4 +1,5 @@
 use candid::Principal;
+use ic_agent::AgentError;
 use ntex::web::{
     self,
     types::{Json, Path, State},
@@ -11,7 +12,7 @@ use types::{
 use crate::{
     api::implementation::{
         delete_metadata_bulk_impl, get_canister_to_principal_bulk_impl,
-        get_user_metadata_bulk_impl, get_user_metadata_impl, set_user_metadata_impl,
+        get_user_metadata_bulk_impl, get_user_metadata_impl, set_user_metadata_impl, set_user_metadata_using_admin_identity_impl,
     },
     services::error_wrappers::{ErrorWrapper, NullOk, OkWrapper},
     state::AppState,
@@ -50,6 +51,45 @@ async fn set_user_metadata(
     .await?;
     Ok(Json(Ok(result)))
 }
+
+
+#[utoipa::path(
+    post,
+    path = "/metadata/{user_principal}",
+    params(
+        ("user_principal" = String, Path, description = "User principal ID")
+    ),
+    request_body = SetUserMetadataReq,
+    responses(
+        (status = 200, description = "Set user metadata successfully", body = OkWrapper<SetUserMetadataRes>),
+        (status = 400, description = "Invalid request", body = ErrorWrapper<SetUserMetadataRes>),
+        (status = 401, description = "Unauthorized", body = ErrorWrapper<SetUserMetadataRes>),
+        (status = 500, description = "Internal server error", body = ErrorWrapper<SetUserMetadataRes>)
+    )
+)]
+#[web::post("/admin/metadata/{user_principal}")]
+async fn admin_set_user_metadata(
+    state: State<AppState>,
+    user_principal: Path<Principal>,
+    req: Json<SetUserMetadataReq>,
+) -> Result<Json<ApiResult<SetUserMetadataRes>>> {
+
+    let admin_principal = state.backend_admin_ic_agent.get_principal().map_err(|e| {
+        log::error!("Error getting admin identity principal: {}", e);
+        Error::EnvironmentVariable(std::env::VarError::NotPresent)
+    })?;
+
+    let result = set_user_metadata_using_admin_identity_impl(
+        &state.redis,
+        admin_principal,
+        *user_principal,
+        req.0,
+        CANISTER_TO_PRINCIPAL_KEY,
+    )
+    .await?;
+    Ok(Json(Ok(result)))
+}
+
 
 #[utoipa::path(
     get,
