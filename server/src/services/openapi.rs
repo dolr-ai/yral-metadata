@@ -32,6 +32,7 @@ impl Modify for BearerAuth {
 #[openapi(
     paths(
         crate::api::set_user_metadata,
+        crate::api::admin_set_user_metadata,
         crate::api::get_user_metadata,
         crate::api::delete_metadata_bulk,
         crate::api::get_user_metadata_bulk,

@@ -123,6 +123,22 @@ pub async fn set_user_metadata_impl(
     set_user_metadata_core(redis_pool, user_principal, &req.metadata, can2prin_key).await
 }
 
+
+pub async fn set_user_metadata_using_admin_identity_impl(
+    redis_pool: &RedisPool,
+    admin_principal: Principal,
+    user_principal: Principal,
+    req: SetUserMetadataReq,
+    can2prin_key: &str,
+) -> Result<SetUserMetadataRes> {
+    // Verify signature
+    req.signature
+        .verify_identity(admin_principal, req.metadata.clone().try_into().map_err(|_| Error::AuthTokenMissing)?)?;
+
+    // Call core implementation
+    set_user_metadata_core(redis_pool, user_principal, &req.metadata, can2prin_key).await
+}
+
 /// Core implementation for getting user metadata
 pub async fn get_user_metadata_impl(
     redis_pool: &RedisPool,
