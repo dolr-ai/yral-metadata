@@ -84,6 +84,40 @@ impl<const A: bool> MetadataClient<A> {
         Ok(res?)
     }
 
+    pub async fn admin_set_user_metadata(
+        &self,
+        identity: &impl Identity,
+        user_principal: Principal,
+        metadata: SetUserMetadataReqMetadata,
+    ) -> Result<SetUserMetadataRes> {
+        let signature = sign_message(
+            identity,
+            metadata
+                .clone()
+                .try_into()
+                .map_err(|_| Error::Api(types::error::ApiError::MetadataNotFound))?,
+        )?;
+        let api_url = self
+            .base_url
+            .join("admin/metadata/")
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
+            .join(&user_principal.to_text())
+            .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
+
+        let res = self
+            .client
+            .post(api_url)
+            .json(&SetUserMetadataReq {
+                metadata,
+                signature,
+            })
+            .send()
+            .await?;
+
+        let res: ApiResult<SetUserMetadataRes> = res.json().await?;
+        Ok(res?)
+    }
+
     async fn get_user_metadata_inner(
         &self,
         username_or_principal: String,
