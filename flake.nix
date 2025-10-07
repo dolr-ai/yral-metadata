@@ -19,7 +19,18 @@
                             curl
                             openssl
                             pkg-config
+                        ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+                            # Apple-specific dependencies for macOS
+                            darwin.apple_sdk.frameworks.Security
+                            darwin.apple_sdk.frameworks.SystemConfiguration
+                            libiconv
                         ];
+
+                        # Environment variables for macOS compilation
+                        shellHook = pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+                            export LDFLAGS="-L${pkgs.libiconv}/lib"
+                            export CPPFLAGS="-I${pkgs.libiconv}/include"
+                        '';
                     };
                 }
         );

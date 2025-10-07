@@ -71,11 +71,13 @@ pub async fn set_user_metadata_core(
             serde_json::from_slice(&existing_meta).map_err(Error::Deser)?;
         existing.user_canister_id = set_metadata.user_canister_id;
 
-        if !existing.user_name.is_empty() {
-            let key = username_info_key(&existing.user_name);
-            let _del: usize = conn.hdel(&key, METADATA_FIELD).await?;
+        if !set_metadata.user_name.is_empty() {
+            if !existing.user_name.is_empty() {
+                let key = username_info_key(&existing.user_name);
+                let _del: usize = conn.hdel(&key, METADATA_FIELD).await?;
+            }
+            existing.user_name = set_metadata.user_name.clone();
         }
-        existing.user_name = set_metadata.user_name.clone();
 
         existing
     } else {
@@ -123,7 +125,6 @@ pub async fn set_user_metadata_impl(
     set_user_metadata_core(redis_pool, user_principal, &req.metadata, can2prin_key).await
 }
 
-
 pub async fn set_user_metadata_using_admin_identity_impl(
     redis_pool: &RedisPool,
     admin_principal: Principal,
@@ -132,8 +133,13 @@ pub async fn set_user_metadata_using_admin_identity_impl(
     can2prin_key: &str,
 ) -> Result<SetUserMetadataRes> {
     // Verify signature
-    req.signature
-        .verify_identity(admin_principal, req.metadata.clone().try_into().map_err(|_| Error::AuthTokenMissing)?)?;
+    req.signature.verify_identity(
+        admin_principal,
+        req.metadata
+            .clone()
+            .try_into()
+            .map_err(|_| Error::AuthTokenMissing)?,
+    )?;
 
     // Call core implementation
     set_user_metadata_core(redis_pool, user_principal, &req.metadata, can2prin_key).await

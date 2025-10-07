@@ -75,6 +75,21 @@ async fn test_set_user_metadata_updates_existing() {
     let metadata: types::UserMetadata = serde_json::from_slice(&stored.unwrap()).unwrap();
     assert_eq!(metadata.user_name, "updatedname");
 
+    // verify just updating caniste id works
+
+    let metadata3 = create_test_metadata_req(300, "");
+    let result = set_user_metadata_core(&redis_pool, user_principal, &metadata3, &unique_key).await;
+    assert!(result.is_ok());
+
+    // Check updated data
+    let stored: Option<Vec<u8>> = conn
+        .hget(user_principal.to_text(), METADATA_FIELD)
+        .await
+        .unwrap();
+    let metadata: types::UserMetadata = serde_json::from_slice(&stored.unwrap()).unwrap();
+    assert_eq!(metadata.user_name, "updatedname");
+    assert_eq!(metadata.user_canister_id, metadata3.user_canister_id);
+
     // Cleanup
     cleanup_test_data(&redis_pool, &user_principal.to_text())
         .await
