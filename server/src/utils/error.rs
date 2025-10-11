@@ -77,19 +77,23 @@ impl From<&Error> for ApiResult<()> {
         let err = match value {
             Error::IO(_) | Error::Config(_) => {
                 log::warn!("internal error {value}");
+                sentry::capture_error(value);
                 ApiError::Unknown("internal error, reported".into())
             }
             Error::Identity(_) => ApiError::InvalidSignature,
             Error::Redis(e) => {
                 log::warn!("redis error {e}");
+                sentry::capture_error(value);
                 ApiError::Redis
             }
             Error::Bb8(e) => {
                 log::warn!("bb8 error {e}");
+                sentry::capture_error(value);
                 ApiError::Redis
             }
             Error::Deser(e) => {
                 log::warn!("deserialization error {e}");
+                sentry::capture_error(value);
                 ApiError::Deser
             }
             Error::Jwt(_) => ApiError::Jwt,
@@ -97,23 +101,30 @@ impl From<&Error> for ApiResult<()> {
             Error::AuthTokenInvalid => ApiError::AuthToken,
             Error::FirebaseApiErr(e) => ApiError::FirebaseApiError(e.clone()),
             Error::BackendAdminIdentityInvalid(e) => {
+                sentry::capture_error(value);
                 ApiError::BackendAdminIdentityInvalid(e.clone())
             }
-            Error::Unknown(e) => ApiError::Unknown(e.clone()),
+            Error::Unknown(e) => {
+                sentry::capture_error(value);
+                ApiError::Unknown(e.clone())
+            }
             Error::EnvironmentVariable(_) => ApiError::EnvironmentVariable,
             Error::EnvironmentVariableMissing(_) => ApiError::EnvironmentVariableMissing,
             Error::UserAlreadyRegistered(e) => ApiError::UserAlreadyRegistered(e.clone()),
             Error::InvalidPrincipal(_) => ApiError::InvalidPrincipal,
             Error::Agent(e) => {
                 log::warn!("agent error {e}");
+                sentry::capture_error(value);
                 ApiError::Unknown(e.to_string())
             }
             Error::UpdateSession(e) => {
                 log::warn!("update session error {e}");
+                sentry::capture_error(value);
                 ApiError::UpdateSession(e.clone())
             }
             Error::SwaggerUi(e) => {
                 log::warn!("swagger ui error {e}");
+                sentry::capture_error(value);
                 ApiError::Unknown(format!("Swagger UI error: {}", e))
             }
             Error::InvalidUsername => ApiError::InvalidUsername,

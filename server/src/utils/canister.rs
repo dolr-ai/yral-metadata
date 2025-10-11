@@ -1,7 +1,8 @@
 use ic_agent::{export::Principal, Agent};
 use redis::AsyncCommands;
 use yral_canisters_client::{
-    ic::PLATFORM_ORCHESTRATOR_ID, platform_orchestrator::PlatformOrchestrator, user_index::UserIndex
+    ic::PLATFORM_ORCHESTRATOR_ID, platform_orchestrator::PlatformOrchestrator,
+    user_index::UserIndex,
 };
 
 use crate::{

@@ -6,6 +6,8 @@ mod consts;
 mod firebase;
 mod notifications;
 mod qstash;
+mod sentry_helpers;
+mod sentry_middleware;
 mod services;
 mod session;
 mod signup;
@@ -30,10 +32,37 @@ async fn main() -> Result<()> {
 
     let conf = AppConfig::load()?;
 
+    // Initialize Sentry with enhanced configuration
+    let _guard = sentry::init((
+        "https://2e7671f1aef9c19f1f599858777accf6@apm.yral.com/6",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            server_name: Some(
+                hostname::get()
+                    .ok()
+                    .and_then(|h| h.into_string().ok())
+                    .unwrap_or_else(|| "unknown".to_string())
+                    .into(),
+            ),
+            // Capture user IPs and potentially sensitive headers when using HTTP server integrations
+            send_default_pii: true,
+            // Sample rate for performance monitoring (1.0 = 100%)
+            traces_sample_rate: 0.1,
+            // Attach stack traces to messages
+            attach_stacktrace: true,
+            // Enable automatic session tracking
+            auto_session_tracking: true,
+            ..Default::default()
+        },
+    ));
+
+    log::info!("Sentry initialized successfully");
+
     let state = AppState::new(&conf).await?;
 
     web::HttpServer::new(move || {
         web::App::new()
+            .wrap(sentry_middleware::SentryMiddleware)
             .wrap(Cors::default())
             .state(state.clone())
             .configure(services::openapi::ntex_config)

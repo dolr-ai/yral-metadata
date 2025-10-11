@@ -9,9 +9,12 @@ use serde::{Deserialize, Serialize};
 use types::ApiResult;
 use utoipa::ToSchema;
 use yral_canisters_client::{
-    ic::USER_INFO_SERVICE_ID, individual_user_template::{
+    ic::USER_INFO_SERVICE_ID,
+    individual_user_template::{
         self, IndividualUserTemplate, SessionType, UserProfileDetailsForFrontendV2,
-    }, user_index::{ UserIndex}, user_info_service::{UserInfoService, Result_, SessionType as UserServiceSessionType}
+    },
+    user_index::UserIndex,
+    user_info_service::{Result_, SessionType as UserServiceSessionType, UserInfoService},
 };
 
 use crate::{
@@ -22,7 +25,7 @@ use crate::{
 use crate::state::AppState;
 
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
-pub struct  UpdateUserSessionRequest {
+pub struct UpdateUserSessionRequest {
     user_principal: String,
     user_canister: String,
 }
@@ -37,7 +40,6 @@ pub struct YralAuthClaim {
     nonce: Option<String>,
     ext_is_anonymous: bool,
 }
-
 
 #[utoipa::path(
     post,
@@ -54,8 +56,11 @@ pub struct YralAuthClaim {
     )
 )]
 #[web::post("/v2/update_session_as_registered")]
-pub async fn update_session_as_registered_v2(app_state: State<AppState>, req_payload: Json<UpdateUserSessionRequest>, http_request: HttpRequest,) -> Result<Json<ApiResult<()>>> {
-    
+pub async fn update_session_as_registered_v2(
+    app_state: State<AppState>,
+    req_payload: Json<UpdateUserSessionRequest>,
+    http_request: HttpRequest,
+) -> Result<Json<ApiResult<()>>> {
     let headers = http_request.headers();
 
     let Some(auth_header) = headers.get(AUTHORIZATION) else {
@@ -74,34 +79,34 @@ pub async fn update_session_as_registered_v2(app_state: State<AppState>, req_pay
     let user_canister = Principal::from_text(req_payload.user_canister.clone())?;
     let user_principal = Principal::from_text(req_payload.user_principal.clone())?;
 
-
     match user_canister {
         USER_INFO_SERVICE_ID => {
             let user_info_service = UserInfoService(user_canister, ic_agent);
 
-            let result = user_info_service.update_session_type(user_principal, UserServiceSessionType::RegisteredSession).await?;
+            let result = user_info_service
+                .update_session_type(user_principal, UserServiceSessionType::RegisteredSession)
+                .await?;
 
             if let Result_::Err(e) = result {
-                return Err(Error::UpdateSession(e))
+                return Err(Error::UpdateSession(e));
             }
 
             Ok(Json(Ok(())))
-        },
+        }
         _ => {
-
             let individual_user_template_service = IndividualUserTemplate(user_canister, ic_agent);
-            let result = individual_user_template_service.update_session_type(SessionType::RegisteredSession).await?;
+            let result = individual_user_template_service
+                .update_session_type(SessionType::RegisteredSession)
+                .await?;
 
             if let yral_canisters_client::individual_user_template::Result15::Err(e) = result {
-                    return Err(Error::UpdateSession(e));
+                return Err(Error::UpdateSession(e));
             }
 
             Ok(Json(Ok(())))
         }
     }
-
 }
-
 
 #[utoipa::path(
     post,
