@@ -12,7 +12,8 @@ use types::{
 use crate::{
     api::implementation::{
         delete_metadata_bulk_impl, get_canister_to_principal_bulk_impl,
-        get_user_metadata_bulk_impl, get_user_metadata_impl, set_user_metadata_impl, set_user_metadata_using_admin_identity_impl,
+        get_user_metadata_bulk_impl, get_user_metadata_impl, set_user_metadata_impl,
+        set_user_metadata_using_admin_identity_impl,
     },
     services::error_wrappers::{ErrorWrapper, NullOk, OkWrapper},
     state::AppState,
@@ -52,7 +53,6 @@ async fn set_user_metadata(
     Ok(Json(Ok(result)))
 }
 
-
 #[utoipa::path(
     post,
     path = "/metadata/{user_principal}",
@@ -73,7 +73,6 @@ async fn admin_set_user_metadata(
     user_principal: Path<Principal>,
     req: Json<SetUserMetadataReq>,
 ) -> Result<Json<ApiResult<SetUserMetadataRes>>> {
-
     let admin_principal = state.backend_admin_ic_agent.get_principal().map_err(|e| {
         log::error!("Error getting admin identity principal: {}", e);
         Error::EnvironmentVariable(std::env::VarError::NotPresent)
@@ -89,7 +88,6 @@ async fn admin_set_user_metadata(
     .await?;
     Ok(Json(Ok(result)))
 }
-
 
 #[utoipa::path(
     get,
