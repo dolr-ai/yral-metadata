@@ -56,7 +56,7 @@ utoipa = { version = "5.3.1" }
 utoipa-swagger-ui = { version = "9.0.2", features = ["reqwest"]}
 regex = "1.11.1"
 elsa = "1.11.2"
-sentry = { version = "0.36.0", features = ["backtrace", "contexts", "panic", "tracing"], default-features = false }
+sentry = { version = "0.36.0", features = ["backtrace", "contexts", "panic", "tracing", "reqwest", "rustls"] }
 hostname = "0.4"
 uuid = { version = "1.11.0", features = ["v4"] }
 
