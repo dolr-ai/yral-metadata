@@ -24,11 +24,46 @@ use utils::error::*;
 
 use crate::signup::{set_signup_datetime, set_user_email};
 
+fn setup_sentry_subscriber() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            "info,yral_metadata_server=debug".into()
+        }))
+        .with(tracing_subscriber::fmt::layer())
+        .with(sentry_tracing::layer())
+        .init();
+}
+
 #[ntex::main]
 async fn main() -> Result<()> {
-    env_logger::init();
-
     let conf = AppConfig::load()?;
+
+    // Initialize Sentry
+    let _guard = sentry::init((
+        "https://2e7671f1aef9c19f1f599858777accf6@apm.yral.com/6",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            server_name: Some(
+                hostname::get()
+                    .ok()
+                    .and_then(|h| h.into_string().ok())
+                    .unwrap_or_else(|| "unknown".to_string())
+                    .into(),
+            ),
+            send_default_pii: true,
+            traces_sample_rate: 0.1,
+            attach_stacktrace: true,
+            auto_session_tracking: true,
+            ..Default::default()
+        },
+    ));
+
+    setup_sentry_subscriber();
+
+    log::info!("Sentry initialized successfully");
 
     let state = AppState::new(&conf).await?;
 
