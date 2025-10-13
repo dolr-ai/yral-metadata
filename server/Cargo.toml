@@ -56,6 +56,21 @@ utoipa = { version = "5.3.1" }
 utoipa-swagger-ui = { version = "9.0.2", features = ["reqwest"]}
 regex = "1.11.1"
 elsa = "1.11.2"
+sentry = { version = "0.37.0", default-features = false, features = [
+    "rustls",
+    "sentry-anyhow",
+    "serde_json",
+    "backtrace",
+    "contexts",
+    "debug-images",
+    "panic",
+    "release-health",
+    "reqwest",
+] }
+sentry-tracing = "0.37.0"
+hostname = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
