@@ -28,6 +28,9 @@ fn setup_sentry_subscriber() {
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
 
+    // Initialize tracing-log to capture log crate events
+    tracing_log::LogTracer::init().expect("Failed to set logger");
+
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
             "info,yral_metadata_server=debug".into()
