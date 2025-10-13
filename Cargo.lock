@@ -6178,7 +6178,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "tracing-log",
  "tracing-subscriber",
  "utoipa",
  "utoipa-swagger-ui",
