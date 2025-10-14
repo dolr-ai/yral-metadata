@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
 
     // Initialize Sentry
     let _guard = sentry::init((
-        "https://2e7671f1aef9c19f1f599858777accf6@apm.yral.com/6",
+        "https://0438addc79794d5656a3391f91648618@apm.yral.com/4",
         sentry::ClientOptions {
             release: sentry::release_name!(),
             server_name: Some(
