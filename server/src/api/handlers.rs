@@ -1,5 +1,4 @@
 use candid::Principal;
-use ic_agent::AgentError;
 use ntex::web::{
     self,
     types::{Json, Path, State},
@@ -42,13 +41,28 @@ async fn set_user_metadata(
     user_principal: Path<Principal>,
     req: Json<SetUserMetadataReq>,
 ) -> Result<Json<ApiResult<SetUserMetadataRes>>> {
+    let principal = *user_principal;
+
+    // Add user context to Sentry
+    crate::sentry_utils::add_user_context(principal, None);
+    crate::sentry_utils::add_operation_breadcrumb(
+        "metadata",
+        &format!("Setting metadata for user: {}", principal),
+        sentry::Level::Info,
+    );
+
     let result = set_user_metadata_impl(
         &state.redis,
-        *user_principal,
+        principal,
         req.0,
         CANISTER_TO_PRINCIPAL_KEY,
     )
-    .await?;
+    .await
+    .map_err(|e| {
+        crate::sentry_utils::capture_api_error(&e, "/metadata/{user_principal}", Some(&principal.to_text()));
+        e
+    })?;
+
     Ok(Json(Ok(result)))
 }
 
@@ -108,7 +122,20 @@ async fn get_user_metadata(
     state: State<AppState>,
     path: Path<String>,
 ) -> Result<Json<ApiResult<GetUserMetadataV2Res>>> {
-    let result = get_user_metadata_impl(&state.redis, path.into_inner()).await?;
+    let identifier = path.into_inner();
+
+    crate::sentry_utils::add_operation_breadcrumb(
+        "metadata",
+        &format!("Getting metadata for: {}", identifier),
+        sentry::Level::Info,
+    );
+
+    let result = get_user_metadata_impl(&state.redis, identifier.clone()).await
+        .map_err(|e| {
+            crate::sentry_utils::capture_api_error(&e, "/metadata/{username_or_principal}", Some(&identifier));
+            e
+        })?;
+
     Ok(Json(Ok(result)))
 }
 
@@ -161,10 +188,19 @@ async fn get_user_metadata_bulk(
     state: State<AppState>,
     req: Json<BulkGetUserMetadataReq>,
 ) -> Result<Json<ApiResult<BulkGetUserMetadataRes>>> {
+    let user_count = req.0.users.len();
+
+    crate::sentry_utils::add_operation_breadcrumb(
+        "metadata",
+        &format!("Bulk fetch metadata for {} users", user_count),
+        sentry::Level::Info,
+    );
+
     let result = get_user_metadata_bulk_impl(&state.redis, req.0)
         .await
         .map_err(|e| {
             log::error!("Error fetching bulk user metadata: {}", e);
+            crate::sentry_utils::capture_api_error(&e, "/metadata-bulk", None);
             e
         })?;
     Ok(Json(Ok(result)))

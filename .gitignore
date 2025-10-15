@@ -3,3 +3,4 @@
 .env
 /.direnv
 CLAUDE.md
+.DS_Store

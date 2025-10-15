@@ -55,10 +55,17 @@ pub struct YralAuthClaim {
 )]
 #[web::post("/v2/update_session_as_registered")]
 pub async fn update_session_as_registered_v2(app_state: State<AppState>, req_payload: Json<UpdateUserSessionRequest>, http_request: HttpRequest,) -> Result<Json<ApiResult<()>>> {
-    
+
+    crate::sentry_utils::add_operation_breadcrumb(
+        "session",
+        &format!("Update session v2 for user: {}", req_payload.user_principal),
+        sentry::Level::Info,
+    );
+
     let headers = http_request.headers();
 
     let Some(auth_header) = headers.get(AUTHORIZATION) else {
+        crate::sentry_utils::add_operation_breadcrumb("session", "Auth token missing", sentry::Level::Warning);
         return Err(Error::AuthTokenMissing);
     };
 
@@ -77,22 +84,33 @@ pub async fn update_session_as_registered_v2(app_state: State<AppState>, req_pay
 
     match user_canister {
         USER_INFO_SERVICE_ID => {
+            crate::sentry_utils::add_canister_call_breadcrumb(&user_canister.to_text(), "update_session_type", true);
             let user_info_service = UserInfoService(user_canister, ic_agent);
 
-            let result = user_info_service.update_session_type(user_principal, UserServiceSessionType::RegisteredSession).await?;
+            let result = user_info_service.update_session_type(user_principal, UserServiceSessionType::RegisteredSession).await
+                .map_err(|e| {
+                    crate::sentry_utils::add_canister_call_breadcrumb(&user_canister.to_text(), "update_session_type", false);
+                    e
+                })?;
 
             if let Result_::Err(e) = result {
+                crate::sentry_utils::add_operation_breadcrumb("session", &format!("Update session failed: {}", e), sentry::Level::Error);
                 return Err(Error::UpdateSession(e))
             }
 
             Ok(Json(Ok(())))
         },
         _ => {
-
+            crate::sentry_utils::add_canister_call_breadcrumb(&user_canister.to_text(), "update_session_type", true);
             let individual_user_template_service = IndividualUserTemplate(user_canister, ic_agent);
-            let result = individual_user_template_service.update_session_type(SessionType::RegisteredSession).await?;
+            let result = individual_user_template_service.update_session_type(SessionType::RegisteredSession).await
+                .map_err(|e| {
+                    crate::sentry_utils::add_canister_call_breadcrumb(&user_canister.to_text(), "update_session_type", false);
+                    e
+                })?;
 
             if let yral_canisters_client::individual_user_template::Result15::Err(e) = result {
+                    crate::sentry_utils::add_operation_breadcrumb("session", &format!("Update session failed: {}", e), sentry::Level::Error);
                     return Err(Error::UpdateSession(e));
             }
 

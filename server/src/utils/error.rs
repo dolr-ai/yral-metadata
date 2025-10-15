@@ -77,48 +77,95 @@ impl From<&Error> for ApiResult<()> {
         let err = match value {
             Error::IO(_) | Error::Config(_) => {
                 log::warn!("internal error {value}");
+                crate::sentry_utils::add_operation_breadcrumb("error", &format!("Internal error: {}", value), sentry::Level::Error);
                 ApiError::Unknown("internal error, reported".into())
             }
-            Error::Identity(_) => ApiError::InvalidSignature,
+            Error::Identity(_) => {
+                crate::sentry_utils::add_operation_breadcrumb("error", "Invalid signature", sentry::Level::Warning);
+                ApiError::InvalidSignature
+            }
             Error::Redis(e) => {
                 log::warn!("redis error {e}");
+                crate::sentry_utils::add_redis_breadcrumb("error", &e.to_string(), false);
                 ApiError::Redis
             }
             Error::Bb8(e) => {
                 log::warn!("bb8 error {e}");
+                crate::sentry_utils::add_redis_breadcrumb("connection_pool_error", &e.to_string(), false);
                 ApiError::Redis
             }
             Error::Deser(e) => {
                 log::warn!("deserialization error {e}");
+                crate::sentry_utils::add_operation_breadcrumb("error", &format!("Deserialization error: {}", e), sentry::Level::Error);
                 ApiError::Deser
             }
-            Error::Jwt(_) => ApiError::Jwt,
-            Error::AuthTokenMissing => ApiError::AuthTokenMissing,
-            Error::AuthTokenInvalid => ApiError::AuthToken,
-            Error::FirebaseApiErr(e) => ApiError::FirebaseApiError(e.clone()),
+            Error::Jwt(_) => {
+                crate::sentry_utils::add_operation_breadcrumb("error", "JWT validation failed", sentry::Level::Warning);
+                ApiError::Jwt
+            }
+            Error::AuthTokenMissing => {
+                crate::sentry_utils::add_operation_breadcrumb("error", "Auth token missing", sentry::Level::Warning);
+                ApiError::AuthTokenMissing
+            }
+            Error::AuthTokenInvalid => {
+                crate::sentry_utils::add_operation_breadcrumb("error", "Auth token invalid", sentry::Level::Warning);
+                ApiError::AuthToken
+            }
+            Error::FirebaseApiErr(e) => {
+                crate::sentry_utils::add_firebase_breadcrumb("error", e, false);
+                ApiError::FirebaseApiError(e.clone())
+            }
             Error::BackendAdminIdentityInvalid(e) => {
+                crate::sentry_utils::add_operation_breadcrumb("error", &format!("Backend admin identity invalid: {}", e), sentry::Level::Error);
                 ApiError::BackendAdminIdentityInvalid(e.clone())
             }
-            Error::Unknown(e) => ApiError::Unknown(e.clone()),
-            Error::EnvironmentVariable(_) => ApiError::EnvironmentVariable,
-            Error::EnvironmentVariableMissing(_) => ApiError::EnvironmentVariableMissing,
-            Error::UserAlreadyRegistered(e) => ApiError::UserAlreadyRegistered(e.clone()),
-            Error::InvalidPrincipal(_) => ApiError::InvalidPrincipal,
+            Error::Unknown(e) => {
+                crate::sentry_utils::add_operation_breadcrumb("error", &format!("Unknown error: {}", e), sentry::Level::Error);
+                ApiError::Unknown(e.clone())
+            }
+            Error::EnvironmentVariable(_) => {
+                crate::sentry_utils::add_operation_breadcrumb("error", "Environment variable error", sentry::Level::Error);
+                ApiError::EnvironmentVariable
+            }
+            Error::EnvironmentVariableMissing(_) => {
+                crate::sentry_utils::add_operation_breadcrumb("error", "Environment variable missing", sentry::Level::Error);
+                ApiError::EnvironmentVariableMissing
+            }
+            Error::UserAlreadyRegistered(e) => {
+                crate::sentry_utils::add_operation_breadcrumb("error", &format!("User already registered: {}", e), sentry::Level::Info);
+                ApiError::UserAlreadyRegistered(e.clone())
+            }
+            Error::InvalidPrincipal(_) => {
+                crate::sentry_utils::add_operation_breadcrumb("error", "Invalid principal", sentry::Level::Warning);
+                ApiError::InvalidPrincipal
+            }
             Error::Agent(e) => {
                 log::warn!("agent error {e}");
+                crate::sentry_utils::add_canister_call_breadcrumb("unknown", "agent_error", false);
                 ApiError::Unknown(e.to_string())
             }
             Error::UpdateSession(e) => {
                 log::warn!("update session error {e}");
+                crate::sentry_utils::add_operation_breadcrumb("error", &format!("Update session error: {}", e), sentry::Level::Error);
                 ApiError::UpdateSession(e.clone())
             }
             Error::SwaggerUi(e) => {
                 log::warn!("swagger ui error {e}");
+                crate::sentry_utils::add_operation_breadcrumb("error", &format!("Swagger UI error: {}", e), sentry::Level::Error);
                 ApiError::Unknown(format!("Swagger UI error: {}", e))
             }
-            Error::InvalidUsername => ApiError::InvalidUsername,
-            Error::InvalidEmail(email) => ApiError::InvalidEmail(email.clone()),
-            Error::DuplicateUsername => ApiError::DuplicateUsername,
+            Error::InvalidUsername => {
+                crate::sentry_utils::add_operation_breadcrumb("error", "Invalid username", sentry::Level::Warning);
+                ApiError::InvalidUsername
+            }
+            Error::InvalidEmail(email) => {
+                crate::sentry_utils::add_operation_breadcrumb("error", &format!("Invalid email: {}", email), sentry::Level::Warning);
+                ApiError::InvalidEmail(email.clone())
+            }
+            Error::DuplicateUsername => {
+                crate::sentry_utils::add_operation_breadcrumb("error", "Duplicate username", sentry::Level::Warning);
+                ApiError::DuplicateUsername
+            }
         };
         ApiResult::Err(err)
     }

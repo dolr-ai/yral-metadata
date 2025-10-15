@@ -51,10 +51,24 @@ async fn register_device(
     user_principal: Path<Principal>,
     req: Json<RegisterDeviceReq>,
 ) -> Result<Json<ApiResult<RegisterDeviceRes>>> {
+    let principal = *user_principal;
+
+    crate::sentry_utils::add_user_context(principal, None);
+    crate::sentry_utils::add_operation_breadcrumb(
+        "notifications",
+        &format!("Registering device for user: {}", principal),
+        sentry::Level::Info,
+    );
+
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
     let redis_service = &mut *redis_conn_pooled;
     let firebase_service = &state.firebase;
+
     register_device_impl(firebase_service, redis_service, user_principal, req).await
+        .map_err(|e| {
+            crate::sentry_utils::capture_api_error(&e, "/notifications/{user_principal}", Some(&principal.to_text()));
+            e
+        })
 }
 
 pub async fn register_device_impl<
@@ -147,8 +161,12 @@ pub async fn register_device_impl<
             .update_notification_devices(fcm_request_body_json)
             .await
         {
-            Ok(Some(key)) => key,
+            Ok(Some(key)) => {
+                crate::sentry_utils::add_firebase_breadcrumb("update_notification_devices", &user_id_text, true);
+                key
+            },
             Err(Error::FirebaseApiErr(err_text)) if err_text.contains("not found") => {
+                crate::sentry_utils::add_firebase_breadcrumb("update_notification_devices", &user_id_text, false);
                 log::warn!(
                     "Attempted to add device to notification_key_name '{}' which was not found in FCM. Attempting to create.",
                     notification_key_name
@@ -421,9 +439,19 @@ async fn send_notification(
     user_principal: Path<Principal>,
     req: Json<SendNotificationReq>,
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
+    let principal = *user_principal;
+
+    crate::sentry_utils::add_user_context(principal, None);
+    crate::sentry_utils::add_operation_breadcrumb(
+        "notifications",
+        &format!("Sending notification to user: {}", principal),
+        sentry::Level::Info,
+    );
+
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
     let redis_service = &mut *redis_conn_pooled;
     let firebase_service = &state.firebase;
+
     send_notification_impl(
         Some(http_req),
         firebase_service,
@@ -432,6 +460,10 @@ async fn send_notification(
         req,
     )
     .await
+    .map_err(|e| {
+        crate::sentry_utils::capture_api_error(&e, "/notifications/{user_principal}/send", Some(&principal.to_text()));
+        e
+    })
 }
 
 pub async fn send_notification_impl<F: FcmService, R: RedisConnection, P: UserPrincipal>(
