@@ -6,6 +6,8 @@ mod consts;
 mod firebase;
 mod notifications;
 mod qstash;
+mod sentry_middleware;
+mod sentry_utils;
 mod services;
 mod session;
 mod signup;
@@ -22,6 +24,7 @@ use ntex_cors::Cors;
 use state::AppState;
 use utils::error::*;
 
+use crate::sentry_middleware::SentryMiddleware;
 use crate::signup::{set_signup_datetime, set_user_email};
 
 fn setup_sentry_subscriber() {
@@ -29,9 +32,10 @@ fn setup_sentry_subscriber() {
     use tracing_subscriber::util::SubscriberInitExt;
 
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-            "info,yral_metadata_server=debug".into()
-        }))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,yral_metadata_server=debug".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .with(sentry_tracing::layer())
         .init();
@@ -41,11 +45,16 @@ fn setup_sentry_subscriber() {
 async fn main() -> Result<()> {
     let conf = AppConfig::load()?;
 
-    // Initialize Sentry
+    // Initialize Sentry with enhanced configuration
     let _guard = sentry::init((
         "https://ca9ac4e37832428f5804817e010068dd@apm.yral.com/6",
         sentry::ClientOptions {
             release: sentry::release_name!(),
+            environment: Some(
+                std::env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "development".to_string())
+                    .into(),
+            ),
             server_name: Some(
                 hostname::get()
                     .ok()
@@ -54,9 +63,19 @@ async fn main() -> Result<()> {
                     .into(),
             ),
             send_default_pii: true,
-            traces_sample_rate: 0.1,
+            traces_sample_rate: 0.5, // Increased for better observability
             attach_stacktrace: true,
             auto_session_tracking: true,
+            max_breadcrumbs: 100, // Store more breadcrumbs for better context
+            before_send: Some(std::sync::Arc::new(|mut event| {
+                // Sanitize sensitive data before sending
+                if let Some(request) = &mut event.request {
+                    // Remove authorization headers from the headers map
+                    request.headers.remove("authorization");
+                    request.headers.remove("cookie");
+                }
+                Some(event)
+            })),
             ..Default::default()
         },
     ));
@@ -69,6 +88,7 @@ async fn main() -> Result<()> {
 
     web::HttpServer::new(move || {
         web::App::new()
+            .wrap(SentryMiddleware) // Add Sentry middleware first to capture all requests
             .wrap(Cors::default())
             .state(state.clone())
             .configure(services::openapi::ntex_config)
