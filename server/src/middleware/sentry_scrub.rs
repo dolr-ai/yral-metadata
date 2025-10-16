@@ -34,6 +34,17 @@ fn contains_sensitive_field(text: &str) -> bool {
     })
 }
 
+/// Check if a key matches a sensitive field (exact match or specific patterns)
+fn is_sensitive_key(key: &str) -> bool {
+    let key_lower = key.to_lowercase();
+    SENSITIVE_FIELDS.iter().any(|field| {
+        // Exact match or with underscores (but not plural forms)
+        key_lower == *field ||
+        key_lower.starts_with(&format!("{}_", field)) ||
+        key_lower.ends_with(&format!("_{}", field))
+    })
+}
+
 /// Recursively scrub sensitive data from a JSON value
 #[allow(dead_code)]
 fn scrub_json_value(value: &mut serde_json::Value) {
@@ -41,7 +52,7 @@ fn scrub_json_value(value: &mut serde_json::Value) {
         serde_json::Value::Object(map) => {
             // Scrub all values in the object
             for (key, val) in map.iter_mut() {
-                if SENSITIVE_FIELDS.iter().any(|f| key.to_lowercase().contains(f)) {
+                if is_sensitive_key(key) {
                     *val = serde_json::Value::String("[REDACTED]".to_string());
                 } else {
                     scrub_json_value(val);
