@@ -1,8 +1,13 @@
 use ntex::service::{Middleware, Service, ServiceCtx};
 use ntex::util::Bytes;
 use ntex::web::{Error, ErrorRenderer, WebRequest, WebResponse};
+use sentry::Hub;
 use std::env;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
+
+/// Global request counter for generating unique request IDs
+static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Maximum body size to capture (default 10KB)
 #[allow(dead_code)]
@@ -69,14 +74,15 @@ fn parse_and_scrub_bytes(bytes: &Bytes) -> Option<String> {
 }
 
 /// Add lightweight breadcrumb for successful requests (no body parsing)
-fn add_lightweight_breadcrumb(method: &str, path: &str, status: u16, duration_ms: u64) {
-    sentry::add_breadcrumb(sentry::Breadcrumb {
+fn add_lightweight_breadcrumb(request_id: u64, method: &str, path: &str, status: u16, duration_ms: u64) {
+    Hub::current().add_breadcrumb(sentry::Breadcrumb {
         ty: "http".into(),
         category: Some("http.response".into()),
-        message: Some(format!("{} {} {} ({}ms)", method, path, status, duration_ms)),
+        message: Some(format!("[req_id:{}] {} {} {} ({}ms)", request_id, method, path, status, duration_ms)),
         level: sentry::Level::Info,
         data: {
             let mut map = std::collections::BTreeMap::new();
+            map.insert("request_id".to_string(), request_id.into());
             map.insert("method".to_string(), method.into());
             map.insert("url".to_string(), path.into());
             map.insert("status_code".to_string(), status.into());
@@ -89,18 +95,20 @@ fn add_lightweight_breadcrumb(method: &str, path: &str, status: u16, duration_ms
 
 /// Add detailed request breadcrumb with body (only for errors)
 fn add_request_breadcrumb(
+    request_id: u64,
     method: &str,
     path: &str,
     query: &str,
     body: Option<String>,
 ) {
-    sentry::add_breadcrumb(sentry::Breadcrumb {
+    Hub::current().add_breadcrumb(sentry::Breadcrumb {
         ty: "http".into(),
         category: Some("http.request".into()),
-        message: Some(format!("{} {}", method, path)),
+        message: Some(format!("[req_id:{}] {} {}", request_id, method, path)),
         level: sentry::Level::Info,
         data: {
             let mut map = std::collections::BTreeMap::new();
+            map.insert("request_id".to_string(), request_id.into());
             map.insert("method".to_string(), method.into());
             map.insert("url".to_string(), path.into());
             if !query.is_empty() {
@@ -117,6 +125,7 @@ fn add_request_breadcrumb(
 
 /// Add detailed response breadcrumb with body (only for errors)
 fn add_response_breadcrumb(
+    request_id: u64,
     status: u16,
     duration_ms: u64,
     body: Option<String>,
@@ -127,13 +136,14 @@ fn add_response_breadcrumb(
         sentry::Level::Warning
     };
 
-    sentry::add_breadcrumb(sentry::Breadcrumb {
+    Hub::current().add_breadcrumb(sentry::Breadcrumb {
         ty: "http".into(),
         category: Some("http.response".into()),
-        message: Some(format!("{} ({}ms)", status, duration_ms)),
+        message: Some(format!("[req_id:{}] {} ({}ms)", request_id, status, duration_ms)),
         level,
         data: {
             let mut map = std::collections::BTreeMap::new();
+            map.insert("request_id".to_string(), request_id.into());
             map.insert("status_code".to_string(), status.into());
             map.insert("duration_ms".to_string(), duration_ms.into());
             if let Some(b) = body {
@@ -164,76 +174,102 @@ where
                 return ctx.call(&self.service, req).await;
             }
 
-            let start_time = Instant::now();
-            let method = req.method().to_string();
-            let path = req.path().to_string();
-            let query = req.query_string().to_string();
+            // Generate unique request ID
+            let request_id = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-            // Start a transaction for this request
-            let transaction_name = format!("{} {}", method, path);
-            let transaction = crate::sentry_utils::start_transaction(&transaction_name, "http.server");
+            // Create isolated Sentry Hub for this request
+            // Note: Hub isolation in async contexts is tricky. We use configure_scope
+            // to add request-specific data, but breadcrumbs will use Hub::current()
+            // which should be bound to this request's context
+            Hub::with_active(|hub| {
+                hub.configure_scope(|scope| {
+                    scope.set_tag("request_id", request_id.to_string());
+                });
+            });
 
-            // Note: In ntex, we cannot easily buffer request bodies without consuming the request
-            // For now, we'll only capture response bodies on errors
-            // This is a simplification compared to Axum where we can use extractors
+            {
+                let start_time = Instant::now();
+                let method = req.method().to_string();
+                let path = req.path().to_string();
+                let query = req.query_string().to_string();
 
-            // Call the next service
-            let result = ctx.call(&self.service, req).await;
+                // Start a transaction for this request
+                let transaction_name = format!("{} {}", method, path);
+                let transaction = crate::sentry_utils::start_transaction(&transaction_name, "http.server");
 
-            let duration = start_time.elapsed();
-            let duration_ms = duration.as_millis() as u64;
+                // Note: In ntex, we cannot easily buffer request bodies without consuming the request
+                // For now, we'll only capture response bodies on errors
+                // This is a simplification compared to Axum where we can use extractors
 
-            match &result {
-                Ok(response) => {
-                    let status = response.status().as_u16();
+                // Call the next service
+                let result = ctx.call(&self.service, req).await;
 
-                    // Capture response context
-                    crate::sentry_utils::capture_response_context(status, duration_ms);
+                let duration = start_time.elapsed();
+                let duration_ms = duration.as_millis() as u64;
 
-                    if status >= 400 {
-                        // Error response - add detailed breadcrumbs
-                        // Note: We don't have access to request/response bodies in ntex without buffering
-                        // This is a limitation of the ntex Service trait
-                        add_request_breadcrumb(&method, &path, &query, None);
-                        add_response_breadcrumb(status, duration_ms, None);
-                    } else {
-                        // Success - add lightweight breadcrumb
-                        add_lightweight_breadcrumb(&method, &path, status, duration_ms);
+                match &result {
+                    Ok(response) => {
+                        let status = response.status().as_u16();
+
+                        // Capture response context
+                        crate::sentry_utils::capture_response_context(status, duration_ms);
+
+                        if status >= 400 {
+                            // Error response - add detailed breadcrumbs and log
+                            log::error!(
+                                "[req_id:{}] HTTP Error: {} {} -> {} ({}ms)",
+                                request_id, method, path, status, duration_ms
+                            );
+
+                            // Note: We don't have access to request/response bodies in ntex without buffering
+                            // This is a limitation of the ntex Service trait
+                            add_request_breadcrumb(request_id, &method, &path, &query, None);
+                            add_response_breadcrumb(request_id, status, duration_ms, None);
+                        } else {
+                            // Success - add lightweight breadcrumb
+                            add_lightweight_breadcrumb(request_id, &method, &path, status, duration_ms);
+                        }
+
+                        // Set transaction status
+                        transaction.set_status(if status >= 500 {
+                            sentry::protocol::SpanStatus::InternalError
+                        } else if status >= 400 {
+                            sentry::protocol::SpanStatus::InvalidArgument
+                        } else {
+                            sentry::protocol::SpanStatus::Ok
+                        });
                     }
+                    Err(error) => {
+                        // Capture error details
+                        log::error!(
+                            "[req_id:{}] HTTP Error: {} {} -> middleware error ({}ms)",
+                            request_id, method, path, duration_ms
+                        );
 
-                    // Set transaction status
-                    transaction.set_status(if status >= 500 {
-                        sentry::protocol::SpanStatus::InternalError
-                    } else if status >= 400 {
-                        sentry::protocol::SpanStatus::InvalidArgument
-                    } else {
-                        sentry::protocol::SpanStatus::Ok
-                    });
-                }
-                Err(error) => {
-                    // Capture error details
-                    sentry::add_breadcrumb(sentry::Breadcrumb {
-                        ty: "error".into(),
-                        category: Some("http".into()),
-                        message: Some(format!("Request failed: {} {}", method, path)),
-                        level: sentry::Level::Error,
-                        data: {
-                            let mut map = std::collections::BTreeMap::new();
-                            map.insert("error".to_string(), format!("{:?}", error).into());
-                            map.insert("duration_ms".to_string(), duration_ms.into());
-                            map
-                        },
-                        ..Default::default()
-                    });
+                        Hub::current().add_breadcrumb(sentry::Breadcrumb {
+                            ty: "error".into(),
+                            category: Some("http".into()),
+                            message: Some(format!("[req_id:{}] Request failed: {} {}", request_id, method, path)),
+                            level: sentry::Level::Error,
+                            data: {
+                                let mut map = std::collections::BTreeMap::new();
+                                map.insert("request_id".to_string(), request_id.into());
+                                map.insert("error".to_string(), format!("{:?}", error).into());
+                                map.insert("duration_ms".to_string(), duration_ms.into());
+                                map
+                            },
+                            ..Default::default()
+                        });
 
-                    transaction.set_status(sentry::protocol::SpanStatus::InternalError);
+                        transaction.set_status(sentry::protocol::SpanStatus::InternalError);
+                    }
                 }
+
+                // Finish the transaction
+                transaction.finish();
+
+                result
             }
-
-            // Finish the transaction
-            transaction.finish();
-
-            result
         }
     }
 }
