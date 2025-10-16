@@ -126,7 +126,7 @@ impl<const A: bool> MetadataClient<A> {
             .base_url
             .join("metadata/")
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?
-            .join(&&username_or_principal)
+            .join(&username_or_principal)
             .map_err(|e| Error::Api(types::error::ApiError::Unknown(e.to_string())))?;
 
         let res = self.client.get(api_url).send().await?;
