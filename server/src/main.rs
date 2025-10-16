@@ -4,6 +4,7 @@ mod auth;
 mod config;
 mod consts;
 mod firebase;
+mod middleware;
 mod notifications;
 mod qstash;
 mod sentry_middleware;
@@ -52,7 +53,7 @@ async fn main() -> Result<()> {
             release: sentry::release_name!(),
             environment: Some(
                 std::env::var("ENVIRONMENT")
-                    .unwrap_or_else(|_| "development".to_string())
+                    .unwrap_or_else(|_| "production".to_string())
                     .into(),
             ),
             server_name: Some(
@@ -63,19 +64,14 @@ async fn main() -> Result<()> {
                     .into(),
             ),
             send_default_pii: true,
-            traces_sample_rate: 0.5, // Increased for better observability
+            traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.5),
             attach_stacktrace: true,
             auto_session_tracking: true,
             max_breadcrumbs: 100, // Store more breadcrumbs for better context
-            before_send: Some(std::sync::Arc::new(|mut event| {
-                // Sanitize sensitive data before sending
-                if let Some(request) = &mut event.request {
-                    // Remove authorization headers from the headers map
-                    request.headers.remove("authorization");
-                    request.headers.remove("cookie");
-                }
-                Some(event)
-            })),
+            before_send: Some(crate::middleware::create_before_send()),
             ..Default::default()
         },
     ));
