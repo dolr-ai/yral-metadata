@@ -36,8 +36,18 @@ async fn set_user_email(
     user_principal: Path<Principal>,
     req: Json<SetUserEmailMetadataReq>,
 ) -> Result<Json<ApiResult<UserMetadata>>> {
+    let principal = *user_principal;
+
+    // Add user context to Sentry
+    crate::sentry_utils::add_user_context(principal, None);
+    crate::sentry_utils::add_operation_breadcrumb(
+        "signup",
+        &format!("Setting email for user: {}", principal),
+        sentry::Level::Info,
+    );
+
     req.signature.clone().verify_identity(
-        user_principal.clone(),
+        principal,
         req.payload
             .clone()
             .try_into()
@@ -45,11 +55,15 @@ async fn set_user_email(
     )?;
     let result = set_user_email_impl(
         &state.redis,
-        user_principal.into_inner(),
+        principal,
         req.0.payload.email,
         req.0.payload.already_signed_in,
     )
-    .await?;
+    .await
+    .map_err(|e| {
+        crate::sentry_utils::capture_api_error(&e, "/email/{user_principal}", Some(&principal.to_text()));
+        e
+    })?;
     Ok(Json(Ok(result)))
 }
 
@@ -72,8 +86,22 @@ async fn set_signup_datetime(
     user_principal: Path<Principal>,
     req: Json<SetUserSignedInMetadataReq>,
 ) -> Result<Json<ApiResult<UserMetadata>>> {
-    let res =
-        set_signup_datetime_impl(&state.redis, *user_principal, req.0.already_signed_in).await?;
+    let principal = *user_principal;
+
+    // Add user context to Sentry
+    crate::sentry_utils::add_user_context(principal, None);
+    crate::sentry_utils::add_operation_breadcrumb(
+        "signup",
+        &format!("Setting signup datetime for user: {}", principal),
+        sentry::Level::Info,
+    );
+
+    let res = set_signup_datetime_impl(&state.redis, principal, req.0.already_signed_in)
+        .await
+        .map_err(|e| {
+            crate::sentry_utils::capture_api_error(&e, "/signup/{user_principal}", Some(&principal.to_text()));
+            e
+        })?;
     Ok(Json(Ok(res)))
 }
 

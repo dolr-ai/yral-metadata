@@ -1,6 +1,25 @@
 use ntex::service::{Middleware, Service, ServiceCtx};
+use ntex::util::Bytes;
 use ntex::web::{Error, ErrorRenderer, WebRequest, WebResponse};
+use std::env;
 use std::time::Instant;
+
+/// Maximum body size to capture (default 10KB)
+#[allow(dead_code)]
+fn get_body_limit() -> usize {
+    env::var("SENTRY_HTTP_BODY_LIMIT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10240)
+}
+
+/// Check if HTTP logging is enabled
+fn is_http_logging_enabled() -> bool {
+    env::var("SENTRY_ENABLE_HTTP_LOGGING")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(true)
+}
 
 /// Middleware for capturing HTTP request/response details in Sentry
 pub struct SentryMiddleware;
@@ -17,6 +36,115 @@ pub struct SentryMiddlewareService<S> {
     service: S,
 }
 
+/// Check if a body contains sensitive field names
+#[allow(dead_code)]
+fn contains_sensitive_field(text: &str) -> bool {
+    let text_lower = text.to_lowercase();
+    const SENSITIVE_FIELDS: &[&str] = &[
+        "signature",
+        "registration_token",
+        "notification_key",
+        "authorization",
+        "bearer",
+        "token",
+        "api_key",
+        "secret",
+        "password",
+    ];
+    SENSITIVE_FIELDS.iter().any(|field| text_lower.contains(field))
+}
+
+/// Parse bytes and scrub sensitive data (only called on errors)
+#[allow(dead_code)]
+fn parse_and_scrub_bytes(bytes: &Bytes) -> Option<String> {
+    let body_str = String::from_utf8_lossy(bytes);
+
+    // Quick check - if no sensitive fields, return as-is
+    if !contains_sensitive_field(&body_str) {
+        return Some(body_str.to_string());
+    }
+
+    // Scrub the body using the scrubbing module
+    Some(crate::middleware::sentry_scrub::scrub_body(&body_str))
+}
+
+/// Add lightweight breadcrumb for successful requests (no body parsing)
+fn add_lightweight_breadcrumb(method: &str, path: &str, status: u16, duration_ms: u64) {
+    sentry::add_breadcrumb(sentry::Breadcrumb {
+        ty: "http".into(),
+        category: Some("http.response".into()),
+        message: Some(format!("{} {} {} ({}ms)", method, path, status, duration_ms)),
+        level: sentry::Level::Info,
+        data: {
+            let mut map = std::collections::BTreeMap::new();
+            map.insert("method".to_string(), method.into());
+            map.insert("url".to_string(), path.into());
+            map.insert("status_code".to_string(), status.into());
+            map.insert("duration_ms".to_string(), duration_ms.into());
+            map
+        },
+        ..Default::default()
+    });
+}
+
+/// Add detailed request breadcrumb with body (only for errors)
+fn add_request_breadcrumb(
+    method: &str,
+    path: &str,
+    query: &str,
+    body: Option<String>,
+) {
+    sentry::add_breadcrumb(sentry::Breadcrumb {
+        ty: "http".into(),
+        category: Some("http.request".into()),
+        message: Some(format!("{} {}", method, path)),
+        level: sentry::Level::Info,
+        data: {
+            let mut map = std::collections::BTreeMap::new();
+            map.insert("method".to_string(), method.into());
+            map.insert("url".to_string(), path.into());
+            if !query.is_empty() {
+                map.insert("query".to_string(), query.into());
+            }
+            if let Some(b) = body {
+                map.insert("body".to_string(), b.into());
+            }
+            map
+        },
+        ..Default::default()
+    });
+}
+
+/// Add detailed response breadcrumb with body (only for errors)
+fn add_response_breadcrumb(
+    status: u16,
+    duration_ms: u64,
+    body: Option<String>,
+) {
+    let level = if status >= 500 {
+        sentry::Level::Error
+    } else {
+        sentry::Level::Warning
+    };
+
+    sentry::add_breadcrumb(sentry::Breadcrumb {
+        ty: "http".into(),
+        category: Some("http.response".into()),
+        message: Some(format!("{} ({}ms)", status, duration_ms)),
+        level,
+        data: {
+            let mut map = std::collections::BTreeMap::new();
+            map.insert("status_code".to_string(), status.into());
+            map.insert("duration_ms".to_string(), duration_ms.into());
+            if let Some(b) = body {
+                map.insert("body".to_string(), b.into());
+            }
+            map
+        },
+        ..Default::default()
+    });
+}
+
 impl<S, Err> Service<WebRequest<Err>> for SentryMiddlewareService<S>
 where
     S: Service<WebRequest<Err>, Response = WebResponse, Error = Error>,
@@ -31,101 +159,144 @@ where
         ctx: ServiceCtx<'_, Self>,
     ) -> impl std::future::Future<Output = Result<Self::Response, Self::Error>> {
         async move {
+            if !is_http_logging_enabled() {
+                // Logging disabled - just pass through
+                return ctx.call(&self.service, req).await;
+            }
+
             let start_time = Instant::now();
             let method = req.method().to_string();
             let path = req.path().to_string();
             let query = req.query_string().to_string();
 
-        // Add breadcrumb for incoming request
-        sentry::add_breadcrumb(sentry::Breadcrumb {
-            ty: "http".into(),
-            category: Some("request".into()),
-            message: Some(format!("{} {}", method, path)),
-            level: sentry::Level::Info,
-            data: {
-                let mut map = std::collections::BTreeMap::new();
-                map.insert("method".to_string(), method.clone().into());
-                map.insert("path".to_string(), path.clone().into());
-                if !query.is_empty() {
-                    map.insert("query".to_string(), query.into());
-                }
-                map
-            },
-            ..Default::default()
-        });
+            // Start a transaction for this request
+            let transaction_name = format!("{} {}", method, path);
+            let transaction = crate::sentry_utils::start_transaction(&transaction_name, "http.server");
 
-        // Start a transaction for this request
-        let transaction_name = format!("{} {}", method, path);
-        let transaction = crate::sentry_utils::start_transaction(&transaction_name, "http.server");
+            // Note: In ntex, we cannot easily buffer request bodies without consuming the request
+            // For now, we'll only capture response bodies on errors
+            // This is a simplification compared to Axum where we can use extractors
 
-        // Call the next service
-        let result = ctx.call(&self.service, req).await;
+            // Call the next service
+            let result = ctx.call(&self.service, req).await;
 
-        let duration = start_time.elapsed();
+            let duration = start_time.elapsed();
+            let duration_ms = duration.as_millis() as u64;
 
-        match &result {
-            Ok(response) => {
-                let status = response.status().as_u16();
+            match &result {
+                Ok(response) => {
+                    let status = response.status().as_u16();
 
-                // Capture response context
-                crate::sentry_utils::capture_response_context(status, duration.as_millis() as u64);
+                    // Capture response context
+                    crate::sentry_utils::capture_response_context(status, duration_ms);
 
-                // Log errors (4xx, 5xx) with appropriate level
-                if status >= 400 {
-                    let level = if status >= 500 {
-                        sentry::Level::Error
+                    if status >= 400 {
+                        // Error response - add detailed breadcrumbs
+                        // Note: We don't have access to request/response bodies in ntex without buffering
+                        // This is a limitation of the ntex Service trait
+                        add_request_breadcrumb(&method, &path, &query, None);
+                        add_response_breadcrumb(status, duration_ms, None);
                     } else {
-                        sentry::Level::Warning
-                    };
+                        // Success - add lightweight breadcrumb
+                        add_lightweight_breadcrumb(&method, &path, status, duration_ms);
+                    }
 
+                    // Set transaction status
+                    transaction.set_status(if status >= 500 {
+                        sentry::protocol::SpanStatus::InternalError
+                    } else if status >= 400 {
+                        sentry::protocol::SpanStatus::InvalidArgument
+                    } else {
+                        sentry::protocol::SpanStatus::Ok
+                    });
+                }
+                Err(error) => {
+                    // Capture error details
                     sentry::add_breadcrumb(sentry::Breadcrumb {
-                        ty: "http".into(),
-                        category: Some("error".into()),
-                        message: Some(format!("{} {} returned {}", method, path, status)),
-                        level,
+                        ty: "error".into(),
+                        category: Some("http".into()),
+                        message: Some(format!("Request failed: {} {}", method, path)),
+                        level: sentry::Level::Error,
                         data: {
                             let mut map = std::collections::BTreeMap::new();
-                            map.insert("status".to_string(), status.into());
-                            map.insert("duration_ms".to_string(), (duration.as_millis() as u64).into());
+                            map.insert("error".to_string(), format!("{:?}", error).into());
+                            map.insert("duration_ms".to_string(), duration_ms.into());
                             map
                         },
                         ..Default::default()
                     });
+
+                    transaction.set_status(sentry::protocol::SpanStatus::InternalError);
                 }
-
-                // Set transaction status
-                transaction.set_status(if status >= 500 {
-                    sentry::protocol::SpanStatus::InternalError
-                } else if status >= 400 {
-                    sentry::protocol::SpanStatus::InvalidArgument
-                } else {
-                    sentry::protocol::SpanStatus::Ok
-                });
             }
-            Err(error) => {
-                // Capture error details
-                sentry::add_breadcrumb(sentry::Breadcrumb {
-                    ty: "error".into(),
-                    category: Some("http".into()),
-                    message: Some(format!("Request failed: {} {}", method, path)),
-                    level: sentry::Level::Error,
-                    data: {
-                        let mut map = std::collections::BTreeMap::new();
-                        map.insert("error".to_string(), format!("{:?}", error).into());
-                        map.insert("duration_ms".to_string(), (duration.as_millis() as u64).into());
-                        map
-                    },
-                    ..Default::default()
-                });
 
-                transaction.set_status(sentry::protocol::SpanStatus::InternalError);
-            }
+            // Finish the transaction
+            transaction.finish();
+
+            result
         }
+    }
+}
 
-        // Finish the transaction
-        transaction.finish();
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        result
-        }
+    #[test]
+    fn test_contains_sensitive_field() {
+        assert!(contains_sensitive_field("signature"));
+        assert!(contains_sensitive_field("{\"signature\":\"abc\"}"));
+        assert!(contains_sensitive_field("Authorization: Bearer xyz"));
+        assert!(contains_sensitive_field("registration_token"));
+        assert!(!contains_sensitive_field("user_name"));
+        assert!(!contains_sensitive_field("user_principal"));
+    }
+
+    #[test]
+    fn test_scrub_json_body() {
+        let body = r#"{"user_name":"alice","signature":"secret123"}"#;
+        let bytes = Bytes::from(body);
+        let scrubbed = parse_and_scrub_bytes(&bytes);
+        assert!(scrubbed.is_some());
+        let scrubbed_str = scrubbed.unwrap();
+        assert!(scrubbed_str.contains("alice"));
+        assert!(scrubbed_str.contains("[REDACTED]"));
+        assert!(!scrubbed_str.contains("secret123"));
+    }
+
+    #[test]
+    fn test_scrub_nested_json() {
+        let body = r#"{"user":{"name":"alice","token":"secret"}}"#;
+        let bytes = Bytes::from(body);
+        let scrubbed = parse_and_scrub_bytes(&bytes);
+        assert!(scrubbed.is_some());
+        let scrubbed_str = scrubbed.unwrap();
+        assert!(scrubbed_str.contains("alice"));
+        assert!(scrubbed_str.contains("[REDACTED]"));
+        assert!(!scrubbed_str.contains("secret"));
+    }
+
+    #[test]
+    fn test_scrub_array_json() {
+        let body = r#"{"items":[{"name":"alice","api_key":"key1"},{"name":"bob","api_key":"key2"}]}"#;
+        let bytes = Bytes::from(body);
+        let scrubbed = parse_and_scrub_bytes(&bytes);
+        assert!(scrubbed.is_some());
+        let scrubbed_str = scrubbed.unwrap();
+        assert!(scrubbed_str.contains("alice"));
+        assert!(scrubbed_str.contains("bob"));
+        assert!(scrubbed_str.contains("[REDACTED]"));
+        assert!(!scrubbed_str.contains("key1"));
+        assert!(!scrubbed_str.contains("key2"));
+    }
+
+    #[test]
+    fn test_non_sensitive_body() {
+        let body = r#"{"user_name":"alice","user_principal":"abc-def"}"#;
+        let bytes = Bytes::from(body);
+        let scrubbed = parse_and_scrub_bytes(&bytes);
+        assert!(scrubbed.is_some());
+        let scrubbed_str = scrubbed.unwrap();
+        assert_eq!(scrubbed_str, body);
     }
 }
