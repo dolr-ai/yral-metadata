@@ -22,6 +22,7 @@ primary_region = 'sin'
 
 
 [[vm]]
-  memory = '16gb'
-  cpu_kind = 'performance'
-  cpus = 8
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
+
