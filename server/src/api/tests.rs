@@ -184,7 +184,7 @@ async fn test_delete_metadata_bulk() {
     let bulk_users = BulkUsers {
         users: users.clone(),
     };
-    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users, &unique_key).await;
+    let result = delete_metadata_bulk_impl(&redis_pool, &bulk_users, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
@@ -217,7 +217,7 @@ async fn test_delete_metadata_bulk_empty_list() {
     let bulk_users = BulkUsers { users: vec![] };
 
     // Execute
-    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users, &unique_key).await;
+    let result = delete_metadata_bulk_impl(&redis_pool, &bulk_users, &unique_key).await;
 
     // Verify
     assert!(result.is_ok());
@@ -265,7 +265,7 @@ async fn test_delete_metadata_bulk_large_batch() {
     let bulk_users = BulkUsers {
         users: users.clone(),
     };
-    let result = delete_metadata_bulk_impl(&redis_pool, bulk_users, &unique_key)
+    let result = delete_metadata_bulk_impl(&redis_pool, &bulk_users, &unique_key)
         .await
         .expect("delete_metadata_bulk_impl shoud not fail");
 

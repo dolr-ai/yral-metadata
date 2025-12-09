@@ -18,10 +18,10 @@ const SENSITIVE_FIELDS: &[&str] = &[
     "password",
     "private_key",
     // yral-metadata specific sensitive fields
-    "signature",              // User identity signatures from SetUserMetadataReq
-    "registration_token",     // FCM device registration tokens
-    "notification_key",       // Firebase notification group keys
-    "key",                    // NotificationKey.key field
+    "signature",          // User identity signatures from SetUserMetadataReq
+    "registration_token", // FCM device registration tokens
+    "notification_key",   // Firebase notification group keys
+    "key",                // NotificationKey.key field
     // Environment secrets
     "yral_metadata_user_notification_api_key",
 ];
@@ -29,9 +29,9 @@ const SENSITIVE_FIELDS: &[&str] = &[
 /// Check if a string contains any sensitive field names
 fn contains_sensitive_field(text: &str) -> bool {
     let text_lower = text.to_lowercase();
-    SENSITIVE_FIELDS.iter().any(|field| {
-        text_lower.contains(field)
-    })
+    SENSITIVE_FIELDS
+        .iter()
+        .any(|field| text_lower.contains(field))
 }
 
 /// Check if a key matches a sensitive field (exact match or specific patterns)
@@ -39,9 +39,9 @@ fn is_sensitive_key(key: &str) -> bool {
     let key_lower = key.to_lowercase();
     SENSITIVE_FIELDS.iter().any(|field| {
         // Exact match or with underscores (but not plural forms)
-        key_lower == *field ||
-        key_lower.starts_with(&format!("{}_", field)) ||
-        key_lower.ends_with(&format!("_{}", field))
+        key_lower == *field
+            || key_lower.starts_with(&format!("{}_", field))
+            || key_lower.ends_with(&format!("_{}", field))
     })
 }
 
@@ -135,11 +135,16 @@ fn scrub_breadcrumbs(breadcrumbs: &mut [Breadcrumb]) {
 
         // Scrub data fields
         for (key, value) in breadcrumb.data.iter_mut() {
-            if SENSITIVE_FIELDS.iter().any(|f| key.to_lowercase().contains(f)) {
+            if SENSITIVE_FIELDS
+                .iter()
+                .any(|f| key.to_lowercase().contains(f))
+            {
                 *value = serde_json::Value::String("[REDACTED]".to_string());
             } else if let serde_json::Value::String(s) = value {
                 if contains_sensitive_field(s) {
-                    *value = serde_json::Value::String("[REDACTED - contains sensitive data]".to_string());
+                    *value = serde_json::Value::String(
+                        "[REDACTED - contains sensitive data]".to_string(),
+                    );
                 }
             }
         }
@@ -151,11 +156,16 @@ fn scrub_contexts(contexts: &mut BTreeMap<String, Context>) {
     for (_key, context) in contexts.iter_mut() {
         if let Context::Other(map) = context {
             for (field_key, value) in map.iter_mut() {
-                if SENSITIVE_FIELDS.iter().any(|f| field_key.to_lowercase().contains(f)) {
+                if SENSITIVE_FIELDS
+                    .iter()
+                    .any(|f| field_key.to_lowercase().contains(f))
+                {
                     *value = serde_json::Value::String("[REDACTED]".to_string());
                 } else if let serde_json::Value::String(s) = value {
                     if contains_sensitive_field(s) {
-                        *value = serde_json::Value::String("[REDACTED - contains sensitive data]".to_string());
+                        *value = serde_json::Value::String(
+                            "[REDACTED - contains sensitive data]".to_string(),
+                        );
                     }
                 }
             }
@@ -180,7 +190,10 @@ pub fn scrub_sensitive_data(mut event: Event<'static>) -> Option<Event<'static>>
 
     // Scrub extra data
     for (key, value) in event.extra.iter_mut() {
-        if SENSITIVE_FIELDS.iter().any(|f| key.to_lowercase().contains(f)) {
+        if SENSITIVE_FIELDS
+            .iter()
+            .any(|f| key.to_lowercase().contains(f))
+        {
             *value = serde_json::Value::String("[REDACTED]".to_string());
         }
     }

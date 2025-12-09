@@ -1,28 +1,30 @@
-use candid::Principal;
-use ntex::web::{
-    self,
-    types::{Json, Path, State},
-    HttpRequest,
+use axum::{
+    extract::{Path, State},
+    http::HeaderMap,
+    Json,
 };
-use reqwest::header::AUTHORIZATION;
+use candid::Principal;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use types::ApiResult;
 use utoipa::ToSchema;
 use yral_canisters_client::{
-    ic::USER_INFO_SERVICE_ID, individual_user_template::{
+    ic::USER_INFO_SERVICE_ID,
+    individual_user_template::{
         self, IndividualUserTemplate, SessionType, UserProfileDetailsForFrontendV2,
-    }, user_index::{ UserIndex}, user_info_service::{UserInfoService, Result_, SessionType as UserServiceSessionType}
+    },
+    user_index::UserIndex,
+    user_info_service::{Result_, SessionType as UserServiceSessionType, UserInfoService},
 };
 
 use crate::{
     services::error_wrappers::{ErrorWrapper, NullOk},
+    state::AppState,
     Error, Result,
 };
 
-use crate::state::AppState;
-
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
-pub struct  UpdateUserSessionRequest {
+pub struct UpdateUserSessionRequest {
     user_principal: String,
     user_canister: String,
 }
@@ -38,7 +40,6 @@ pub struct YralAuthClaim {
     ext_is_anonymous: bool,
 }
 
-
 #[utoipa::path(
     post,
     path = "/v2/update_session_as_registered",
@@ -53,19 +54,23 @@ pub struct YralAuthClaim {
         ("bearer_auth" = [])
     )
 )]
-#[web::post("/v2/update_session_as_registered")]
-pub async fn update_session_as_registered_v2(app_state: State<AppState>, req_payload: Json<UpdateUserSessionRequest>, http_request: HttpRequest,) -> Result<Json<ApiResult<()>>> {
-
+pub async fn update_session_as_registered_v2(
+    State(app_state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req_payload): Json<UpdateUserSessionRequest>,
+) -> Result<Json<ApiResult<()>>> {
     crate::sentry_utils::add_operation_breadcrumb(
         "session",
         &format!("Update session v2 for user: {}", req_payload.user_principal),
         sentry::Level::Info,
     );
 
-    let headers = http_request.headers();
-
-    let Some(auth_header) = headers.get(AUTHORIZATION) else {
-        crate::sentry_utils::add_operation_breadcrumb("session", "Auth token missing", sentry::Level::Warning);
+    let Some(auth_header) = headers.get("Authorization") else {
+        crate::sentry_utils::add_operation_breadcrumb(
+            "session",
+            "Auth token missing",
+            sentry::Level::Warning,
+        );
         return Err(Error::AuthTokenMissing);
     };
 
@@ -81,45 +86,70 @@ pub async fn update_session_as_registered_v2(app_state: State<AppState>, req_pay
     let user_canister = Principal::from_text(req_payload.user_canister.clone())?;
     let user_principal = Principal::from_text(req_payload.user_principal.clone())?;
 
-
     match user_canister {
         USER_INFO_SERVICE_ID => {
-            crate::sentry_utils::add_canister_call_breadcrumb(&user_canister.to_text(), "update_session_type", true);
+            crate::sentry_utils::add_canister_call_breadcrumb(
+                &user_canister.to_text(),
+                "update_session_type",
+                true,
+            );
             let user_info_service = UserInfoService(user_canister, ic_agent);
 
-            let result = user_info_service.update_session_type(user_principal, UserServiceSessionType::RegisteredSession).await
+            let result = user_info_service
+                .update_session_type(user_principal, UserServiceSessionType::RegisteredSession)
+                .await
                 .map_err(|e| {
-                    crate::sentry_utils::add_canister_call_breadcrumb(&user_canister.to_text(), "update_session_type", false);
+                    crate::sentry_utils::add_canister_call_breadcrumb(
+                        &user_canister.to_text(),
+                        "update_session_type",
+                        false,
+                    );
                     e
                 })?;
 
             if let Result_::Err(e) = result {
-                crate::sentry_utils::add_operation_breadcrumb("session", &format!("Update session failed: {}", e), sentry::Level::Error);
-                return Err(Error::UpdateSession(e))
+                crate::sentry_utils::add_operation_breadcrumb(
+                    "session",
+                    &format!("Update session failed: {}", e),
+                    sentry::Level::Error,
+                );
+                return Err(Error::UpdateSession(e));
             }
 
             Ok(Json(Ok(())))
-        },
+        }
         _ => {
-            crate::sentry_utils::add_canister_call_breadcrumb(&user_canister.to_text(), "update_session_type", true);
+            crate::sentry_utils::add_canister_call_breadcrumb(
+                &user_canister.to_text(),
+                "update_session_type",
+                true,
+            );
             let individual_user_template_service = IndividualUserTemplate(user_canister, ic_agent);
-            let result = individual_user_template_service.update_session_type(SessionType::RegisteredSession).await
+            let result = individual_user_template_service
+                .update_session_type(SessionType::RegisteredSession)
+                .await
                 .map_err(|e| {
-                    crate::sentry_utils::add_canister_call_breadcrumb(&user_canister.to_text(), "update_session_type", false);
+                    crate::sentry_utils::add_canister_call_breadcrumb(
+                        &user_canister.to_text(),
+                        "update_session_type",
+                        false,
+                    );
                     e
                 })?;
 
             if let yral_canisters_client::individual_user_template::Result15::Err(e) = result {
-                    crate::sentry_utils::add_operation_breadcrumb("session", &format!("Update session failed: {}", e), sentry::Level::Error);
-                    return Err(Error::UpdateSession(e));
+                crate::sentry_utils::add_operation_breadcrumb(
+                    "session",
+                    &format!("Update session failed: {}", e),
+                    sentry::Level::Error,
+                );
+                return Err(Error::UpdateSession(e));
             }
 
             Ok(Json(Ok(())))
         }
     }
-
 }
-
 
 #[utoipa::path(
     post,
@@ -137,15 +167,12 @@ pub async fn update_session_as_registered_v2(app_state: State<AppState>, req_pay
         ("bearer_auth" = [])
     )
 )]
-#[web::post("/update_session_as_registered/{canister_id}")]
 pub async fn update_session_as_registered(
-    app_state: State<AppState>,
-    canister_id: Path<String>,
-    http_request: HttpRequest,
+    State(app_state): State<Arc<AppState>>,
+    Path(canister_id): Path<String>,
+    headers: HeaderMap,
 ) -> Result<Json<ApiResult<()>>> {
-    let headers = http_request.headers();
-
-    let Some(auth_header) = headers.get(AUTHORIZATION) else {
+    let Some(auth_header) = headers.get("Authorization") else {
         return Err(Error::AuthTokenMissing);
     };
 
@@ -161,7 +188,7 @@ pub async fn update_session_as_registered(
 
     let ic_agent = &app_state.backend_admin_ic_agent;
 
-    let canister_id = Principal::from_text(canister_id.as_ref())?;
+    let canister_id = Principal::from_text(&canister_id)?;
 
     let referee_individual_user_template = IndividualUserTemplate(canister_id, ic_agent);
 

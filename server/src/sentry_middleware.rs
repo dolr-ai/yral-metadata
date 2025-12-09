@@ -1,10 +1,9 @@
-use ntex::service::{Middleware, Service, ServiceCtx};
-use ntex::util::Bytes;
-use ntex::web::{Error, ErrorRenderer, WebRequest, WebResponse};
+use axum::{body::Bytes, extract::Request, response::Response};
 use sentry::Hub;
 use std::env;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
+use tower::{Layer, Service};
 
 /// Global request counter for generating unique request IDs
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -27,16 +26,18 @@ fn is_http_logging_enabled() -> bool {
 }
 
 /// Middleware for capturing HTTP request/response details in Sentry
+#[derive(Clone)]
 pub struct SentryMiddleware;
 
-impl<S> Middleware<S> for SentryMiddleware {
+impl<S> Layer<S> for SentryMiddleware {
     type Service = SentryMiddlewareService<S>;
 
-    fn create(&self, service: S) -> Self::Service {
+    fn layer(&self, service: S) -> Self::Service {
         SentryMiddlewareService { service }
     }
 }
 
+#[derive(Clone)]
 pub struct SentryMiddlewareService<S> {
     service: S,
 }
@@ -56,7 +57,9 @@ fn contains_sensitive_field(text: &str) -> bool {
         "secret",
         "password",
     ];
-    SENSITIVE_FIELDS.iter().any(|field| text_lower.contains(field))
+    SENSITIVE_FIELDS
+        .iter()
+        .any(|field| text_lower.contains(field))
 }
 
 /// Parse bytes and scrub sensitive data (only called on errors)
@@ -74,11 +77,20 @@ fn parse_and_scrub_bytes(bytes: &Bytes) -> Option<String> {
 }
 
 /// Add lightweight breadcrumb for successful requests (no body parsing)
-fn add_lightweight_breadcrumb(request_id: u64, method: &str, path: &str, status: u16, duration_ms: u64) {
+fn add_lightweight_breadcrumb(
+    request_id: u64,
+    method: &str,
+    path: &str,
+    status: u16,
+    duration_ms: u64,
+) {
     Hub::current().add_breadcrumb(sentry::Breadcrumb {
         ty: "http".into(),
         category: Some("http.response".into()),
-        message: Some(format!("[req_id:{}] {} {} {} ({}ms)", request_id, method, path, status, duration_ms)),
+        message: Some(format!(
+            "[req_id:{}] {} {} {} ({}ms)",
+            request_id, method, path, status, duration_ms
+        )),
         level: sentry::Level::Info,
         data: {
             let mut map = std::collections::BTreeMap::new();
@@ -124,12 +136,7 @@ fn add_request_breadcrumb(
 }
 
 /// Add detailed response breadcrumb with body (only for errors)
-fn add_response_breadcrumb(
-    request_id: u64,
-    status: u16,
-    duration_ms: u64,
-    body: Option<String>,
-) {
+fn add_response_breadcrumb(request_id: u64, status: u16, duration_ms: u64, body: Option<String>) {
     let level = if status >= 500 {
         sentry::Level::Error
     } else {
@@ -139,7 +146,10 @@ fn add_response_breadcrumb(
     Hub::current().add_breadcrumb(sentry::Breadcrumb {
         ty: "http".into(),
         category: Some("http.response".into()),
-        message: Some(format!("[req_id:{}] {} ({}ms)", request_id, status, duration_ms)),
+        message: Some(format!(
+            "[req_id:{}] {} ({}ms)",
+            request_id, status, duration_ms
+        )),
         level,
         data: {
             let mut map = std::collections::BTreeMap::new();
@@ -155,25 +165,33 @@ fn add_response_breadcrumb(
     });
 }
 
-impl<S, Err> Service<WebRequest<Err>> for SentryMiddlewareService<S>
+impl<S> Service<Request> for SentryMiddlewareService<S>
 where
-    S: Service<WebRequest<Err>, Response = WebResponse, Error = Error>,
-    Err: ErrorRenderer,
+    S: Service<Request, Response = Response> + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    S::Error: std::fmt::Debug + Copy,
 {
-    type Response = WebResponse;
-    type Error = Error;
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
 
-    fn call(
-        &self,
-        req: WebRequest<Err>,
-        ctx: ServiceCtx<'_, Self>,
-    ) -> impl std::future::Future<Output = Result<Self::Response, Self::Error>> {
-        async move {
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.service.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Request) -> Self::Future {
+        let mut inner = self.service.clone();
+
+        Box::pin(async move {
             if !is_http_logging_enabled() {
                 // Logging disabled - just pass through
-                return ctx.call(&self.service, req).await;
+                return inner.call(req).await;
             }
-
             // Generate unique request ID
             let request_id = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
 
@@ -187,90 +205,93 @@ where
                 });
             });
 
-            {
-                let start_time = Instant::now();
-                let method = req.method().to_string();
-                let path = req.path().to_string();
-                let query = req.query_string().to_string();
+            let start_time = Instant::now();
+            let method = req.method().to_string();
+            let path = req.uri().path().to_string();
+            let query = req.uri().query().map(|q| q.to_string()).unwrap_or_default();
 
-                // Start a transaction for this request
-                let transaction_name = format!("{} {}", method, path);
-                let transaction = crate::sentry_utils::start_transaction(&transaction_name, "http.server");
+            // Start a transaction for this request
+            let transaction_name = format!("{} {}", method, path);
+            let transaction =
+                crate::sentry_utils::start_transaction(&transaction_name, "http.server");
 
-                // Note: In ntex, we cannot easily buffer request bodies without consuming the request
-                // For now, we'll only capture response bodies on errors
-                // This is a simplification compared to Axum where we can use extractors
+            let result = inner.call(req).await;
 
-                // Call the next service
-                let result = ctx.call(&self.service, req).await;
+            let duration = start_time.elapsed();
+            let duration_ms = duration.as_millis() as u64;
+            match &result {
+                Ok(response) => {
+                    let status = response.status().as_u16();
 
-                let duration = start_time.elapsed();
-                let duration_ms = duration.as_millis() as u64;
+                    // Capture response context
+                    crate::sentry_utils::capture_response_context(status, duration_ms);
 
-                match &result {
-                    Ok(response) => {
-                        let status = response.status().as_u16();
-
-                        // Capture response context
-                        crate::sentry_utils::capture_response_context(status, duration_ms);
-
-                        if status >= 400 {
-                            // Error response - add detailed breadcrumbs and log
-                            log::error!(
-                                "[req_id:{}] HTTP Error: {} {} -> {} ({}ms)",
-                                request_id, method, path, status, duration_ms
-                            );
-
-                            // Note: We don't have access to request/response bodies in ntex without buffering
-                            // This is a limitation of the ntex Service trait
-                            add_request_breadcrumb(request_id, &method, &path, &query, None);
-                            add_response_breadcrumb(request_id, status, duration_ms, None);
-                        } else {
-                            // Success - add lightweight breadcrumb
-                            add_lightweight_breadcrumb(request_id, &method, &path, status, duration_ms);
-                        }
-
-                        // Set transaction status
-                        transaction.set_status(if status >= 500 {
-                            sentry::protocol::SpanStatus::InternalError
-                        } else if status >= 400 {
-                            sentry::protocol::SpanStatus::InvalidArgument
-                        } else {
-                            sentry::protocol::SpanStatus::Ok
-                        });
-                    }
-                    Err(error) => {
-                        // Capture error details
+                    if status >= 400 {
+                        // Error response - add detailed breadcrumbs and log
                         log::error!(
-                            "[req_id:{}] HTTP Error: {} {} -> middleware error ({}ms)",
-                            request_id, method, path, duration_ms
+                            "[req_id:{}] HTTP Error: {} {} -> {} ({}ms)",
+                            request_id,
+                            method,
+                            path,
+                            status,
+                            duration_ms
                         );
 
-                        Hub::current().add_breadcrumb(sentry::Breadcrumb {
-                            ty: "error".into(),
-                            category: Some("http".into()),
-                            message: Some(format!("[req_id:{}] Request failed: {} {}", request_id, method, path)),
-                            level: sentry::Level::Error,
-                            data: {
-                                let mut map = std::collections::BTreeMap::new();
-                                map.insert("request_id".to_string(), request_id.into());
-                                map.insert("error".to_string(), format!("{:?}", error).into());
-                                map.insert("duration_ms".to_string(), duration_ms.into());
-                                map
-                            },
-                            ..Default::default()
-                        });
-
-                        transaction.set_status(sentry::protocol::SpanStatus::InternalError);
+                        // Note: We don't have access to request/response bodies in ntex without buffering
+                        // This is a limitation of the ntex Service trait
+                        add_request_breadcrumb(request_id, &method, &path, &query, None);
+                        add_response_breadcrumb(request_id, status, duration_ms, None);
+                    } else {
+                        // Success - add lightweight breadcrumb
+                        add_lightweight_breadcrumb(request_id, &method, &path, status, duration_ms);
                     }
+
+                    // Set transaction status
+                    transaction.set_status(if status >= 500 {
+                        sentry::protocol::SpanStatus::InternalError
+                    } else if status >= 400 {
+                        sentry::protocol::SpanStatus::InvalidArgument
+                    } else {
+                        sentry::protocol::SpanStatus::Ok
+                    });
                 }
+                Err(error) => {
+                    // Capture error details
+                    log::error!(
+                        "[req_id:{}] HTTP Error: {} {} -> middleware error ({}ms)",
+                        request_id,
+                        method,
+                        path,
+                        duration_ms
+                    );
 
-                // Finish the transaction
-                transaction.finish();
+                    Hub::current().add_breadcrumb(sentry::Breadcrumb {
+                        ty: "error".into(),
+                        category: Some("http".into()),
+                        message: Some(format!(
+                            "[req_id:{}] Request failed: {} {}",
+                            request_id, method, path
+                        )),
+                        level: sentry::Level::Error,
+                        data: {
+                            let mut map = std::collections::BTreeMap::new();
+                            map.insert("request_id".to_string(), request_id.into());
+                            map.insert("error".to_string(), format!("{:?}", error).into());
+                            map.insert("duration_ms".to_string(), duration_ms.into());
+                            map
+                        },
+                        ..Default::default()
+                    });
 
-                result
+                    transaction.set_status(sentry::protocol::SpanStatus::InternalError);
+                }
             }
-        }
+
+            // Finish the transaction
+            transaction.finish();
+
+            result
+        })
     }
 }
 
@@ -314,7 +335,8 @@ mod tests {
 
     #[test]
     fn test_scrub_array_json() {
-        let body = r#"{"items":[{"name":"alice","api_key":"key1"},{"name":"bob","api_key":"key2"}]}"#;
+        let body =
+            r#"{"items":[{"name":"alice","api_key":"key1"},{"name":"bob","api_key":"key2"}]}"#;
         let bytes = Bytes::from(body);
         let scrubbed = parse_and_scrub_bytes(&bytes);
         assert!(scrubbed.is_some());

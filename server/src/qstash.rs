@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use axum::http::HeaderMap;
 use base64::{engine::general_purpose::URL_SAFE, Engine as _};
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
-use ntex::web;
+use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -37,9 +37,8 @@ impl QStashState {
         }
     }
 
-    pub async fn verify_qstash_message(&self, req: &web::HttpRequest, body: &[u8]) -> Result<()> {
-        let signature = req
-            .headers()
+    pub async fn verify_qstash_message(&self, headers: &HeaderMap, body: &[u8]) -> Result<()> {
+        let signature = headers
             .get("Upstash-Signature")
             .ok_or(Error::AuthTokenMissing)?
             .to_str()
@@ -53,7 +52,7 @@ impl QStashState {
             .decode(jwt.claims.body)
             .map_err(|_| Error::AuthTokenInvalid)?;
 
-        let derived_hash = Sha256::digest(&body);
+        let derived_hash = Sha256::digest(body);
 
         if derived_hash.as_slice() != sig_body_hash.as_slice() {
             return Err(Error::AuthTokenInvalid);

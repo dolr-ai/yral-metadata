@@ -1,11 +1,14 @@
 use bb8::PooledConnection;
 use bb8_redis::RedisConnectionManager;
 use candid::Principal;
-use elsa::FrozenVec;
+use elsa::sync::FrozenVec;
 use futures::{stream, StreamExt, TryStreamExt};
 use redis::AsyncCommands;
 use regex::Regex;
-use std::{collections::HashMap, rc::Rc, sync::LazyLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock},
+};
 use types::{
     BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
     CanisterToPrincipalRes, GetUserMetadataRes, GetUserMetadataV2Res, SetUserMetadataReq,
@@ -179,13 +182,13 @@ pub async fn get_user_metadata_impl(
 /// Core implementation for bulk delete of user metadata
 pub async fn delete_metadata_bulk_impl(
     redis_pool: &RedisPool,
-    users: BulkUsers,
+    users: &BulkUsers,
     can2prin_key: &str,
 ) -> Result<()> {
     let keys = users.users.iter().map(|k| k.to_text()).collect::<Vec<_>>();
 
-    let canister_ids: Rc<FrozenVec<String>> = Rc::new(FrozenVec::new());
-    let usernames: Rc<FrozenVec<String>> = Rc::new(FrozenVec::new());
+    let canister_ids: Arc<FrozenVec<String>> = Arc::new(FrozenVec::new());
+    let usernames: Arc<FrozenVec<String>> = Arc::new(FrozenVec::new());
 
     let conn = redis_pool.get().await?;
     let mut inner_stream = stream::iter(users.users.iter().copied())
@@ -214,11 +217,11 @@ pub async fn delete_metadata_bulk_impl(
     while let Some(_) = inner_stream.try_next().await? {}
     std::mem::drop(inner_stream);
 
-    let canister_ids = Rc::try_unwrap(canister_ids)
+    let canister_ids = Arc::try_unwrap(canister_ids)
         .map_err(|_| ())
         .expect("[BUG] CONCURRENCY: All refs to canister_ids should be dropped before this point")
         .into_vec();
-    let usernames = Rc::try_unwrap(usernames)
+    let usernames = Arc::try_unwrap(usernames)
         .map_err(|_| ())
         .expect("[BUG] CONCURRENCY: All refs to usernames should be dropped before this point")
         .into_vec();

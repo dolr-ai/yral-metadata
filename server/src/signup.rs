@@ -1,19 +1,17 @@
 use crate::{
     api::METADATA_FIELD,
     notifications::traits::RedisConnection,
-    state::RedisPool,
+    services::error_wrappers::{ErrorWrapper, OkWrapper},
+    state::{AppState, RedisPool},
     utils::error::{Error, Result},
 };
-use crate::{
-    services::error_wrappers::{ErrorWrapper, OkWrapper},
-    state::AppState,
+use axum::{
+    extract::{Path, State},
+    Json,
 };
 use candid::Principal;
 use email_address::EmailAddress;
-use ntex::web::{
-    self,
-    types::{Json, Path, State},
-};
+use std::sync::Arc;
 use types::{ApiResult, SetUserEmailMetadataReq, SetUserSignedInMetadataReq, UserMetadata};
 
 #[utoipa::path(
@@ -30,13 +28,12 @@ use types::{ApiResult, SetUserEmailMetadataReq, SetUserSignedInMetadataReq, User
         (status = 500, description = "Internal server error", body = ErrorWrapper<Error>)
     )
 )]
-#[web::post("/email/{user_principal}")]
-async fn set_user_email(
-    state: State<AppState>,
-    user_principal: Path<Principal>,
-    req: Json<SetUserEmailMetadataReq>,
+pub async fn set_user_email(
+    State(state): State<Arc<AppState>>,
+    Path(user_principal): Path<Principal>,
+    Json(req): Json<SetUserEmailMetadataReq>,
 ) -> Result<Json<ApiResult<UserMetadata>>> {
-    let principal = *user_principal;
+    let principal = user_principal;
 
     // Add user context to Sentry
     crate::sentry_utils::add_user_context(principal, None);
@@ -56,12 +53,16 @@ async fn set_user_email(
     let result = set_user_email_impl(
         &state.redis,
         principal,
-        req.0.payload.email,
-        req.0.payload.already_signed_in,
+        req.payload.email,
+        req.payload.already_signed_in,
     )
     .await
     .map_err(|e| {
-        crate::sentry_utils::capture_api_error(&e, "/email/{user_principal}", Some(&principal.to_text()));
+        crate::sentry_utils::capture_api_error(
+            &e,
+            "/email/{user_principal}",
+            Some(&principal.to_text()),
+        );
         e
     })?;
     Ok(Json(Ok(result)))
@@ -80,13 +81,12 @@ async fn set_user_email(
         (status = 500, description = "Internal server error", body = ErrorWrapper<Error>)
     )
 )]
-#[web::post("/signup/{user_principal}")]
-async fn set_signup_datetime(
-    state: State<AppState>,
-    user_principal: Path<Principal>,
-    req: Json<SetUserSignedInMetadataReq>,
+pub async fn set_signup_datetime(
+    State(state): State<Arc<AppState>>,
+    Path(user_principal): Path<Principal>,
+    Json(req): Json<SetUserSignedInMetadataReq>,
 ) -> Result<Json<ApiResult<UserMetadata>>> {
-    let principal = *user_principal;
+    let principal = user_principal;
 
     // Add user context to Sentry
     crate::sentry_utils::add_user_context(principal, None);
@@ -96,10 +96,14 @@ async fn set_signup_datetime(
         sentry::Level::Info,
     );
 
-    let res = set_signup_datetime_impl(&state.redis, principal, req.0.already_signed_in)
+    let res = set_signup_datetime_impl(&state.redis, principal, req.already_signed_in)
         .await
         .map_err(|e| {
-            crate::sentry_utils::capture_api_error(&e, "/signup/{user_principal}", Some(&principal.to_text()));
+            crate::sentry_utils::capture_api_error(
+                &e,
+                "/signup/{user_principal}",
+                Some(&principal.to_text()),
+            );
             e
         })?;
     Ok(Json(Ok(res)))

@@ -1,10 +1,10 @@
-use candid::Principal;
-use ntex::web::{
-    self,
-    types::{Json, Path, State},
-    HttpRequest,
+use axum::{
+    extract::{Path, State},
+    http::HeaderMap,
+    Json,
 };
-use std::env;
+use candid::Principal;
+use std::{env, sync::Arc};
 use types::{
     error::ApiError, ApiResult, NotificationKey, RegisterDeviceReq, RegisterDeviceRes,
     SendNotificationReq, SendNotificationRes, UnregisterDeviceReq, UnregisterDeviceRes,
@@ -45,13 +45,12 @@ use crate::notifications::traits::{
         (status = 500, description = "Internal server error", body = ErrorWrapper<crate::utils::error::Error>)
     )
 )]
-#[web::post("/notifications/{user_principal}")]
-async fn register_device(
-    state: State<AppState>,
-    user_principal: Path<Principal>,
-    req: Json<RegisterDeviceReq>,
+pub async fn register_device(
+    State(state): State<Arc<AppState>>,
+    Path(user_principal): Path<Principal>,
+    Json(req): Json<RegisterDeviceReq>,
 ) -> Result<Json<ApiResult<RegisterDeviceRes>>> {
-    let principal = *user_principal;
+    let principal = user_principal;
 
     crate::sentry_utils::add_user_context(principal, None);
     crate::sentry_utils::add_operation_breadcrumb(
@@ -64,11 +63,21 @@ async fn register_device(
     let redis_service = &mut *redis_conn_pooled;
     let firebase_service = &state.firebase;
 
-    register_device_impl(firebase_service, redis_service, user_principal, req).await
-        .map_err(|e| {
-            crate::sentry_utils::capture_api_error(&e, "/notifications/{user_principal}", Some(&principal.to_text()));
-            e
-        })
+    register_device_impl(
+        firebase_service,
+        redis_service,
+        user_principal.to_text(),
+        Json(req),
+    )
+    .await
+    .map_err(|e| {
+        crate::sentry_utils::capture_api_error(
+            &e,
+            "/notifications/{user_principal}",
+            Some(&principal.to_text()),
+        );
+        e
+    })
 }
 
 pub async fn register_device_impl<
@@ -82,7 +91,7 @@ pub async fn register_device_impl<
     user_principal: P,
     req: Json<Req>,
 ) -> Result<Json<ApiResult<RegisterDeviceRes>>> {
-    let request_data = req.into_inner();
+    let request_data = req.0;
     let registration_token_obj = request_data.registration_token();
 
     request_data.verify_identity_against_principal(&user_principal)?;
@@ -162,11 +171,19 @@ pub async fn register_device_impl<
             .await
         {
             Ok(Some(key)) => {
-                crate::sentry_utils::add_firebase_breadcrumb("update_notification_devices", &user_id_text, true);
+                crate::sentry_utils::add_firebase_breadcrumb(
+                    "update_notification_devices",
+                    &user_id_text,
+                    true,
+                );
                 key
-            },
+            }
             Err(Error::FirebaseApiErr(err_text)) if err_text.contains("not found") => {
-                crate::sentry_utils::add_firebase_breadcrumb("update_notification_devices", &user_id_text, false);
+                crate::sentry_utils::add_firebase_breadcrumb(
+                    "update_notification_devices",
+                    &user_id_text,
+                    false,
+                );
                 log::warn!(
                     "Attempted to add device to notification_key_name '{}' which was not found in FCM. Attempting to create.",
                     notification_key_name
@@ -185,9 +202,12 @@ pub async fn register_device_impl<
                 fcm_service
                     .update_notification_devices(create_body_json)
                     .await?
-                    .ok_or_else(|| Error::Unknown(
-                        "create notification key (after add to non-existent key failed) did not return a notification key".to_string(),
-                    ))?
+                    .ok_or_else(|| {
+                        Error::Unknown(
+                            "create notification key (after add to non-existent key failed) did not return a notification key"
+                                .to_string(),
+                        )
+                    })?
             }
             Err(e) => return Err(e),
             Ok(None) => {
@@ -239,9 +259,12 @@ pub async fn register_device_impl<
                 fcm_service
                     .update_notification_devices(add_body_json)
                     .await?
-                    .ok_or_else(|| Error::Unknown(
-                        "add notification token (after key_name exists) did not return a notification key".to_string(),
-                    ))?;
+                    .ok_or_else(|| {
+                        Error::Unknown(
+                            "add notification token (after key_name exists) did not return a notification key"
+                                .to_string(),
+                        )
+                    })?;
                 existing_key
             }
             Err(e) => return Err(e),
@@ -299,16 +322,21 @@ pub async fn register_device_impl<
         (status = 500, description = "Internal server error", body = ErrorWrapper<crate::utils::error::Error>)
     )
 )]
-#[web::delete("/notifications/{user_principal}")]
-async fn unregister_device(
-    state: State<AppState>,
-    user_principal: Path<Principal>,
-    req: Json<UnregisterDeviceReq>,
+pub async fn unregister_device(
+    State(state): State<Arc<AppState>>,
+    Path(user_principal): Path<Principal>,
+    Json(req): Json<UnregisterDeviceReq>,
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
     let redis_service = &mut *redis_conn_pooled;
     let firebase_service = &state.firebase;
-    unregister_device_impl(firebase_service, redis_service, user_principal, req).await
+    unregister_device_impl(
+        firebase_service,
+        redis_service,
+        user_principal.to_text(),
+        Json(req),
+    )
+    .await
 }
 
 pub async fn unregister_device_impl<
@@ -322,7 +350,7 @@ pub async fn unregister_device_impl<
     user_principal: P,
     req: Json<Req>,
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
-    let request_data = req.into_inner();
+    let request_data = req.0;
     let registration_token_obj = request_data.registration_token();
 
     request_data.verify_identity_against_principal(&user_principal)?;
@@ -432,14 +460,13 @@ pub async fn unregister_device_impl<
         ("bearer_auth" = [])
     )
 )]
-#[web::post("/notifications/{user_principal}/send")]
-async fn send_notification(
-    http_req: HttpRequest,
-    state: State<AppState>,
-    user_principal: Path<Principal>,
-    req: Json<SendNotificationReq>,
+pub async fn send_notification(
+    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+    Path(user_principal): Path<Principal>,
+    Json(req): Json<SendNotificationReq>,
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
-    let principal = *user_principal;
+    let principal = user_principal;
 
     crate::sentry_utils::add_user_context(principal, None);
     crate::sentry_utils::add_operation_breadcrumb(
@@ -453,21 +480,25 @@ async fn send_notification(
     let firebase_service = &state.firebase;
 
     send_notification_impl(
-        Some(http_req),
+        Some(&headers),
         firebase_service,
         redis_service,
-        user_principal,
-        req,
+        user_principal.to_text(),
+        Json(req),
     )
     .await
     .map_err(|e| {
-        crate::sentry_utils::capture_api_error(&e, "/notifications/{user_principal}/send", Some(&principal.to_text()));
+        crate::sentry_utils::capture_api_error(
+            &e,
+            "/notifications/{user_principal}/send",
+            Some(&principal.to_text()),
+        );
         e
     })
 }
 
 pub async fn send_notification_impl<F: FcmService, R: RedisConnection, P: UserPrincipal>(
-    http_req: Option<HttpRequest>,
+    headers: Option<&HeaderMap>,
     fcm_service: &F,
     redis_service: &mut R,
     user_principal: P,
@@ -475,7 +506,7 @@ pub async fn send_notification_impl<F: FcmService, R: RedisConnection, P: UserPr
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
     let user_id_text = user_principal.to_text();
 
-    if let Some(actual_http_req) = http_req {
+    if let Some(actual_headers) = headers {
         log::info!("[send_notification] Entered for user: {}", user_id_text);
         let expected_api_key =
             env::var("YRAL_METADATA_USER_NOTIFICATION_API_KEY").map_err(|_| {
@@ -484,8 +515,7 @@ pub async fn send_notification_impl<F: FcmService, R: RedisConnection, P: UserPr
                 )
             })?;
 
-        let auth_header = actual_http_req
-            .headers()
+        let auth_header = actual_headers
             .get("Authorization")
             .and_then(|h| h.to_str().ok());
 
@@ -537,7 +567,7 @@ pub async fn send_notification_impl<F: FcmService, R: RedisConnection, P: UserPr
         notification_key_to_use.key
     );
 
-    let data_to_send = req.into_inner();
+    let data_to_send = req.0;
     log::info!(
         "[send_notification] Preparing to send data for user {}: {:?}",
         user_id_text,

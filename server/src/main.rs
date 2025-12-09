@@ -17,16 +17,18 @@ mod utils;
 
 #[cfg(test)]
 mod test_utils;
-use api::*;
+use std::sync::Arc;
+
+use axum::{
+    routing::{delete, get, post},
+    Router,
+};
 use config::AppConfig;
-use notifications::*;
-use ntex::web;
-use ntex_cors::Cors;
 use state::AppState;
+use tower_http::cors::CorsLayer;
 use utils::error::*;
 
 use crate::sentry_middleware::SentryMiddleware;
-use crate::signup::{set_signup_datetime, set_user_email};
 
 fn setup_sentry_subscriber() {
     use tracing_subscriber::layer::SubscriberExt;
@@ -42,7 +44,7 @@ fn setup_sentry_subscriber() {
         .init();
 }
 
-#[ntex::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     let conf = AppConfig::load()?;
 
@@ -80,32 +82,83 @@ async fn main() -> Result<()> {
 
     log::info!("Sentry initialized successfully");
 
-    let state = AppState::new(&conf).await?;
+    let state = Arc::new(AppState::new(&conf).await?);
 
-    web::HttpServer::new(move || {
-        web::App::new()
-            .wrap(SentryMiddleware) // Add Sentry middleware first to capture all requests
-            .wrap(Cors::default())
-            .state(state.clone())
-            .configure(services::openapi::ntex_config)
-            .service(admin_set_user_metadata)
-            .service(set_user_metadata)
-            .service(set_user_email)
-            .service(set_signup_datetime)
-            .service(get_user_metadata)
-            .service(delete_metadata_bulk)
-            .service(get_user_metadata_bulk)
-            .service(get_canister_to_principal_bulk)
-            .service(register_device)
-            .service(unregister_device)
-            .service(send_notification)
-            .service(session::update_session_as_registered_v2)
-            .service(session::update_session_as_registered)
-            .service(admin::populate_canister_index)
-    })
-    .bind(conf.bind_address)?
-    .run()
-    .await?;
+    // Build the application router with all routes defined here
+    let app = Router::new()
+        // API routes
+        .route(
+            "/metadata/:user_principal",
+            post(api::handlers::set_user_metadata),
+        )
+        .route(
+            "/admin/metadata/:user_principal",
+            post(api::handlers::admin_set_user_metadata),
+        )
+        .route(
+            "/metadata/:username_or_principal",
+            get(api::handlers::get_user_metadata),
+        )
+        .route(
+            "/metadata/bulk",
+            delete(api::handlers::delete_metadata_bulk),
+        )
+        .route(
+            "/metadata-bulk",
+            post(api::handlers::get_user_metadata_bulk),
+        )
+        .route(
+            "/canister-to-principal/bulk",
+            post(api::handlers::get_canister_to_principal_bulk),
+        )
+        // Notification routes
+        .route(
+            "/notifications/:user_principal",
+            post(notifications::register_device),
+        )
+        .route(
+            "/notifications/:user_principal",
+            delete(notifications::unregister_device),
+        )
+        .route(
+            "/notifications/:user_principal/send",
+            post(notifications::send_notification),
+        )
+        // Session routes
+        .route(
+            "/v2/update_session_as_registered",
+            post(session::update_session_as_registered_v2),
+        )
+        .route(
+            "/update_session_as_registered/:canister_id",
+            post(session::update_session_as_registered),
+        )
+        // Signup routes
+        .route("/email/:user_principal", post(signup::set_user_email))
+        .route("/signup/:user_principal", post(signup::set_signup_datetime))
+        // Admin routes
+        .route(
+            "/admin/populate-canister-index",
+            post(admin::populate_canister_index),
+        )
+        // OpenAPI/Swagger UI routes
+        .route("/explorer/*tail", get(services::openapi::get_swagger))
+        .route("/explorer/", get(services::openapi::get_swagger))
+        // Add shared state
+        .with_state(state)
+        // Add middleware layers (applied in reverse order)
+        .layer(sentry_tower::NewSentryLayer::new_from_top())
+        .layer(sentry_tower::SentryHttpLayer::with_transaction())
+        .layer(SentryMiddleware)
+        .layer(CorsLayer::permissive());
+
+    let listener = tokio::net::TcpListener::bind(conf.bind_address)
+        .await
+        .map_err(|e| Error::IO(e))?;
+
+    log::info!("Server starting on {}", conf.bind_address);
+
+    axum::serve(listener, app).await.map_err(|e| Error::IO(e))?;
 
     Ok(())
 }
