@@ -1,9 +1,7 @@
-use axum::{body::Bytes, extract::Request, response::Response};
+use axum::{body::Bytes};
 use sentry::Hub;
 use std::env;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Instant;
-use tower::{Layer, Service};
+use std::sync::atomic::AtomicU64;
 
 /// Global request counter for generating unique request IDs
 static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -17,6 +15,7 @@ fn get_body_limit() -> usize {
         .unwrap_or(10240)
 }
 
+#[allow(dead_code)]
 /// Check if HTTP logging is enabled
 fn is_http_logging_enabled() -> bool {
     env::var("SENTRY_ENABLE_HTTP_LOGGING")
@@ -59,6 +58,7 @@ fn parse_and_scrub_bytes(bytes: &Bytes) -> Option<String> {
     Some(crate::middleware::sentry_scrub::scrub_body(&body_str))
 }
 
+#[allow(dead_code)]
 /// Add lightweight breadcrumb for successful requests (no body parsing)
 fn add_lightweight_breadcrumb(
     request_id: u64,
@@ -87,6 +87,8 @@ fn add_lightweight_breadcrumb(
         ..Default::default()
     });
 }
+
+#[allow(dead_code)]
 
 /// Add detailed request breadcrumb with body (only for errors)
 fn add_request_breadcrumb(
@@ -118,6 +120,7 @@ fn add_request_breadcrumb(
     });
 }
 
+#[allow(dead_code)]
 /// Add detailed response breadcrumb with body (only for errors)
 fn add_response_breadcrumb(request_id: u64, status: u16, duration_ms: u64, body: Option<String>) {
     let level = if status >= 500 {
