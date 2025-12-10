@@ -28,8 +28,6 @@ use state::AppState;
 use tower_http::cors::CorsLayer;
 use utils::error::*;
 
-use crate::sentry_middleware::SentryMiddleware;
-
 fn setup_sentry_subscriber() {
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
@@ -149,7 +147,6 @@ async fn main() -> Result<()> {
         // Add middleware layers (applied in reverse order)
         .layer(sentry_tower::NewSentryLayer::new_from_top())
         .layer(sentry_tower::SentryHttpLayer::with_transaction())
-        .layer(SentryMiddleware)
         .layer(CorsLayer::permissive());
 
     let listener = tokio::net::TcpListener::bind(conf.bind_address)
