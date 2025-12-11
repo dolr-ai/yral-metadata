@@ -1,4 +1,4 @@
-use axum::{body::Bytes};
+use axum::body::Bytes;
 use sentry::Hub;
 use std::env;
 use std::sync::atomic::AtomicU64;
