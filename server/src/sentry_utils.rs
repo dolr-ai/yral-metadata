@@ -1,15 +1,15 @@
+use axum::http::Request;
 use candid::Principal;
-use ntex::web::HttpRequest;
-use sentry::Level;
 use sentry::protocol::Uuid;
+use sentry::Level;
 use std::collections::BTreeMap;
 
 /// Captures HTTP request context and adds it to the current Sentry scope
-pub fn capture_request_context(req: &HttpRequest, user_principal: Option<Principal>) {
+pub fn capture_request_context<B>(req: &Request<B>, user_principal: Option<Principal>) {
     sentry::configure_scope(|scope| {
         // Add request details
         scope.set_tag("http.method", req.method().as_str());
-        scope.set_tag("http.path", req.path());
+        scope.set_tag("http.path", req.uri().path());
 
         // Add user context if available
         if let Some(principal) = user_principal {
@@ -25,19 +25,22 @@ pub fn capture_request_context(req: &HttpRequest, user_principal: Option<Princip
             let name_str = name.as_str();
             if name_str.to_lowercase() != "authorization" {
                 if let Ok(value_str) = value.to_str() {
-                    headers_map.insert(name_str.to_string(), serde_json::Value::String(value_str.to_string()));
+                    headers_map.insert(
+                        name_str.to_string(),
+                        serde_json::Value::String(value_str.to_string()),
+                    );
                 }
             }
         }
         scope.set_context("headers", sentry::protocol::Context::Other(headers_map));
 
         // Add query parameters
-        if !req.query_string().is_empty() {
-            scope.set_extra("query_string", req.query_string().to_string().into());
+        if let Some(query) = req.uri().query() {
+            scope.set_extra("query_string", query.to_string().into());
         }
 
         // Add connection info
-        if let Some(peer_addr) = req.peer_addr() {
+        if let Some(peer_addr) = req.extensions().get::<std::net::SocketAddr>() {
             scope.set_tag("client.ip", peer_addr.to_string());
         }
 
@@ -60,7 +63,10 @@ pub fn capture_response_context(status_code: u16, duration_ms: u64) {
         sentry::add_breadcrumb(sentry::Breadcrumb {
             ty: "http".into(),
             category: Some("response".into()),
-            message: Some(format!("HTTP Response: {} ({}ms)", status_code, duration_ms)),
+            message: Some(format!(
+                "HTTP Response: {} ({}ms)",
+                status_code, duration_ms
+            )),
             level: if status_code >= 500 {
                 Level::Error
             } else if status_code >= 400 {
@@ -153,11 +159,7 @@ pub fn add_firebase_breadcrumb(operation: &str, user_principal: &str, success: b
 }
 
 /// Adds breadcrumb for IC canister calls
-pub fn add_canister_call_breadcrumb(
-    canister_id: &str,
-    method: &str,
-    success: bool,
-) {
+pub fn add_canister_call_breadcrumb(canister_id: &str, method: &str, success: bool) {
     sentry::add_breadcrumb(sentry::Breadcrumb {
         ty: "rpc".into(),
         category: Some("canister".into()),

@@ -1,7 +1,7 @@
 mod tests {
     use crate::api::METADATA_FIELD; // Import METADATA_FIELD
     use crate::notifications::traits::RedisConnection;
-    use ntex::web::types::Json;
+    use axum::Json;
     use types::{
         error::ApiError,
         DeviceRegistrationToken,

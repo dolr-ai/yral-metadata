@@ -1,7 +1,9 @@
+use axum::{
+    extract::Path,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use std::sync::Arc;
-
-use ntex::util::Bytes;
-use ntex::web;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
@@ -31,12 +33,12 @@ impl Modify for BearerAuth {
 #[derive(OpenApi)]
 #[openapi(
     paths(
-        crate::api::set_user_metadata,
-        crate::api::admin_set_user_metadata,
-        crate::api::get_user_metadata,
-        crate::api::delete_metadata_bulk,
-        crate::api::get_user_metadata_bulk,
-        crate::api::get_canister_to_principal_bulk,
+        crate::api::handlers::set_user_metadata,
+        crate::api::handlers::admin_set_user_metadata,
+        crate::api::handlers::get_user_metadata,
+        crate::api::handlers::delete_metadata_bulk,
+        crate::api::handlers::get_user_metadata_bulk,
+        crate::api::handlers::get_canister_to_principal_bulk,
         crate::notifications::register_device,
         crate::notifications::unregister_device,
         crate::notifications::send_notification,
@@ -65,39 +67,26 @@ impl Modify for BearerAuth {
 )]
 pub(crate) struct ApiDoc;
 
-#[web::get("/{tail}*")]
-async fn get_swagger(
-    tail: web::types::Path<String>,
-    openapi_conf: web::types::State<Arc<utoipa_swagger_ui::Config<'static>>>,
-) -> Result<web::HttpResponse, AppError> {
-    if tail.as_ref() == "swagger.json" {
+pub async fn get_swagger(Path(tail): Path<String>) -> Result<Response, AppError> {
+    if tail == "swagger.json" || tail.is_empty() {
         let spec = ApiDoc::openapi()
             .to_json()
             .map_err(|err| AppError::SwaggerUi(err.to_string()))?;
-        return Ok(web::HttpResponse::Ok()
-            .content_type("application/json")
-            .body(spec));
+        return Ok((StatusCode::OK, [("content-type", "application/json")], spec).into_response());
     }
-    let conf = openapi_conf.as_ref().clone();
-    match utoipa_swagger_ui::serve(&tail, conf.into())
+
+    let config =
+        Arc::new(utoipa_swagger_ui::Config::new(["/explorer/swagger.json"]).use_base_layout());
+
+    match utoipa_swagger_ui::serve(&tail, config.as_ref().clone().into())
         .map_err(|err| AppError::SwaggerUi(err.to_string()))?
     {
         None => Err(AppError::SwaggerUi(format!("path not found: {}", tail))),
-        Some(file) => Ok({
-            let bytes = Bytes::from(file.bytes.to_vec());
-            web::HttpResponse::Ok()
-                .content_type(file.content_type)
-                .body(bytes)
-        }),
+        Some(file) => Ok((
+            StatusCode::OK,
+            [("content-type", file.content_type)],
+            file.bytes.to_vec(),
+        )
+            .into_response()),
     }
-}
-
-pub fn ntex_config(config: &mut web::ServiceConfig) {
-    let swagger_config =
-        Arc::new(utoipa_swagger_ui::Config::new(["/explorer/swagger.json"]).use_base_layout());
-    config.service(
-        web::scope("/explorer/")
-            .state(swagger_config)
-            .service(get_swagger),
-    );
 }

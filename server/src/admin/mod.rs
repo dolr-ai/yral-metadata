@@ -1,11 +1,11 @@
-use ntex::util::Bytes;
-use ntex::web;
+use axum::{body::Bytes, extract::State, http::HeaderMap, Json};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use types::PopulateIndexResponse;
 
 use crate::state::AppState;
 use crate::utils::canister::populate_canister_to_principal_index;
 use crate::utils::error::Result;
-use types::PopulateIndexResponse;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct QStashRequest {
@@ -14,14 +14,13 @@ pub struct QStashRequest {
     pub data: serde_json::Value,
 }
 
-#[web::post("/admin/populate-canister-index")]
 pub async fn populate_canister_index(
-    state: web::types::State<AppState>,
-    req: web::HttpRequest,
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     body: Bytes,
-) -> Result<web::HttpResponse> {
+) -> Result<Json<PopulateIndexResponse>> {
     // Verify QStash signature
-    state.qstash.verify_qstash_message(&req, &body).await?;
+    state.qstash.verify_qstash_message(&headers, &body).await?;
 
     // Call the populate function
     let (total, processed) =
@@ -33,5 +32,5 @@ pub async fn populate_canister_index(
         failed: total - processed,
     };
 
-    Ok(web::HttpResponse::Ok().json(&response))
+    Ok(Json(response))
 }

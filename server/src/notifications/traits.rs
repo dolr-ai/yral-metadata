@@ -1,5 +1,5 @@
+use axum::extract::Path;
 use candid::Principal;
-use ntex::web::types::Path;
 use redis::RedisResult;
 
 use crate::utils::error::{Error, Result};
@@ -62,7 +62,7 @@ pub trait UserPrincipal: Send + Sync {
 
 impl UserPrincipal for Path<Principal> {
     fn to_text(&self) -> String {
-        self.as_ref().to_text()
+        self.0.to_text()
     }
 
     fn as_principal(&self) -> Option<Principal> {

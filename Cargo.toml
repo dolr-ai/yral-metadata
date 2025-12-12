@@ -3,7 +3,7 @@ members = ["client", "server", "types"]
 resolver = "2"
 
 [workspace.dependencies]
-serde = { version = "^1.0.128", features = ["derive"] }
+serde = { version = "=1.0.219", features = ["derive"] }
 thiserror = "1.0.58"
 candid = "^0.10.10"
 log = "0.4.21"
