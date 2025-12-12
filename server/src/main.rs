@@ -140,7 +140,7 @@ async fn main() -> Result<()> {
             post(admin::populate_canister_index),
         )
         // OpenAPI/Swagger UI routes
-        .route("/explorer/*tail", get(services::openapi::get_swagger))
+        .route("/explorer/{*tail}", get(services::openapi::get_swagger))
         .route("/explorer/", get(services::openapi::get_swagger))
         // Add shared state
         .with_state(state)
