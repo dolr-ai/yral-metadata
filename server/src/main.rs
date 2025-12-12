@@ -86,15 +86,15 @@ async fn main() -> Result<()> {
     let app = Router::new()
         // API routes
         .route(
-            "/metadata/:user_principal",
+            "/metadata/{user_principal}",
             post(api::handlers::set_user_metadata),
         )
         .route(
-            "/admin/metadata/:user_principal",
+            "/admin/metadata/{user_principal}",
             post(api::handlers::admin_set_user_metadata),
         )
         .route(
-            "/metadata/:username_or_principal",
+            "/metadata/{user_principal}",
             get(api::handlers::get_user_metadata),
         )
         .route(
@@ -111,15 +111,15 @@ async fn main() -> Result<()> {
         )
         // Notification routes
         .route(
-            "/notifications/:user_principal",
+            "/notifications/{user_principal}",
             post(notifications::register_device),
         )
         .route(
-            "/notifications/:user_principal",
+            "/notifications/{user_principal}",
             delete(notifications::unregister_device),
         )
         .route(
-            "/notifications/:user_principal/send",
+            "/notifications/{user_principal}/send",
             post(notifications::send_notification),
         )
         // Session routes
@@ -128,12 +128,12 @@ async fn main() -> Result<()> {
             post(session::update_session_as_registered_v2),
         )
         .route(
-            "/update_session_as_registered/:canister_id",
+            "/update_session_as_registered/{canister_id}",
             post(session::update_session_as_registered),
         )
         // Signup routes
-        .route("/email/:user_principal", post(signup::set_user_email))
-        .route("/signup/:user_principal", post(signup::set_signup_datetime))
+        .route("/email/{user_principal}", post(signup::set_user_email))
+        .route("/signup/{user_principal}", post(signup::set_signup_datetime))
         // Admin routes
         .route(
             "/admin/populate-canister-index",
