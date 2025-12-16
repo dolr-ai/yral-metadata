@@ -1,0 +1,188 @@
+name : Deploy to Hetzner Bare Metal
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: deploy-hetzner-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build_check:
+    uses: ./.github/workflows/build.yml
+    with:
+      publish-artifact: true
+  
+  build-and-push:
+    name: Build and Push Docker Images
+    needs: build_check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-musl
+
+      - name: Make binary executable
+        run: chmod +x target/x86_64-unknown-linux-musl/release/yral-metadata-server
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for yral-metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=raw,value=latest
+
+      - name: Build and push yral-metadata-image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Hetzner Bare Metal
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        server:
+          - name: yral-metadata-1
+            host: {{ vars.SERVER_1_HOST }}
+          - name: yral-metadata-2
+            host: {{ vars.SERVER_2_HOST }}
+      max-parallel: 1
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/yral_metadata_key
+          chmod 600 ~/.ssh/yral_metadata_key
+          ssh-keyscan -H ${{ matrix.server.host }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to ${{ matrix.server.name }}
+        env:
+          SERVER_HOST: ${{ matrix.server.host }}
+          SERVER_USER: ${{ vars.SERVER_USER }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REDIS_URL: ${{ secrets.METADATA_REDIS_URL }}
+          JWT_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_PUBLIC_KEY }}
+          YRAL_METADATA_USER_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_USER_NOTIFICATION_API_KEY }}
+          CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
+          GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID }}
+          BACKEND_ADMIN_IDENTITY: ${{ secrets.YRAL_APP_ADMIN_AND_PROPOSAL_SUBMITTER_DFX_IDENTITY_SECP_PRIVATE_KEY }}
+          YRAL_AUTH_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_JWT_VERIFY_PUBLIC_KEY }}
+          GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
+          QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
+          QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
+        run: |
+          # Create deployment directory if not exists
+          ssh $SERVER_USER@$SERVER_HOST "mkdir -p /home/yral-metadata"
+          
+          # Copy docker-compose and env template
+          scp docker-compose.yml $SERVER_USER@$SERVER_HOST:/home/yral-metadata/
+          
+          # Create .env file on server with secrets
+          ssh $SERVER_USER@$SERVER_HOST "cat > /home/yral-metadata/.env << 'EOF'
+          BIND_ADDRESS=0.0.0.0:8080
+          ENVIRONMENT=production
+          RUST_LOG=info,yral_metadata_server=debug
+          REDIS_URL=$REDIS_URL
+          JWT_PUBLIC_KEY=$JWT_PUBLIC_KEY
+          YRAL_METADATA_USER_NOTIFICATION_API_KEY=$YRAL_METADATA_USER_NOTIFICATION_API_KEY
+          CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY=$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY
+          GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID=$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID
+          BACKEND_ADMIN_IDENTITY=$BACKEND_ADMIN_IDENTITY
+          YRAL_AUTH_PUBLIC_KEY=$YRAL_AUTH_PUBLIC_KEY
+          GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID=$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID
+          QSTASH_CURRENT_SIGNING_KEY=$QSTASH_CURRENT_SIGNING_KEY
+          QSTASH_NEXT_SIGNING_KEY=$QSTASH_NEXT_SIGNING_KEY
+          EOF"
+          
+          # Secure the env file
+          ssh $SERVER_USER@$SERVER_HOST "chmod 600 /home/yral-metadata/.env"
+          
+          # Login to GHCR
+          ssh $SERVER_USER@$SERVER_HOST "echo $GHCR_TOKEN | docker login ghcr.io -u ${{ github.actor }} --password-stdin"
+          
+          echo 'Pulling latest images...'
+          APP_IMAGE=ghcr.io/${{ github.repository }} \
+          IMAGE_TAG=${{ github.sha }} \
+          docker compose pull
+          
+          echo 'Stopping existing containers...'
+          docker compose down --remove-orphans || true
+          
+          echo 'Starting services...'
+          APP_IMAGE=ghcr.io/${{ github.repository }} \
+          IMAGE_TAG=${{ github.sha }} \
+          docker compose up -d
+
+          echo 'Waiting for services to start...'
+          sleep 15
+          echo 'Services status:'
+          docker compose ps
+          "
+      
+      - name: Verify deployment
+        run: |
+          ssh ${{ vars.SERVER_USER }}@${{ matrix.server.host }} "
+            cd /home/yral-auth
+            echo '=== Container Status ==='
+            docker compose ps
+            echo ''
+            echo '=== Container Logs (last 20 lines) ==='
+            docker compose logs --tail=20 yral-auth 2>/dev/null || echo 'Logs not yet available'
+          "
+
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Server**: ${{ matrix.server.host }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployment Method**: Docker Compose" >> $GITHUB_STEP_SUMMARY
+          echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
+          echo "  - ghcr.io/${{ github.repository }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Secrets**: Injected via environment variables at runtime" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Wait before next server
+        if: ${{ matrix.server.name == 'yral-metadata-1' }}
+        run: |
+          echo "Waiting 30 seconds before deploying to next server..."
+          sleep 30
