@@ -102,9 +102,9 @@ jobs:
       matrix:
         server:
           - name: yral-metadata-1
-            host: ${{ vars.SERVER_1_HOST }}
+            host: 138.201.32.116
           - name: yral-metadata-2
-            host: ${{ vars.SERVER_2_HOST }}
+            host: 49.12.120.32
       max-parallel: 1
     
     steps:

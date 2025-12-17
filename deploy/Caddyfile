@@ -1,10 +1,10 @@
 {
     # Global options
-    email ${vars.EMAIL_FOR_TLS}
+    email naitik@@gobazzinga.io
 }
 
 # Main metadata domain
-${vars.METADATA_DOMAIN_NAME} {
+metadata.yral.com {
     # Reverse proxy to the yral-metadata service
     reverse_proxy yral-metadata:8080 {
         # Health checking
@@ -43,5 +43,5 @@ ${vars.METADATA_DOMAIN_NAME} {
 
 # Optional: Handle bare IP or other hostnames with redirect
 :80 {
-    respond "Service available at https://${vars.METADATA_DOMAIN_NAME}" 200
+    respond "Service available at https://metadata.yral.com" 200
 }
