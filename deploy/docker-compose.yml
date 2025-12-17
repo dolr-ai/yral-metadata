@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  fly-redis-proxy:
+    image: ${PROXY_IMAGE:-ghcr.io/dolr-ai/fly-redis-proxy}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      - FLY_API_TOKEN=${FLY_API_TOKEN}
+    networks:
+      - yral-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "16379"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  yral-metadata:
+    image: ghcr.io/${{ github.repository }}:latest
+    container_name: yral-metadata
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - yral-network
+    depends_on:
+      - fly-redis-proxy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+      image: caddy:2-alpine
+      restart: unless-stopped
+      ports:
+        - "80:80"
+        - "443:443"
+      volumes:
+        - ./Caddyfile:/etc/caddy/Caddyfile:ro
+        - caddy_data:/data
+        - caddy_config:/config
+      networks:
+        - yral-net
+      depends_on:
+        - yral-metadata
+        
+networks:
+  yral-network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

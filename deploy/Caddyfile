@@ -1,0 +1,47 @@
+{
+    # Global options
+    email ${vars.EMAIL_FOR_TLS}
+}
+
+# Main metadata domain
+${vars.METADATA_DOMAIN_NAME} {
+    # Reverse proxy to the yral-metadata service
+    reverse_proxy yral-metadata:8080 {
+        # Health checking
+        health_uri /healthz
+        health_interval 30s
+        health_timeout 10s
+
+        # Headers
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Security headers
+    header {
+        # Enable HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        # Prevent clickjacking
+        X-Frame-Options "DENY"
+        # Prevent content type sniffing
+        X-Content-Type-Options "nosniff"
+        # XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Logging
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}
+
+# Optional: Handle bare IP or other hostnames with redirect
+:80 {
+    respond "Service available at https://${vars.METADATA_DOMAIN_NAME}" 200
+}
