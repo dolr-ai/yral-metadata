@@ -16,7 +16,7 @@ services:
       start_period: 60s
 
   yral-metadata:
-    image: ghcr.io/${{ github.repository }}:latest
+    image: ${APP_IMAGE:-ghcr.io/dolr-ai/yral-metadata}:${IMAGE_TAG:-latest}
     container_name: yral-metadata
     restart: unless-stopped
     ports:
@@ -30,7 +30,7 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - yral-network
+      - yral-net
     depends_on:
       - fly-redis-proxy
     logging:
@@ -55,7 +55,7 @@ services:
         - yral-metadata
         
 networks:
-  yral-network:
+  yral-net:
     driver: bridge
 
 volumes:
