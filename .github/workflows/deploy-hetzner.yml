@@ -23,6 +23,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       publish-artifact: true
+    secrets: inherit
   
   build-and-push:
     name: Build and Push Docker Images
