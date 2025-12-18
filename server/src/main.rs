@@ -42,43 +42,8 @@ fn setup_sentry_subscriber() {
         .init();
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+async fn main_impl() -> Result<()> {
     let conf = AppConfig::load()?;
-
-    // Initialize Sentry with enhanced configuration
-    let _guard = sentry::init((
-        "https://ca9ac4e37832428f5804817e010068dd@apm.yral.com/6",
-        sentry::ClientOptions {
-            release: sentry::release_name!(),
-            environment: Some(
-                std::env::var("ENVIRONMENT")
-                    .unwrap_or_else(|_| "production".to_string())
-                    .into(),
-            ),
-            server_name: Some(
-                hostname::get()
-                    .ok()
-                    .and_then(|h| h.into_string().ok())
-                    .unwrap_or_else(|| "unknown".to_string())
-                    .into(),
-            ),
-            send_default_pii: true,
-            traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0.5),
-            attach_stacktrace: true,
-            auto_session_tracking: true,
-            max_breadcrumbs: 100, // Store more breadcrumbs for better context
-            before_send: Some(crate::middleware::create_before_send()),
-            ..Default::default()
-        },
-    ));
-
-    setup_sentry_subscriber();
-
-    log::info!("Sentry initialized successfully");
 
     let state = Arc::new(AppState::new(&conf).await?);
 
@@ -159,4 +124,47 @@ async fn main() -> Result<()> {
     axum::serve(listener, app).await.map_err(|e| Error::IO(e))?;
 
     Ok(())
+}
+
+fn main() -> Result<()>{
+
+    // Initialize Sentry with enhanced configuration
+    let _guard = sentry::init((
+        "https://ca9ac4e37832428f5804817e010068dd@apm.yral.com/6",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            environment: Some(
+                std::env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "production".to_string())
+                    .into(),
+            ),
+            server_name: Some(
+                hostname::get()
+                    .ok()
+                    .and_then(|h| h.into_string().ok())
+                    .unwrap_or_else(|| "unknown".to_string())
+                    .into(),
+            ),
+            send_default_pii: true,
+            traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.5),
+            attach_stacktrace: true,
+            auto_session_tracking: true,
+            max_breadcrumbs: 100, // Store more breadcrumbs for better context
+            before_send: Some(crate::middleware::create_before_send()),
+            ..Default::default()
+        },
+    ));
+
+    setup_sentry_subscriber();
+
+    log::info!("Sentry initialized successfully");
+
+    tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(
+        async {
+            main_impl().await.map_err(|e| Error::from(e))
+        }
+    )
 }
