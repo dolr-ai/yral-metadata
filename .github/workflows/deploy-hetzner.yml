@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - master
+  pull_request:
+    branches:
+      - master
 
 concurrency:
   group: deploy-hetzner-${{ github.ref }}
@@ -103,8 +106,8 @@ jobs:
         server:
           - name: yral-metadata-1
             host: 138.201.32.116
-          - name: yral-metadata-2
-            host: 49.12.120.32
+          # - name: yral-metadata-2
+          #   host: 49.12.120.32
       max-parallel: 1
     
     steps:
