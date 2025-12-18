@@ -23,8 +23,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       publish-artifact: true
-    secrets:
-      TEST_REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
+    secrets: inherit
   
   build-and-push:
     name: Build and Push Docker Images
