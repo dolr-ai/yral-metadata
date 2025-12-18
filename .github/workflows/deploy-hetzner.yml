@@ -16,7 +16,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  PROXY_IMAGE_NAME: ${{ github.repository_owner }}/fly-redis-proxy
+  PROXY_IMAGE_NAME: ${{ github.repository_owner }}/fly-redis-proxy-metadata
 
 jobs:
   build_check:
@@ -211,7 +211,7 @@ jobs:
           
           echo 'Pulling latest images...'
           APP_IMAGE=ghcr.io/${{ github.repository }} \
-          PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy \
+          PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
           IMAGE_TAG=${{ github.sha }} \
           docker compose pull
           
@@ -220,7 +220,7 @@ jobs:
           
           echo 'Starting services...'
           APP_IMAGE=ghcr.io/${{ github.repository }} \
-          PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy \
+          PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
           IMAGE_TAG=${{ github.sha }} \
           docker compose up -d
 
@@ -248,7 +248,7 @@ jobs:
           echo "- **Deployment Method**: Docker Compose" >> $GITHUB_STEP_SUMMARY
           echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
           echo "  - ghcr.io/${{ github.repository }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "  - ghcr.io/${{ github.repository_owner }}/fly-redis-proxy:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "  - ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Services**: fly-redis-proxy, yral-metadata, caddy" >> $GITHUB_STEP_SUMMARY
           echo "- **Secrets**: Injected via environment variables at runtime" >> $GITHUB_STEP_SUMMARY
       
