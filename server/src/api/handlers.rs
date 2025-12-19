@@ -2,6 +2,7 @@ use axum::{
     extract::{Path, State},
     http::HeaderMap,
     Json,
+    response::IntoResponse
 };
 use candid::Principal;
 use std::sync::Arc;
@@ -219,4 +220,9 @@ pub async fn get_canister_to_principal_bulk(
     let result =
         get_canister_to_principal_bulk_impl(&state.redis, req, CANISTER_TO_PRINCIPAL_KEY).await?;
     Ok(Json(Ok(result)))
+}
+
+/// Health check endpoint
+pub async fn healthz() -> axum::response::Response {
+    Json(serde_json::json!({"status": "ok"})).into_response()
 }

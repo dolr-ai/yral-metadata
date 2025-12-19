@@ -106,6 +106,8 @@ async fn main_impl() -> Result<()> {
         )
         // OpenAPI/Swagger UI routes
         .route("/explorer/{*tail}", get(services::openapi::get_swagger))
+        .route("/explorer/", get(services::openapi::get_swagger_root))
+        .route("/healthz", get(api::handlers::healthz))
         // Add shared state
         .with_state(state)
         // Add middleware layers (applied in reverse order)
