@@ -36,12 +36,12 @@ pub async fn set_user_email(
     let principal = user_principal;
 
     // Add user context to Sentry
-    crate::sentry_utils::add_user_context(principal, None);
-    crate::sentry_utils::add_operation_breadcrumb(
-        "signup",
-        &format!("Setting email for user: {}", principal),
-        sentry::Level::Info,
-    );
+    // crate::sentry_utils::add_user_context(principal, None);
+    // crate::sentry_utils::add_operation_breadcrumb(
+    //     "signup",
+    //     &format!("Setting email for user: {}", principal),
+    //     sentry::Level::Info,
+    // );
 
     req.signature.clone().verify_identity(
         principal,
@@ -58,11 +58,11 @@ pub async fn set_user_email(
     )
     .await
     .map_err(|e| {
-        crate::sentry_utils::capture_api_error(
-            &e,
-            "/email/{user_principal}",
-            Some(&principal.to_text()),
-        );
+        // crate::sentry_utils::capture_api_error(
+        //     &e,
+        //     "/email/{user_principal}",
+        //     Some(&principal.to_text()),
+        // );
         e
     })?;
     Ok(Json(Ok(result)))
@@ -89,21 +89,21 @@ pub async fn set_signup_datetime(
     let principal = user_principal;
 
     // Add user context to Sentry
-    crate::sentry_utils::add_user_context(principal, None);
-    crate::sentry_utils::add_operation_breadcrumb(
-        "signup",
-        &format!("Setting signup datetime for user: {}", principal),
-        sentry::Level::Info,
-    );
+    // crate::sentry_utils::add_user_context(principal, None);
+    // crate::sentry_utils::add_operation_breadcrumb(
+    //     "signup",
+    //     &format!("Setting signup datetime for user: {}", principal),
+    //     sentry::Level::Info,
+    // );
 
     let res = set_signup_datetime_impl(&state.redis, principal, req.already_signed_in)
         .await
         .map_err(|e| {
-            crate::sentry_utils::capture_api_error(
-                &e,
-                "/signup/{user_principal}",
-                Some(&principal.to_text()),
-            );
+            // crate::sentry_utils::capture_api_error(
+            //     &e,
+            //     "/signup/{user_principal}",
+            //     Some(&principal.to_text()),
+            // );
             e
         })?;
     Ok(Json(Ok(res)))

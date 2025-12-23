@@ -70,6 +70,16 @@ impl UserPrincipal for Path<Principal> {
     }
 }
 
+impl UserPrincipal for Principal {
+    fn to_text(&self) -> String {
+        self.to_text()
+    }
+     
+    fn as_principal(&self) -> Option<Principal> {
+        Some(*self)
+    }
+}
+
 impl UserPrincipal for String {
     fn to_text(&self) -> String {
         self.clone()

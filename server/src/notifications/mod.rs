@@ -52,12 +52,12 @@ pub async fn register_device(
 ) -> Result<Json<ApiResult<RegisterDeviceRes>>> {
     let principal = user_principal;
 
-    crate::sentry_utils::add_user_context(principal, None);
-    crate::sentry_utils::add_operation_breadcrumb(
-        "notifications",
-        &format!("Registering device for user: {}", principal),
-        sentry::Level::Info,
-    );
+    // crate::sentry_utils::add_user_context(principal, None);
+    // crate::sentry_utils::add_operation_breadcrumb(
+    //     "notifications",
+    //     &format!("Registering device for user: {}", principal),
+    //     sentry::Level::Info,
+    // );
 
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
     let redis_service = &mut *redis_conn_pooled;
@@ -66,16 +66,16 @@ pub async fn register_device(
     register_device_impl(
         firebase_service,
         redis_service,
-        user_principal.to_text(),
+        user_principal,
         Json(req),
     )
     .await
     .map_err(|e| {
-        crate::sentry_utils::capture_api_error(
-            &e,
-            "/notifications/{user_principal}",
-            Some(&principal.to_text()),
-        );
+        // crate::sentry_utils::capture_api_error(
+        //     &e,
+        //     "/notifications/{user_principal}",
+        //     Some(&principal.to_text()),
+        // );
         e
     })
 }
@@ -171,19 +171,19 @@ pub async fn register_device_impl<
             .await
         {
             Ok(Some(key)) => {
-                crate::sentry_utils::add_firebase_breadcrumb(
-                    "update_notification_devices",
-                    &user_id_text,
-                    true,
-                );
+                // crate::sentry_utils::add_firebase_breadcrumb(
+                //     "update_notification_devices",
+                //     &user_id_text,
+                //     true,
+                // );
                 key
             }
             Err(Error::FirebaseApiErr(err_text)) if err_text.contains("not found") => {
-                crate::sentry_utils::add_firebase_breadcrumb(
-                    "update_notification_devices",
-                    &user_id_text,
-                    false,
-                );
+                // crate::sentry_utils::add_firebase_breadcrumb(
+                //     "update_notification_devices",
+                //     &user_id_text,
+                //     false,
+                // );
                 log::warn!(
                     "Attempted to add device to notification_key_name '{}' which was not found in FCM. Attempting to create.",
                     notification_key_name
@@ -333,7 +333,7 @@ pub async fn unregister_device(
     unregister_device_impl(
         firebase_service,
         redis_service,
-        user_principal.to_text(),
+        user_principal,
         Json(req),
     )
     .await
@@ -468,12 +468,12 @@ pub async fn send_notification(
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
     let principal = user_principal;
 
-    crate::sentry_utils::add_user_context(principal, None);
-    crate::sentry_utils::add_operation_breadcrumb(
-        "notifications",
-        &format!("Sending notification to user: {}", principal),
-        sentry::Level::Info,
-    );
+    // crate::sentry_utils::add_user_context(principal, None);
+    // crate::sentry_utils::add_operation_breadcrumb(
+    //     "notifications",
+    //     &format!("Sending notification to user: {}", principal),
+    //     sentry::Level::Info,
+    // );
 
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
     let redis_service = &mut *redis_conn_pooled;
@@ -483,16 +483,16 @@ pub async fn send_notification(
         Some(&headers),
         firebase_service,
         redis_service,
-        user_principal.to_text(),
+        user_principal,
         Json(req),
     )
     .await
     .map_err(|e| {
-        crate::sentry_utils::capture_api_error(
-            &e,
-            "/notifications/{user_principal}/send",
-            Some(&principal.to_text()),
-        );
+        // crate::sentry_utils::capture_api_error(
+        //     &e,
+        //     "/notifications/{user_principal}/send",
+        //     Some(&principal.to_text()),
+        // );
         e
     })
 }
