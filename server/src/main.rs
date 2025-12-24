@@ -154,10 +154,7 @@ fn main() {
                     .into(),
             ),
             send_default_pii: true,
-            traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0.01), //lower sampling for lower data accumulation.
+            traces_sample_rate: 0.01, //lower sampling for lower data accumulation.
             attach_stacktrace: true,
             auto_session_tracking: true,
             max_breadcrumbs: 100, // Store more breadcrumbs for better context
