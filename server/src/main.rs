@@ -7,8 +7,8 @@ mod firebase;
 mod middleware;
 mod notifications;
 mod qstash;
-// mod sentry_middleware;
-// mod sentry_utils;
+mod sentry_middleware;
+mod sentry_utils;
 mod services;
 mod session;
 mod signup;
@@ -28,19 +28,16 @@ use state::AppState;
 use tower_http::cors::CorsLayer;
 use utils::error::*;
 
-// fn setup_sentry_subscriber() {
-//     use tracing_subscriber::layer::SubscriberExt;
-//     use tracing_subscriber::util::SubscriberInitExt;
+fn setup_sentry_subscriber() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
 
-//     tracing_subscriber::registry()
-//         .with(
-//             tracing_subscriber::EnvFilter::try_from_default_env()
-//                 .unwrap_or_else(|_| "info,yral_metadata_server=debug".into()),
-//         )
-//         .with(tracing_subscriber::fmt::layer())
-//         .with(sentry_tracing::layer())
-//         .init();
-// }
+    tracing_subscriber::registry()
+        .with(sentry_tracing::layer())
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+}
 
 async fn main_impl() -> Result<()> {
     let conf = AppConfig::load()?;
@@ -111,8 +108,8 @@ async fn main_impl() -> Result<()> {
         // Add shared state
         .with_state(state)
         // Add middleware layers (applied in reverse order)
-        // .layer(sentry_tower::NewSentryLayer::new_from_top())
-        // .layer(sentry_tower::SentryHttpLayer::with_transaction())
+        .layer(sentry_tower::NewSentryLayer::new_from_top())
+        .layer(sentry_tower::SentryHttpLayer::with_transaction())
         .layer(CorsLayer::permissive());
 
     let listener = tokio::net::TcpListener::bind(conf.bind_address)
@@ -128,39 +125,39 @@ async fn main_impl() -> Result<()> {
 
 fn main() -> Result<()>{
 
-    // // Initialize Sentry with enhanced configuration
-    // let _guard = sentry::init((
-    //     "https://ca9ac4e37832428f5804817e010068dd@apm.yral.com/6",
-    //     sentry::ClientOptions {
-    //         release: sentry::release_name!(),
-    //         environment: Some(
-    //             std::env::var("ENVIRONMENT")
-    //                 .unwrap_or_else(|_| "production".to_string())
-    //                 .into(),
-    //         ),
-    //         server_name: Some(
-    //             hostname::get()
-    //                 .ok()
-    //                 .and_then(|h| h.into_string().ok())
-    //                 .unwrap_or_else(|| "unknown".to_string())
-    //                 .into(),
-    //         ),
-    //         send_default_pii: true,
-    //         traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
-    //             .ok()
-    //             .and_then(|s| s.parse().ok())
-    //             .unwrap_or(0.5),
-    //         attach_stacktrace: true,
-    //         auto_session_tracking: true,
-    //         max_breadcrumbs: 100, // Store more breadcrumbs for better context
-    //         before_send: Some(crate::middleware::create_before_send()),
-    //         ..Default::default()
-    //     },
-    // ));
+    // Initialize Sentry with enhanced configuration
+    let _guard = sentry::init((
+        "https://ca9ac4e37832428f5804817e010068dd@apm.yral.com/6",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            environment: Some(
+                std::env::var("ENVIRONMENT")
+                    .unwrap_or_else(|_| "production".to_string())
+                    .into(),
+            ),
+            server_name: Some(
+                hostname::get()
+                    .ok()
+                    .and_then(|h| h.into_string().ok())
+                    .unwrap_or_else(|| "unknown".to_string())
+                    .into(),
+            ),
+            send_default_pii: false,
+            // traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
+            //     .ok()
+            //     .and_then(|s| s.parse().ok())
+            //     .unwrap_or(0.5),
+            traces_sample_rate: 0.01, //lower sampling for lower data accumulation.
+            attach_stacktrace: true,
+            max_breadcrumbs: 100, // Store more breadcrumbs for better context
+            before_send: Some(crate::middleware::create_before_send()),
+            ..Default::default()
+        },
+    ));
 
-    // setup_sentry_subscriber();
+    setup_sentry_subscriber();
 
-    // log::info!("Sentry initialized successfully");
+    log::info!("Sentry initialized successfully");
 
     tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(
         async {

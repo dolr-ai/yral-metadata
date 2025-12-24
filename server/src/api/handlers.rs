@@ -48,21 +48,21 @@ pub async fn set_user_metadata(
     let principal = user_principal;
 
     // Add user context to Sentry
-    // crate::sentry_utils::add_user_context(principal, None);
-    // crate::sentry_utils::add_operation_breadcrumb(
-    //     "metadata",
-    //     &format!("Setting metadata for user: {}", principal),
-    //     sentry::Level::Info,
-    // );
+    crate::sentry_utils::add_user_context(principal, None);
+    crate::sentry_utils::add_operation_breadcrumb(
+        "metadata",
+        &format!("Setting metadata for user: {}", principal),
+        sentry::Level::Info,
+    );
 
     let result = set_user_metadata_impl(&state.redis, principal, req, CANISTER_TO_PRINCIPAL_KEY)
         .await
         .map_err(|e| {
-            // crate::sentry_utils::capture_api_error(
-            //     &e,
-            //     "/metadata/{user_principal}",
-            //     Some(&principal.to_text()),
-            // );
+            crate::sentry_utils::capture_api_error(
+                &e,
+                "/metadata/{user_principal}",
+                Some(&principal.to_text()),
+            );
             e
         })?;
 
@@ -120,20 +120,20 @@ pub async fn get_user_metadata(
     State(state): State<Arc<AppState>>,
     Path(identifier): Path<String>,
 ) -> Result<Json<ApiResult<GetUserMetadataV2Res>>> {
-    // crate::sentry_utils::add_operation_breadcrumb(
-    //     "metadata",
-    //     &format!("Getting metadata for: {}", identifier),
-    //     sentry::Level::Info,
-    // );
+    crate::sentry_utils::add_operation_breadcrumb(
+        "metadata",
+        &format!("Getting metadata for: {}", identifier),
+        sentry::Level::Info,
+    );
 
     let result = get_user_metadata_impl(&state.redis, identifier.clone())
         .await
         .map_err(|e| {
-            // crate::sentry_utils::capture_api_error(
-            //     &e,
-            //     "/metadata/{username_or_principal}",
-            //     Some(&identifier),
-            // );
+            crate::sentry_utils::capture_api_error(
+                &e,
+                "/metadata/{username_or_principal}",
+                Some(&identifier),
+            );
             e
         })?;
 
@@ -188,17 +188,17 @@ pub async fn get_user_metadata_bulk(
 ) -> Result<Json<ApiResult<BulkGetUserMetadataRes>>> {
     let user_count = req.users.len();
 
-    // crate::sentry_utils::add_operation_breadcrumb(
-    //     "metadata",
-    //     &format!("Bulk fetch metadata for {} users", user_count),
-    //     sentry::Level::Info,
-    // );
+    crate::sentry_utils::add_operation_breadcrumb(
+        "metadata",
+        &format!("Bulk fetch metadata for {} users", user_count),
+        sentry::Level::Info,
+    );
 
     let result = get_user_metadata_bulk_impl(&state.redis, req)
         .await
         .map_err(|e| {
             log::error!("Error fetching bulk user metadata: {}", e);
-            // crate::sentry_utils::capture_api_error(&e, "/metadata-bulk", None);
+            crate::sentry_utils::capture_api_error(&e, "/metadata-bulk", None);
             e
         })?;
     Ok(Json(Ok(result)))

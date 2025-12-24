@@ -59,18 +59,18 @@ pub async fn update_session_as_registered_v2(
     headers: HeaderMap,
     Json(req_payload): Json<UpdateUserSessionRequest>,
 ) -> Result<Json<ApiResult<()>>> {
-    // crate::sentry_utils::add_operation_breadcrumb(
-    //     "session",
-    //     &format!("Update session v2 for user: {}", req_payload.user_principal),
-    //     sentry::Level::Info,
-    // );
+    crate::sentry_utils::add_operation_breadcrumb(
+        "session",
+        &format!("Update session v2 for user: {}", req_payload.user_principal),
+        sentry::Level::Info,
+    );
 
     let Some(auth_header) = headers.get("Authorization") else {
-        // crate::sentry_utils::add_operation_breadcrumb(
-        //     "session",
-        //     "Auth token missing",
-        //     sentry::Level::Warning,
-        // );
+        crate::sentry_utils::add_operation_breadcrumb(
+            "session",
+            "Auth token missing",
+            sentry::Level::Warning,
+        );
         return Err(Error::AuthTokenMissing);
     };
 
@@ -88,61 +88,61 @@ pub async fn update_session_as_registered_v2(
 
     match user_canister {
         USER_INFO_SERVICE_ID => {
-            // crate::sentry_utils::add_canister_call_breadcrumb(
-            //     &user_canister.to_text(),
-            //     "update_session_type",
-            //     true,
-            // );
+            crate::sentry_utils::add_canister_call_breadcrumb(
+                &user_canister.to_text(),
+                "update_session_type",
+                true,
+            );
             let user_info_service = UserInfoService(user_canister, ic_agent);
 
             let result = user_info_service
                 .update_session_type(user_principal, UserServiceSessionType::RegisteredSession)
                 .await
                 .map_err(|e| {
-                    // crate::sentry_utils::add_canister_call_breadcrumb(
-                    //     &user_canister.to_text(),
-                    //     "update_session_type",
-                    //     false,
-                    // );
+                    crate::sentry_utils::add_canister_call_breadcrumb(
+                        &user_canister.to_text(),
+                        "update_session_type",
+                        false,
+                    );
                     e
                 })?;
 
             if let Result_::Err(e) = result {
-                // crate::sentry_utils::add_operation_breadcrumb(
-                //     "session",
-                //     &format!("Update session failed: {}", e),
-                //     sentry::Level::Error,
-                // );
+                crate::sentry_utils::add_operation_breadcrumb(
+                    "session",
+                    &format!("Update session failed: {}", e),
+                    sentry::Level::Error,
+                );
                 return Err(Error::UpdateSession(e));
             }
 
             Ok(Json(Ok(())))
         }
         _ => {
-            // crate::sentry_utils::add_canister_call_breadcrumb(
-            //     &user_canister.to_text(),
-            //     "update_session_type",
-            //     true,
-            // );
+            crate::sentry_utils::add_canister_call_breadcrumb(
+                &user_canister.to_text(),
+                "update_session_type",
+                true,
+            );
             let individual_user_template_service = IndividualUserTemplate(user_canister, ic_agent);
             let result = individual_user_template_service
                 .update_session_type(SessionType::RegisteredSession)
                 .await
                 .map_err(|e| {
-                    // crate::sentry_utils::add_canister_call_breadcrumb(
-                    //     &user_canister.to_text(),
-                    //     "update_session_type",
-                    //     false,
-                    // );
+                    crate::sentry_utils::add_canister_call_breadcrumb(
+                        &user_canister.to_text(),
+                        "update_session_type",
+                        false,
+                    );
                     e
                 })?;
 
             if let yral_canisters_client::individual_user_template::Result15::Err(e) = result {
-                // crate::sentry_utils::add_operation_breadcrumb(
-                //     "session",
-                //     &format!("Update session failed: {}", e),
-                //     sentry::Level::Error,
-                // );
+                crate::sentry_utils::add_operation_breadcrumb(
+                    "session",
+                    &format!("Update session failed: {}", e),
+                    sentry::Level::Error,
+                );
                 return Err(Error::UpdateSession(e));
             }
 
