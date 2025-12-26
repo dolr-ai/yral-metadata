@@ -66,7 +66,7 @@ pub async fn register_device(
     register_device_impl(
         firebase_service,
         redis_service,
-        user_principal.to_text(),
+        user_principal,
         Json(req),
     )
     .await
@@ -333,7 +333,7 @@ pub async fn unregister_device(
     unregister_device_impl(
         firebase_service,
         redis_service,
-        user_principal.to_text(),
+        user_principal,
         Json(req),
     )
     .await
@@ -483,7 +483,7 @@ pub async fn send_notification(
         Some(&headers),
         firebase_service,
         redis_service,
-        user_principal.to_text(),
+        user_principal,
         Json(req),
     )
     .await
