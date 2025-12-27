@@ -24,7 +24,9 @@ use axum::{
     Router,
 };
 use config::AppConfig;
+use sentry_tower::{NewSentryLayer, SentryHttpLayer};
 use state::AppState;
+use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 use utils::error::*;
 
@@ -46,6 +48,11 @@ async fn main_impl() -> Result<()> {
     let conf = AppConfig::load()?;
 
     let state = Arc::new(AppState::new(&conf).await?);
+
+    // Sentry middleware
+    let sentry_tower_layer = ServiceBuilder::new()
+        .layer(NewSentryLayer::new_from_top())
+        .layer(SentryHttpLayer::with_transaction());
 
     // Build the application router with all routes defined here
     let app = Router::new()
@@ -98,7 +105,10 @@ async fn main_impl() -> Result<()> {
         )
         // Signup routes
         .route("/email/{user_principal}", post(signup::set_user_email))
-        .route("/signup/{user_principal}", post(signup::set_signup_datetime))
+        .route(
+            "/signup/{user_principal}",
+            post(signup::set_signup_datetime),
+        )
         // Admin routes
         .route(
             "/admin/populate-canister-index",
@@ -106,14 +116,13 @@ async fn main_impl() -> Result<()> {
         )
         // OpenAPI/Swagger UI routes
         .route("/explorer/{*tail}", get(services::openapi::get_swagger))
-        // Health check route
+        .route("/explorer/", get(services::openapi::get_swagger_root))
         .route("/healthz", get(api::handlers::healthz))
+        .layer(CorsLayer::permissive())
+        // Add sentry middleware layer
+        .layer(sentry_tower_layer)
         // Add shared state
-        .with_state(state)
-        // Add middleware layers (applied in reverse order)
-        .layer(sentry_tower::NewSentryLayer::new_from_top())
-        .layer(sentry_tower::SentryHttpLayer::with_transaction())
-        .layer(CorsLayer::permissive());
+        .with_state(state.clone());
 
     let listener = tokio::net::TcpListener::bind(conf.bind_address)
         .await
@@ -126,8 +135,7 @@ async fn main_impl() -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()>{
-
+fn main() {
     // Initialize Sentry with enhanced configuration
     let _guard = sentry::init((
         "https://ca9ac4e37832428f5804817e010068dd@apm.yral.com/6",
@@ -146,10 +154,7 @@ fn main() -> Result<()>{
                     .into(),
             ),
             send_default_pii: true,
-            traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0.5),
+            traces_sample_rate: 0.01, //lower sampling for lower data accumulation.
             attach_stacktrace: true,
             auto_session_tracking: true,
             max_breadcrumbs: 100, // Store more breadcrumbs for better context
@@ -162,9 +167,11 @@ fn main() -> Result<()>{
 
     log::info!("Sentry initialized successfully");
 
-    tokio::runtime::Builder::new_multi_thread().enable_all().build()?.block_on(
-        async {
-            main_impl().await.map_err(|e| Error::from(e))
-        }
-    )
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            main_impl().await.unwrap();
+        });
 }

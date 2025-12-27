@@ -68,7 +68,7 @@ impl Modify for BearerAuth {
 pub(crate) struct ApiDoc;
 
 pub async fn get_swagger(Path(tail): Path<String>) -> Result<Response, AppError> {
-    if tail == "swagger.json" || tail.is_empty() {
+    if tail == "swagger.json" {
         let spec = ApiDoc::openapi()
             .to_json()
             .map_err(|err| AppError::SwaggerUi(err.to_string()))?;
@@ -78,10 +78,27 @@ pub async fn get_swagger(Path(tail): Path<String>) -> Result<Response, AppError>
     let config =
         Arc::new(utoipa_swagger_ui::Config::new(["/explorer/swagger.json"]).use_base_layout());
 
-    match utoipa_swagger_ui::serve(&tail, config.as_ref().clone().into())
+    match utoipa_swagger_ui::serve(&tail, config.clone())
         .map_err(|err| AppError::SwaggerUi(err.to_string()))?
     {
         None => Err(AppError::SwaggerUi(format!("path not found: {}", tail))),
+        Some(file) => Ok((
+            StatusCode::OK,
+            [("content-type", file.content_type)],
+            file.bytes.to_vec(),
+        )
+            .into_response()),
+    }
+}
+
+pub async fn get_swagger_root() -> Result<Response, AppError> {
+    let config =
+        Arc::new(utoipa_swagger_ui::Config::new(["/explorer/swagger.json"]).use_base_layout());
+
+    match utoipa_swagger_ui::serve("index.html", config.clone())
+        .map_err(|err| AppError::SwaggerUi(err.to_string()))?
+    {
+        None => Err(AppError::SwaggerUi("path not found".to_string())),
         Some(file) => Ok((
             StatusCode::OK,
             [("content-type", file.content_type)],
