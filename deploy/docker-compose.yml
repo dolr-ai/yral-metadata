@@ -5,7 +5,7 @@ services:
     image: ${PROXY_IMAGE:-ghcr.io/dolr-ai/fly-redis-proxy}:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
-      - FLY_API_TOKEN=${FLY_API_TOKEN}
+      - FLY_API_TOKEN='${FLY_API_TOKEN}'
     networks:
       - yral-net
     healthcheck:
