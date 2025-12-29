@@ -164,7 +164,13 @@ jobs:
             ./deploy/ \
             root@${{matrix.server.host}}:/home/yral-metadata/
 
-      - name: Deploy to ${{ matrix.server.name }}
+      - name: Log in to GitHub Container Registry on server
+        run: |
+          ssh root@${{matrix.server.host}} "
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          "
+
+      - name: Deploy to ${{ matrix.server.name }} with docker compose
         env:
           SERVER_HOST: ${{ matrix.server.host }}
           SERVER_USER: root
@@ -183,51 +189,39 @@ jobs:
           # Create deployment directory if not exists
           ssh $SERVER_USER@$SERVER_HOST "mkdir -p /home/yral-metadata"
           
-          # Copy docker-compose and env template
-          scp docker-compose.yml $SERVER_USER@$SERVER_HOST:/home/yral-metadata/
-          
-          # Create .env file on server with secrets
-          ssh $SERVER_USER@$SERVER_HOST "cat > /home/yral-metadata/.env << 'EOF'
-          BIND_ADDRESS=0.0.0.0:8080
-          ENVIRONMENT=production
-          RUST_LOG=info,yral_metadata_server=debug
-          REDIS_URL=$REDIS_URL
-          JWT_PUBLIC_KEY=$JWT_PUBLIC_KEY
-          YRAL_METADATA_USER_NOTIFICATION_API_KEY=$YRAL_METADATA_USER_NOTIFICATION_API_KEY
-          CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY=$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY
-          GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID=$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID
-          BACKEND_ADMIN_IDENTITY=$BACKEND_ADMIN_IDENTITY
-          YRAL_AUTH_PUBLIC_KEY=$YRAL_AUTH_PUBLIC_KEY
-          GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID=$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID
-          QSTASH_CURRENT_SIGNING_KEY=$QSTASH_CURRENT_SIGNING_KEY
-          QSTASH_NEXT_SIGNING_KEY=$QSTASH_NEXT_SIGNING_KEY
-          EOF"
-          
-          # Secure the env file
-          ssh $SERVER_USER@$SERVER_HOST "chmod 600 /home/yral-metadata/.env"
-          
-          # Login to GHCR
-          ssh $SERVER_USER@$SERVER_HOST "echo $GHCR_TOKEN | docker login ghcr.io -u ${{ github.actor }} --password-stdin"
-          
-          echo 'Pulling latest images...'
-          APP_IMAGE=ghcr.io/${{ github.repository }} \
-          PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
-          IMAGE_TAG=${{ github.sha }} \
-          docker compose pull
-          
-          echo 'Stopping existing containers...'
-          docker compose down --remove-orphans || true
-          
-          echo 'Starting services...'
-          APP_IMAGE=ghcr.io/${{ github.repository }} \
-          PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
-          IMAGE_TAG=${{ github.sha }} \
-          docker compose up -d
+          ssh $SERVER_USER@$SERVER_HOST "
+            cd /home/yral-metadata
+            
+            echo 'Pulling latest images...'
+            APP_IMAGE=ghcr.io/${{ github.repository }} \
+            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
+            IMAGE_TAG=${{ github.sha }} \
+            docker compose pull
+            
+            echo 'Stopping existing containers...'
+            docker compose down --remove-orphans || true
+            
+            echo 'Starting services...'
+            APP_IMAGE=ghcr.io/${{ github.repository }} \
+            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
+            IMAGE_TAG=${{ github.sha }} \
+            BIND_ADDRESS=0.0.0.0:8080 \
+            REDIS_URL=$REDIS_URL \
+            JWT_PUBLIC_KEY=$JWT_PUBLIC_KEY \
+            YRAL_METADATA_USER_NOTIFICATION_API_KEY=$YRAL_METADATA_USER_NOTIFICATION_API_KEY \
+            CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY=$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY \
+            GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID=$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID \
+            BACKEND_ADMIN_IDENTITY=$BACKEND_ADMIN_IDENTITY \
+            YRAL_AUTH_PUBLIC_KEY=$YRAL_AUTH_PUBLIC_KEY \
+            GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID=$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID \
+            QSTASH_CURRENT_SIGNING_KEY=$QSTASH_CURRENT_SIGNING_KEY \
+            QSTASH_NEXT_SIGNING_KEY=$QSTASH_NEXT_SIGNING_KEY \
+            docker compose up -d
 
-          echo 'Waiting for services to start...'
-          sleep 15
-          echo 'Services status:'
-          docker compose ps
+            echo 'Waiting for services to start...'
+            sleep 15
+            echo 'Services status:'
+            docker compose ps
           "
       
       - name: Verify deployment
