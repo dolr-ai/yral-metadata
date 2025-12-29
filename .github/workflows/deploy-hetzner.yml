@@ -107,8 +107,8 @@ jobs:
         server:
           - name: yral-metadata-1
             host: 138.201.32.116
-          # - name: yral-metadata-2
-          #   host: 49.12.120.32
+          - name: yral-metadata-2
+            host: 49.12.120.32
       max-parallel: 1
     
     steps:
@@ -175,6 +175,7 @@ jobs:
           SERVER_HOST: ${{ matrix.server.host }}
           SERVER_USER: root
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
           REDIS_URL: redis://default:${REDIS_PASSWORD}@fly-redis-proxy:16379
           JWT_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_PUBLIC_KEY }}
           YRAL_METADATA_USER_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_USER_NOTIFICATION_API_KEY }}
@@ -206,6 +207,7 @@ jobs:
             PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
             IMAGE_TAG=${{ github.sha }} \
             BIND_ADDRESS=0.0.0.0:8080 \
+            FLY_API_TOKEN=$FLY_API_TOKEN \
             REDIS_URL=$REDIS_URL \
             JWT_PUBLIC_KEY=$JWT_PUBLIC_KEY \
             YRAL_METADATA_USER_NOTIFICATION_API_KEY=$YRAL_METADATA_USER_NOTIFICATION_API_KEY \
