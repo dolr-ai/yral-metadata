@@ -4,12 +4,13 @@
 set timeout -1
 
 # Spawn the command with the token from environment
-spawn flyctl -t $env(FLY_API_TOKEN) redis proxy -o gobazzinga-inc-584
+spawn flyctl redis proxy -o gobazzinga-inc-584
 
 # Expect the database selection prompt, type to filter, then select
 expect "*Select a database to connect to*" {
     # Type to filter to yral-metadata
-    send "yral-metadata"
+    # Notice: space is require for name matching else it will select yral-metadata-auth due to matching name pattern
+    send "yral-metadata "
     sleep 0.5
     send "\r"
 }
