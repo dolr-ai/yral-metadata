@@ -5,7 +5,7 @@ services:
     image: ${PROXY_IMAGE:-ghcr.io/dolr-ai/fly-redis-proxy}:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
-      - FLY_API_TOKEN='${FLY_API_TOKEN}'
+      - FLY_API_TOKEN=${FLY_API_TOKEN}
     networks:
       - yral-net
     healthcheck:
@@ -21,23 +21,23 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
-    env_file:
-      - .env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    environment:
+      - BIND_ADDRESS=0.0.0.0:8080 
+      - FLY_API_TOKEN=${FLY_API_TOKEN} 
+      - REDIS_URL=${REDIS_URL} 
+      - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
+      - YRAL_METADATA_USER_NOTIFICATION_API_KEY=${YRAL_METADATA_USER_NOTIFICATION_API_KEY}
+      - CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY=${CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY}
+      - GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID=${GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID}
+      - BACKEND_ADMIN_IDENTITY=${BACKEND_ADMIN_IDENTITY}
+      - YRAL_AUTH_PUBLIC_KEY=${YRAL_AUTH_PUBLIC_KEY}
+      - GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID=${GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID}
+      - QSTASH_CURRENT_SIGNING_KEY=${QSTASH_CURRENT_SIGNING_KEY}
+      - QSTASH_NEXT_SIGNING_KEY=${QSTASH_NEXT_SIGNING_KEY}
     networks:
       - yral-net
     depends_on:
       - fly-redis-proxy
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   caddy:
       image: caddy:2-alpine
