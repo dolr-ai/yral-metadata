@@ -1,7 +1,8 @@
 mod tests {
-    use crate::api::METADATA_FIELD; // Import METADATA_FIELD
     use crate::notifications::traits::RedisConnection;
+    use crate::{api::METADATA_FIELD, consts::TEST_KEY_PREFIX}; // Import METADATA_FIELD
     use axum::Json;
+    use tracing_subscriber::fmt::writer::Tee;
     use types::{
         error::ApiError,
         DeviceRegistrationToken,
@@ -41,10 +42,13 @@ mod tests {
     async fn test_register_device_new_user_creates_key() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "aaaaa-aa".to_string();
 
         let initial_metadata = create_actual_user_metadata(&user_principal_text, None);
-        mock_redis.add_user(initial_metadata); // Use add_user helper
+
+        mock_redis.add_user(initial_metadata.clone()); // Use add_user helper
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata); // Use add_user helper
 
         let req = Json(MockRegisterDeviceReq {
             registration_token: DeviceRegistrationToken {
@@ -53,10 +57,13 @@ mod tests {
         });
 
         let result = register_device_impl(
-            &mock_fcm,                   // FCM service first
-            &mut mock_redis,             // Then Redis service
+            &mock_fcm, // FCM service first
+            &mut mock_redis,
+            // Then Redis service
+            &mut dragonfly_mock_redis,   // Then Dragonfly Redis service
             user_principal_text.clone(), // Then user principal
             req,                         // Then request data
+            TEST_KEY_PREFIX,
         )
         .await;
 
@@ -103,6 +110,7 @@ mod tests {
     async fn test_register_device_unmigrated_user_replaces_key() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "gytd5-mqaaa-aaaah-ajwka-cai".to_string();
 
         let initial_fcm_key = "existing_fcm_key_for_gytd5-mqaaa-aaaah-ajwka-cai".to_string();
@@ -117,7 +125,8 @@ mod tests {
                 }],
             }),
         );
-        mock_redis.add_user(initial_metadata);
+        mock_redis.add_user(initial_metadata.clone());
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata);
 
         let notification_key_name =
             crate::firebase::notifications::utils::get_notification_key_name_from_principal(
@@ -138,9 +147,15 @@ mod tests {
             },
         });
 
-        let result =
-            register_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = register_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Registration failed: {:?}", result.err());
         let api_result = result.unwrap().0;
@@ -181,6 +196,7 @@ mod tests {
     async fn test_register_device_migrated_user_adds_to_key() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "gytd5-mqaaa-aaaah-ajwka-cai".to_string();
 
         let initial_fcm_key = "existing_fcm_key_for_gytd5-mqaaa-aaaah-ajwka-cai".to_string();
@@ -196,6 +212,7 @@ mod tests {
             }),
         );
         initial_metadata.is_migrated = true;
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
@@ -217,9 +234,15 @@ mod tests {
             },
         });
 
-        let result =
-            register_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = register_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Registration failed: {:?}", result.err());
         let api_result = result.unwrap().0;
@@ -264,6 +287,7 @@ mod tests {
     async fn test_register_device_reregister_existing_token() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "76qol-iiaaa-aaaak-qelkq-cai".to_string();
 
         let initial_fcm_key = "existing_fcm_key_for_76qol-iiaaa-aaaak-qelkq-cai".to_string();
@@ -278,6 +302,7 @@ mod tests {
                 }],
             }),
         );
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
@@ -298,9 +323,15 @@ mod tests {
             },
         });
 
-        let result =
-            register_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = register_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Registration failed: {:?}", result.err());
         let api_result = result.unwrap().0;
@@ -340,6 +371,7 @@ mod tests {
     async fn test_register_device_metadata_not_found() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "zboat-zyaaa-aaaaj-qml7q-caii".to_string();
 
         let req = Json(MockRegisterDeviceReq {
@@ -348,9 +380,15 @@ mod tests {
             },
         });
 
-        let result =
-            register_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = register_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Call itself should be ok");
         let api_result = result.unwrap().0;
@@ -362,6 +400,7 @@ mod tests {
     async fn test_unregister_device_success() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "64jio-xaaaa-aaaao-qdeoa-cai".to_string();
         let token_to_unregister = "token_to_remove".to_string();
         let other_token = "other_token_kept".to_string();
@@ -381,6 +420,7 @@ mod tests {
                 ],
             }),
         );
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
@@ -401,9 +441,15 @@ mod tests {
             },
         });
 
-        let result =
-            unregister_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = unregister_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Unregistration failed: {:?}", result.err());
         let api_result = result.unwrap().0;
@@ -439,6 +485,7 @@ mod tests {
     async fn test_unregister_last_device_removes_group_from_fcm() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "vppwu-fqaaa-aaaah-qhzea-cai".to_string();
         let last_token = "the_last_token".to_string();
         let fcm_key = "fcm_key_for_vppwu-fqaaa-aaaah-qhzea-cai".to_string();
@@ -452,6 +499,7 @@ mod tests {
                 }],
             }),
         );
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
@@ -480,9 +528,15 @@ mod tests {
             },
         });
 
-        let result =
-            unregister_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = unregister_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Unregistration failed: {:?}", result.err());
         let api_result = result.unwrap().0;
@@ -519,6 +573,7 @@ mod tests {
     async fn test_unregister_device_not_found() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "eedyd-aaaaa-aaaag-qdxpa-cai".to_string();
         let existing_token = "actual_token".to_string();
         let token_to_unregister = "non_existent_token".to_string();
@@ -533,6 +588,7 @@ mod tests {
                 }],
             }),
         );
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
@@ -553,9 +609,15 @@ mod tests {
             },
         });
 
-        let result =
-            unregister_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = unregister_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Call itself should be ok");
         let api_result = result.unwrap().0;
@@ -588,9 +650,11 @@ mod tests {
     async fn test_unregister_device_no_notification_key() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "iwf4p-syaaa-aaaag-qicra-cai".to_string();
 
         let initial_metadata = create_actual_user_metadata(&user_principal_text, None);
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let req = Json(MockUnregisterDeviceReq {
@@ -599,9 +663,15 @@ mod tests {
             },
         });
 
-        let result =
-            unregister_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = unregister_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Call itself should be ok");
         let api_result = result.unwrap().0;
@@ -613,6 +683,7 @@ mod tests {
     async fn test_unregister_device_metadata_not_found() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "wf4p-syaaa-aaaag-qicra-cai".to_string();
 
         let req = Json(MockUnregisterDeviceReq {
@@ -621,9 +692,15 @@ mod tests {
             },
         });
 
-        let result =
-            unregister_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = unregister_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Call itself should be ok");
         let api_result = result.unwrap().0;
@@ -635,6 +712,7 @@ mod tests {
     async fn test_send_notification_success() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "ijcpr-iqaaa-aaaag-anfnq-cai".to_string();
         let fcm_key = "fcm_key_for_ijcpr-iqaaa-aaaag-anfnq-cai".to_string();
         let device_token = "device_for_ijcpr-iqaaa-aaaag-anfnq-cai".to_string();
@@ -648,6 +726,7 @@ mod tests {
                 }],
             }),
         );
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
@@ -680,8 +759,10 @@ mod tests {
             None, // HttpRequest is None for tests
             &mock_fcm,
             &mut mock_redis,
+            &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
+            TEST_KEY_PREFIX,
         )
         .await;
 
@@ -702,6 +783,7 @@ mod tests {
     async fn test_send_notification_metadata_not_found() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "wrd2k-oyaaa-aaaai-afitq-cai".to_string();
 
         let notification_payload = types::NotificationPayload {
@@ -722,8 +804,10 @@ mod tests {
             None,
             &mock_fcm,
             &mut mock_redis,
+            &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
+            TEST_KEY_PREFIX,
         )
         .await;
 
@@ -737,9 +821,11 @@ mod tests {
     async fn test_send_notification_key_not_found_in_metadata() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "mpvf6-4aaaa-aaaal-qhokq-cai".to_string();
 
         let initial_metadata = create_actual_user_metadata(&user_principal_text, None);
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let notification_payload = types::NotificationPayload {
@@ -760,8 +846,10 @@ mod tests {
             None,
             &mock_fcm,
             &mut mock_redis,
+            &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
+            TEST_KEY_PREFIX,
         )
         .await;
 
@@ -775,6 +863,7 @@ mod tests {
     async fn test_send_notification_fcm_key_not_found_in_fcm_mock() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "vfvsa-lqaaa-aaaag-qetmq-cai".to_string();
         let fcm_key_in_redis = "dangling_fcm_key_in_redis".to_string();
 
@@ -787,6 +876,7 @@ mod tests {
                 }],
             }),
         );
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let notification_payload = types::NotificationPayload {
@@ -807,8 +897,10 @@ mod tests {
             None,
             &mock_fcm,
             &mut mock_redis,
+            &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
+            TEST_KEY_PREFIX,
         )
         .await;
 
@@ -834,9 +926,11 @@ mod tests {
     async fn test_register_device_fcm_has_key_redis_missing_key_struct() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "mbwvf-5iaaa-aaaal-affma-cai".to_string();
 
         let initial_metadata_no_key = create_actual_user_metadata(&user_principal_text, None);
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata_no_key.clone());
         mock_redis.add_user(initial_metadata_no_key);
 
         let notification_key_name =
@@ -859,9 +953,15 @@ mod tests {
             },
         });
 
-        let result =
-            register_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = register_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Registration failed: {:?}", result.err());
         let api_result = result.unwrap().0;
@@ -911,6 +1011,7 @@ mod tests {
     async fn test_register_device_fcm_missing_key_redis_has_key() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "ijcpr-iqaaa-aaaag-anfnq-cai".to_string();
         let redis_stale_key = "stale_fcm_key_in_redis".to_string();
 
@@ -923,6 +1024,7 @@ mod tests {
                 }],
             }),
         );
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata_stale_key.clone());
         mock_redis.add_user(initial_metadata_stale_key);
 
         let new_device_token_str = "new_device_for_ijcpr-iqaaa-aaaag-anfnq-cai".to_string();
@@ -932,9 +1034,15 @@ mod tests {
             },
         });
 
-        let result =
-            register_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = register_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(result.is_ok(), "Registration failed: {:?}", result.err());
         let api_result = result.unwrap().0;
@@ -977,6 +1085,7 @@ mod tests {
     async fn test_unregister_device_token_in_redis_not_in_fcm_group_exists() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "r4q6s-yyaaa-aaaap-acika-cai".to_string();
         let token_in_redis_only = "token_in_redis_not_fcm".to_string();
         let token_in_both = "token_in_both_systems".to_string();
@@ -996,6 +1105,7 @@ mod tests {
                 ],
             }),
         );
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
@@ -1016,9 +1126,15 @@ mod tests {
             },
         });
 
-        let result =
-            unregister_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = unregister_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(
             result.is_ok(),
@@ -1053,6 +1169,7 @@ mod tests {
     async fn test_unregister_device_token_in_redis_fcm_group_gone() {
         let mock_fcm = MockFCM::new();
         let mut mock_redis = MockRedisConnection::new();
+        let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "jkoyy-xaaaa-aaaai-agrba-cai".to_string();
         let token_to_unregister = "token_when_fcm_group_is_gone".to_string();
         let fcm_key_in_redis = "fcm_key_for_jkoyy-xaaaa-aaaai-agrba-cai_gone_from_fcm".to_string();
@@ -1066,6 +1183,7 @@ mod tests {
                 }],
             }),
         );
+        dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
         mock_redis.add_user(initial_metadata);
 
         let req = Json(MockUnregisterDeviceReq {
@@ -1074,9 +1192,15 @@ mod tests {
             },
         });
 
-        let result =
-            unregister_device_impl(&mock_fcm, &mut mock_redis, user_principal_text.clone(), req)
-                .await;
+        let result = unregister_device_impl(
+            &mock_fcm,
+            &mut mock_redis,
+            &mut dragonfly_mock_redis,
+            user_principal_text.clone(),
+            req,
+            TEST_KEY_PREFIX,
+        )
+        .await;
 
         assert!(
             result.is_ok(),

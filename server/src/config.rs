@@ -11,10 +11,14 @@ pub struct AppConfig {
     pub bind_address: SocketAddr,
     #[serde_as(as = "DisplayFromStr")]
     pub redis_url: ConnectionInfo,
+    pub dragonfly_redis_cluster: Vec<String>,
     pub jwt_public_key: String,
     pub yral_auth_public_key: String,
     pub backend_admin_identity: String,
     pub qstash_current_signing_key: String,
+    pub ca_cert_path: String,
+    pub client_cert_path: String,
+    pub client_key_path: String,
 }
 
 impl AppConfig {
