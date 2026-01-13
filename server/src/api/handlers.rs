@@ -1,8 +1,8 @@
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
+    response::IntoResponse,
     Json,
-    response::IntoResponse
 };
 use candid::Principal;
 use std::sync::Arc;

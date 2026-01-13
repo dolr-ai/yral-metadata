@@ -63,21 +63,16 @@ pub async fn register_device(
     let redis_service = &mut *redis_conn_pooled;
     let firebase_service = &state.firebase;
 
-    register_device_impl(
-        firebase_service,
-        redis_service,
-        user_principal,
-        Json(req),
-    )
-    .await
-    .map_err(|e| {
-        crate::sentry_utils::capture_api_error(
-            &e,
-            "/notifications/{user_principal}",
-            Some(&principal.to_text()),
-        );
-        e
-    })
+    register_device_impl(firebase_service, redis_service, user_principal, Json(req))
+        .await
+        .map_err(|e| {
+            crate::sentry_utils::capture_api_error(
+                &e,
+                "/notifications/{user_principal}",
+                Some(&principal.to_text()),
+            );
+            e
+        })
 }
 
 pub async fn register_device_impl<
@@ -330,13 +325,7 @@ pub async fn unregister_device(
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
     let redis_service = &mut *redis_conn_pooled;
     let firebase_service = &state.firebase;
-    unregister_device_impl(
-        firebase_service,
-        redis_service,
-        user_principal,
-        Json(req),
-    )
-    .await
+    unregister_device_impl(firebase_service, redis_service, user_principal, Json(req)).await
 }
 
 pub async fn unregister_device_impl<

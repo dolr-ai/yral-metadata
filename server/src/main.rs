@@ -34,13 +34,24 @@ fn setup_sentry_subscriber() {
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
 
+    // Configure sentry_tracing to only capture errors as events
+    // and only warnings as breadcrumbs (not debug/info)
+    let sentry_layer = sentry_tracing::layer().event_filter(|metadata| {
+        use sentry_tracing::EventFilter;
+        match *metadata.level() {
+            tracing::Level::ERROR => EventFilter::Event,
+            tracing::Level::WARN => EventFilter::Breadcrumb,
+            _ => EventFilter::Ignore, // Ignore DEBUG, INFO, TRACE
+        }
+    });
+
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,yral_metadata_server=debug".into()),
+                .unwrap_or_else(|_| "info,hyper=warn,reqwest=warn,tower_http=warn".into()),
         )
         .with(tracing_subscriber::fmt::layer())
-        .with(sentry_tracing::layer())
+        .with(sentry_layer)
         .init();
 }
 
