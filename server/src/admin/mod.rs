@@ -23,8 +23,12 @@ pub async fn populate_canister_index(
     state.qstash.verify_qstash_message(&headers, &body).await?;
 
     // Call the populate function
-    let (total, processed) =
-        populate_canister_to_principal_index(&state.backend_admin_ic_agent, &state.redis).await?;
+    let (total, processed) = populate_canister_to_principal_index(
+        &state.backend_admin_ic_agent,
+        &state.redis,
+        &state.dragonfly_redis,
+    )
+    .await?;
 
     let response = PopulateIndexResponse {
         total,
