@@ -1,4 +1,4 @@
-use redis::{FromRedisValue, RedisResult, ToRedisArgs};
+use redis::{FromRedisValue, RedisResult, ToRedisArgs, ToSingleRedisArg};
 
 use crate::{
     firebase::Firebase,
@@ -38,7 +38,7 @@ impl FcmService for Firebase {
 impl RedisConnection for redis::aio::MultiplexedConnection {
     async fn hget<F, RV>(&mut self, key: &str, field: F) -> RedisResult<RV>
     where
-        F: ToRedisArgs + Send + Sync,
+        F: ToSingleRedisArg + Send + Sync,
         RV: FromRedisValue + Send + Sync,
     {
         let mut conn = self.clone();
@@ -47,12 +47,31 @@ impl RedisConnection for redis::aio::MultiplexedConnection {
 
     async fn hset<K, F, V>(&mut self, key: K, field: F, value: V) -> RedisResult<bool>
     where
-        K: ToRedisArgs + Send + Sync,
-        F: ToRedisArgs + Send + Sync,
-        V: ToRedisArgs + Send + Sync,
+        K: ToSingleRedisArg + Send + Sync,
+        F: ToSingleRedisArg + Send + Sync,
+        V: ToSingleRedisArg + Send + Sync,
     {
         let mut conn = self.clone();
         redis::AsyncCommands::hset(&mut conn, key, field, value).await
+    }
+}
+
+impl RedisConnection for redis::aio::ConnectionManager {
+    async fn hget<F, RV>(&mut self, key: &str, field: F) -> RedisResult<RV>
+    where
+        F: ToSingleRedisArg + Send + Sync,
+        RV: FromRedisValue + Send + Sync,
+    {
+        redis::AsyncCommands::hget(self, key, field).await
+    }
+
+    async fn hset<K, F, V>(&mut self, key: K, field: F, value: V) -> RedisResult<bool>
+    where
+        K: ToSingleRedisArg + Send + Sync,
+        F: ToSingleRedisArg + Send + Sync,
+        V: ToSingleRedisArg + Send + Sync,
+    {
+        redis::AsyncCommands::hset(self, key, field, value).await
     }
 }
 

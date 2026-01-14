@@ -6,6 +6,7 @@ use yral_canisters_client::{
 };
 
 use crate::{
+    dragonfly::{format_to_dragonfly_key, DragonflyPool, YRAL_METADATA_KEY_PREFIX},
     state::RedisPool,
     utils::error::{Error, Result},
 };
@@ -64,6 +65,7 @@ pub async fn get_user_principal_canister_list_v2(
 pub async fn populate_canister_to_principal_index(
     agent: &Agent,
     redis_pool: &RedisPool,
+    dragonfly_pool: &DragonflyPool,
 ) -> Result<(usize, usize)> {
     let user_principal_canister_list = get_user_principal_canister_list_v2(agent).await?;
 
@@ -73,6 +75,7 @@ pub async fn populate_canister_to_principal_index(
 
     // Process in batches of 1000
     let batch_size = 1000;
+    let mut dragonfly_conn = dragonfly_pool.get().await?;
 
     for batch in user_principal_canister_list.chunks(batch_size) {
         // Convert to format needed for Redis
@@ -95,6 +98,22 @@ pub async fn populate_canister_to_principal_index(
             Err(e) => {
                 log::error!("Failed to insert batch: {}", e);
                 failed += batch.len();
+            }
+        }
+
+        match dragonfly_conn
+            .hset_multiple::<_, _, _, ()>(
+                &format_to_dragonfly_key(YRAL_METADATA_KEY_PREFIX, CANISTER_TO_PRINCIPAL_KEY),
+                &items,
+            )
+            .await
+        {
+            Ok(_) => {
+                // Successfully inserted into Dragonfly
+            }
+            Err(e) => {
+                log::error!("Failed to insert batch into Dragonfly: {}", e);
+                // Note: We don't increment failed here as we already counted it above
             }
         }
     }

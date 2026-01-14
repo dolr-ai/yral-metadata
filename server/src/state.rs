@@ -1,14 +1,15 @@
-use ic_agent::identity::Secp256k1Identity;
-use ic_agent::Agent;
-
 use crate::auth::init_jwt;
 use crate::auth::JwtDetails;
 use crate::config::AppConfig;
+use crate::dragonfly::{
+    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis, DragonflyPool,
+};
 use crate::firebase::Firebase;
 use crate::qstash::QStashState;
 use crate::utils::error::{Error, Result};
 use crate::utils::yral_auth_jwt::YralAuthJwt;
-
+use ic_agent::identity::Secp256k1Identity;
+use ic_agent::Agent;
 pub type RedisPool = bb8::Pool<bb8_redis::RedisConnectionManager>;
 
 pub static IC_AGENT_URL: &str = "https://ic0.app";
@@ -16,6 +17,7 @@ pub static IC_AGENT_URL: &str = "https://ic0.app";
 #[derive(Clone)]
 pub struct AppState {
     pub redis: RedisPool,
+    pub dragonfly_redis: DragonflyPool,
     pub jwt_details: JwtDetails,
     pub yral_auth_jwt: YralAuthJwt,
     pub firebase: Firebase,
@@ -25,8 +27,17 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(app_config: &AppConfig) -> Result<Self> {
+        let ca_cert_bytes = get_ca_cert_pem()?;
+        let client_cert_bytes = get_client_cert_pem()?;
+        let client_key_bytes = get_client_key_pem()?;
         Ok(AppState {
             redis: init_redis(app_config).await?,
+            dragonfly_redis: init_dragonfly_redis(
+                ca_cert_bytes,
+                client_cert_bytes,
+                client_key_bytes,
+            )
+            .await?,
             jwt_details: init_jwt(app_config)?,
             yral_auth_jwt: YralAuthJwt::init(app_config.yral_auth_public_key.clone())?,
             firebase: Firebase::new()

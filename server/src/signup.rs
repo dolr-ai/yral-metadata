@@ -1,5 +1,6 @@
 use crate::{
     api::METADATA_FIELD,
+    dragonfly::{format_to_dragonfly_key, DragonflyPool, YRAL_METADATA_KEY_PREFIX},
     notifications::traits::RedisConnection,
     services::error_wrappers::{ErrorWrapper, OkWrapper},
     state::{AppState, RedisPool},
@@ -52,9 +53,11 @@ pub async fn set_user_email(
     )?;
     let result = set_user_email_impl(
         &state.redis,
+        &state.dragonfly_redis,
         principal,
         req.payload.email,
         req.payload.already_signed_in,
+        YRAL_METADATA_KEY_PREFIX,
     )
     .await
     .map_err(|e| {
@@ -96,26 +99,35 @@ pub async fn set_signup_datetime(
         sentry::Level::Info,
     );
 
-    let res = set_signup_datetime_impl(&state.redis, principal, req.already_signed_in)
-        .await
-        .map_err(|e| {
-            crate::sentry_utils::capture_api_error(
-                &e,
-                "/signup/{user_principal}",
-                Some(&principal.to_text()),
-            );
-            e
-        })?;
+    let res = set_signup_datetime_impl(
+        &state.redis,
+        &state.dragonfly_redis,
+        principal,
+        req.already_signed_in,
+        YRAL_METADATA_KEY_PREFIX,
+    )
+    .await
+    .map_err(|e| {
+        crate::sentry_utils::capture_api_error(
+            &e,
+            "/signup/{user_principal}",
+            Some(&principal.to_text()),
+        );
+        e
+    })?;
     Ok(Json(Ok(res)))
 }
 
 pub async fn set_user_email_impl(
     redis_pool: &RedisPool,
+    dragonfly_redis: &DragonflyPool,
     user_principal: Principal,
     email: String,
     already_signed_in: bool,
+    key_prefix: &str,
 ) -> Result<UserMetadata> {
     let user_key = user_principal.to_text();
+    let formatted_user_key = format_to_dragonfly_key(key_prefix, &user_key);
 
     // 1. Confirm the email is valid
     if !is_valid_email(&email) {
@@ -124,6 +136,7 @@ pub async fn set_user_email_impl(
 
     // 2. Get Redis connection
     let mut conn = redis_pool.get().await?;
+    let mut dragonfly_conn = dragonfly_redis.get().await?;
 
     // 3. Fetch user metadata from Redis
     let meta_raw: Option<Box<[u8]>> = conn.hget(&user_key, METADATA_FIELD).await?;
@@ -140,12 +153,18 @@ pub async fn set_user_email_impl(
         meta.email = Some(email);
         let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
         let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;
+        let _: bool = dragonfly_conn
+            .hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
+            .await?;
     }
 
     if !already_signed_in && meta.signup_at.is_none() {
         meta.signup_at = Some(chrono::Utc::now().timestamp());
         let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
         let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;
+        let _: bool = dragonfly_conn
+            .hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
+            .await?;
     }
 
     Ok(meta)
@@ -153,13 +172,17 @@ pub async fn set_user_email_impl(
 
 pub async fn set_signup_datetime_impl(
     redis_pool: &RedisPool,
+    dragonfly_redis: &DragonflyPool,
     user_principal: Principal,
     already_signed_id: bool,
+    key_prefix: &str,
 ) -> Result<UserMetadata> {
     let user_key = user_principal.to_text();
+    let formatted_user_key = format_to_dragonfly_key(key_prefix, &user_key);
 
     // 2. Get Redis connection
     let mut conn = redis_pool.get().await?;
+    let mut dragonfly_conn = dragonfly_redis.get().await?;
 
     // 3. Fetch user metadata from Redis
     let meta_raw: Option<Box<[u8]>> = conn.hget(&user_key, METADATA_FIELD).await?;
@@ -180,6 +203,9 @@ pub async fn set_signup_datetime_impl(
         }
         let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
         let _: bool = conn.hset(&user_key, METADATA_FIELD, &updated_meta).await?;
+        let _: bool = dragonfly_conn
+            .hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
+            .await?;
     }
 
     Ok(meta)

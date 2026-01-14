@@ -4,10 +4,11 @@ pub mod test_helpers {
     use std::collections::HashSet;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
-    use std::thread;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{fs, thread};
     use types::{SetUserMetadataReqMetadata, UserMetadata};
 
+    use crate::dragonfly::DragonflyPool;
     use crate::{
         state::{init_redis_with_url, RedisPool},
         utils::error::Result,

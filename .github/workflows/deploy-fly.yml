@@ -1,0 +1,67 @@
+# keeping fly deployment yml, if required.
+name: Deploy to Fly on push to main
+on:
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - master
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      publish-artifact: true
+    secrets: inherit
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-musl
+      - run: chmod +x target/x86_64-unknown-linux-musl/release/yral-metadata-server
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Set secret tokens
+        run: |
+          flyctl secrets set REDIS_URL=$REDIS_URL --app "yral-metadata" --stage
+          flyctl secrets set JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" --app "yral-metadata" --stage
+          flyctl secrets set YRAL_METADATA_USER_NOTIFICATION_API_KEY="$YRAL_METADATA_USER_NOTIFICATION_API_KEY" --app "yral-metadata" --stage
+          flyctl secrets set CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY="$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY" --app "yral-metadata" --stage
+          flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID="$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID" --app "yral-metadata" --stage
+          flyctl secrets set BACKEND_ADMIN_IDENTITY="$BACKEND_ADMIN_IDENTITY" --app "yral-metadata" --stage
+          flyctl secrets set YRAL_AUTH_PUBLIC_KEY="$YRAL_AUTH_PUBLIC_KEY" --app "yral-metadata" --stage
+          flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID="$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID" --app "yral-metadata" --stage
+          flyctl secrets set QSTASH_CURRENT_SIGNING_KEY="$QSTASH_CURRENT_SIGNING_KEY" --app "yral-metadata" --stage
+          flyctl secrets set QSTASH_NEXT_SIGNING_KEY="$QSTASH_NEXT_SIGNING_KEY" --app "yral-metadata" --stage
+          flyctl secrets set DRAGONFLY_PASSWORD="$DRAGONFLY_PASSWORD" --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_HOSTS="$DRAGONFLY_HOSTS" --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_CA_CERT="$DRAGONFLY_CA_CERT" --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_CLIENT_CERT="$DRAGONFLY_CLIENT_CERT" --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_CLIENT_KEY="$DRAGONFLY_CLIENT_KEY" --app "$APP_NAME" --stage
+
+        env:
+          REDIS_URL: ${{ secrets.METADATA_FLY_IO_UPSTASH_REDIS_DATABASE_CONNECTION_STRING }}
+          FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
+          JWT_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_PUBLIC_KEY }}
+          YRAL_METADATA_USER_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_USER_NOTIFICATION_API_KEY }}
+          GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID }}
+          GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
+          CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
+          BACKEND_ADMIN_IDENTITY: ${{ secrets.YRAL_APP_ADMIN_AND_PROPOSAL_SUBMITTER_DFX_IDENTITY_SECP_PRIVATE_KEY }}
+          YRAL_AUTH_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_JWT_VERIFY_PUBLIC_KEY }}
+          QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
+          QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
+          DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
+          DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
+          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT}}
+          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT}}
+          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY}}
+          
+      - name: Deploy a docker container to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}

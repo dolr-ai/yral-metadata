@@ -165,24 +165,8 @@ pub enum RedisErrorKind {
 impl From<redis::ErrorKind> for RedisErrorKind {
     fn from(e: redis::ErrorKind) -> Self {
         match e {
-            redis::ErrorKind::ResponseError => RedisErrorKind::ResponseError,
-            redis::ErrorKind::ParseError => RedisErrorKind::ParseError,
             redis::ErrorKind::AuthenticationFailed => RedisErrorKind::AuthenticationFailed,
-            redis::ErrorKind::TypeError => RedisErrorKind::TypeError,
-            redis::ErrorKind::ExecAbortError => RedisErrorKind::ExecAbortError,
-            redis::ErrorKind::BusyLoadingError => RedisErrorKind::BusyLoadingError,
-            redis::ErrorKind::NoScriptError => RedisErrorKind::NoScriptError,
             redis::ErrorKind::InvalidClientConfig => RedisErrorKind::InvalidClientConfig,
-            redis::ErrorKind::Moved => RedisErrorKind::Moved,
-            redis::ErrorKind::Ask => RedisErrorKind::Ask,
-            redis::ErrorKind::TryAgain => RedisErrorKind::TryAgain,
-            redis::ErrorKind::ClusterDown => RedisErrorKind::ClusterDown,
-            redis::ErrorKind::CrossSlot => RedisErrorKind::CrossSlot,
-            redis::ErrorKind::MasterDown => RedisErrorKind::MasterDown,
-            redis::ErrorKind::IoError => RedisErrorKind::IoError,
-            redis::ErrorKind::ClientError => RedisErrorKind::ClientError,
-            redis::ErrorKind::ExtensionError => RedisErrorKind::ExtensionError,
-            redis::ErrorKind::ReadOnly => RedisErrorKind::ReadOnly,
             redis::ErrorKind::MasterNameNotFoundBySentinel => {
                 RedisErrorKind::MasterNameNotFoundBySentinel
             }
@@ -193,7 +177,6 @@ impl From<redis::ErrorKind> for RedisErrorKind {
             redis::ErrorKind::ClusterConnectionNotFound => {
                 RedisErrorKind::ClusterConnectionNotFound
             }
-            redis::ErrorKind::NotBusy => RedisErrorKind::NotBusy,
             _ => RedisErrorKind::Unknown,
         }
     }

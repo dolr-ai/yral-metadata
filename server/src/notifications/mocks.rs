@@ -1,5 +1,6 @@
 use crate::{
     api::METADATA_FIELD,
+    dragonfly::{format_to_dragonfly_key, TEST_KEY_PREFIX},
     firebase::notifications::utils::{
         Operation as FirebaseUtilOperation, Request as FirebaseUtilRequest,
     },
@@ -101,6 +102,12 @@ impl MockRedisConnection {
         self.users_data
             .insert(user_metadata.user_canister_id.to_text(), user_metadata);
     }
+    pub fn add_user_to_dragonfly(&mut self, user_metadata: ActualUserMetadata) {
+        self.users_data.insert(
+            format_to_dragonfly_key(TEST_KEY_PREFIX, &user_metadata.user_canister_id.to_text()),
+            user_metadata,
+        );
+    }
 }
 
 impl RedisConnection for MockRedisConnection {
@@ -114,7 +121,7 @@ impl RedisConnection for MockRedisConnection {
             String::from_utf8_lossy(field_bytes.get(0).map_or(&Vec::new(), |v| v)).into_owned();
 
         if field_str != METADATA_FIELD {
-            return Ok(RV::from_redis_value(&redis::Value::Nil)?); // Field mismatch, return nil
+            return Ok(RV::from_redis_value(redis::Value::Nil)?); // Field mismatch, return nil
         }
 
         match self.users_data.get(key) {
@@ -122,14 +129,15 @@ impl RedisConnection for MockRedisConnection {
                 // Serialize to JSON bytes, then wrap in redis::Value::Data
                 let serialized_data = serde_json::to_vec(user_metadata).map_err(|e| {
                     RedisError::from((
-                        redis::ErrorKind::TypeError,
+                        redis::ErrorKind::Parse,
                         "Mock serialization error",
                         e.to_string(),
                     ))
                 })?;
-                RV::from_redis_value(&redis::Value::Data(serialized_data))
+                RV::from_redis_value(redis::Value::BulkString(serialized_data))
+                    .map_err(|e| RedisError::from(e))
             }
-            None => Ok(RV::from_redis_value(&redis::Value::Nil)?), // Key not found, return nil
+            None => Ok(RV::from_redis_value(redis::Value::Nil)?), // Key not found, return nil
         }
     }
 
@@ -149,7 +157,7 @@ impl RedisConnection for MockRedisConnection {
 
         if field_str != METADATA_FIELD {
             return Err(RedisError::from((
-                redis::ErrorKind::TypeError,
+                redis::ErrorKind::Parse,
                 "Mock hset: Invalid field argument",
             )));
         }
@@ -157,7 +165,7 @@ impl RedisConnection for MockRedisConnection {
         let value_args = value.to_redis_args();
         let value_bytes = value_args.get(0).ok_or_else(|| {
             RedisError::from((
-                redis::ErrorKind::TypeError,
+                redis::ErrorKind::Parse,
                 "Mock hset: Value is not valid bytes",
             ))
         })?;
@@ -165,7 +173,7 @@ impl RedisConnection for MockRedisConnection {
         let user_metadata: ActualUserMetadata =
             serde_json::from_slice(value_bytes).map_err(|e| {
                 RedisError::from((
-                    redis::ErrorKind::TypeError,
+                    redis::ErrorKind::Parse,
                     "Mock hset: Deserialization error",
                     e.to_string(),
                 ))
