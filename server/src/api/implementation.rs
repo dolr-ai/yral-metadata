@@ -306,7 +306,6 @@ pub async fn delete_metadata_bulk_impl(
 
     for chunk in formatted_keys.chunks(chunk_size) {
         let res: usize = dragonfly_conn.del(chunk).await?;
-        failed += chunk.len() - res as usize;
     }
 
     // Also remove from reverse index
