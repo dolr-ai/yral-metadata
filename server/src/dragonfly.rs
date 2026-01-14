@@ -143,7 +143,7 @@ pub async fn init_dragonfly_redis_for_test() -> Result<DragonflyPool> {
 
     let mut sentinel_client = builder.build().expect("Failed to build SentinelClient");
     let conn_man = RedisManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
-     let mut conn = conn_man.get().await.expect("failed to get connection");
+    let mut conn = conn_man.get().await.expect("failed to get connection");
 
     let pong: String = redis::cmd("PING")
         .query_async(&mut conn)
@@ -197,7 +197,7 @@ impl RedisManager {
     // Get a cloned connection for use (cheap clone, shares underlying connection)
     pub async fn get(&self) -> Result<MultiplexedConnection, redis::RedisError> {
         let mut attempts = 0;
-        let max_attempts = 3;
+        let max_attempts = 10;
 
         loop {
             attempts += 1;
@@ -281,6 +281,6 @@ mod tests {
         // Cleanup
         let _: () = conn.del("test:hello").await.expect("DEL failed");
 
-        println!("Kvrocks cluster connection test passed!");
+        println!("dragonfly cluster connection test passed!");
     }
 }
