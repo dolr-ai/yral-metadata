@@ -72,8 +72,15 @@ async fn test_set_user_metadata_updates_existing() {
     let dragonfly_pool = init_dragonfly_redis_for_test()
         .await
         .expect("Dragonfly pool");
+    let mut conn = redis_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get().await.unwrap();
     let user_principal = generate_unique_test_principal();
     let unique_key = generate_unique_test_key_prefix();
+
+    let _: () = conn.del(username_info_key("originalname")).await.unwrap();
+    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, "originalname")).await.unwrap();
+    let _: () = conn.del(username_info_key("updatedname")).await.unwrap();
+    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, "updatedname")).await.unwrap();
 
     // First request
     let metadata1 = create_test_metadata_req(200, "originalname");
@@ -104,11 +111,6 @@ async fn test_set_user_metadata_updates_existing() {
     assert!(result.is_ok());
 
     // Check updated data
-    let mut conn = redis_pool.get().await.unwrap();
-    let dragonfly_pool = init_dragonfly_redis_for_test()
-        .await
-        .expect("Dragonfly pool");
-    let mut dconn = dragonfly_pool.get().await.unwrap();
     let stored: Option<Vec<u8>> = conn
         .hget(user_principal.to_text(), METADATA_FIELD)
         .await
