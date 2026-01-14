@@ -26,6 +26,10 @@ pub async fn init_dragonfly_redis(
     client_cert_bytes: Vec<u8>,
     client_key_bytes: Vec<u8>,
 ) -> Result<DragonflyPool> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .ok();
+
     let tls_certs = redis::TlsCertificates {
         client_tls: Some(ClientTlsConfig {
             client_cert: client_cert_bytes,
@@ -71,11 +75,25 @@ pub async fn init_dragonfly_redis(
 
     let mut sentinel_client = builder.build().expect("Failed to build SentinelClient");
     let conn_man = RedisManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
+
+     let mut conn = conn_man.get().await.expect("failed to get connection");
+
+    let pong: String = redis::cmd("PING")
+        .query_async(&mut conn)
+        .await.expect("failed to get reponse");
+
+    if pong != "PONG" {
+        return Err(Error::Unknown(String::from("failed to get reponse of ping")))
+    }
     Ok(Arc::new(conn_man))
 }
 
 // to create client for testing env
 pub async fn init_dragonfly_redis_for_test() -> Result<DragonflyPool> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .ok();
+
     let ca_bytes = get_ca_cert_pem().expect("failed to read ca-cert bytes");
     let cert_bytes = get_client_cert_pem().expect("failed to read client cert bytes");
     let key_bytes = get_client_key_pem().expect("failed to read client key bytes");
@@ -125,6 +143,16 @@ pub async fn init_dragonfly_redis_for_test() -> Result<DragonflyPool> {
 
     let mut sentinel_client = builder.build().expect("Failed to build SentinelClient");
     let conn_man = RedisManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
+     let mut conn = conn_man.get().await.expect("failed to get connection");
+
+    let pong: String = redis::cmd("PING")
+        .query_async(&mut conn)
+        .await.expect("failed to get reponse");
+
+    if pong != "PONG" {
+        return Err(Error::Unknown(String::from("failed to get reponse of ping")))
+    }
+    
     Ok(Arc::new(conn_man))
 }
 
