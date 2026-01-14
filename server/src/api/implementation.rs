@@ -54,7 +54,7 @@ async fn set_metadata_for_username(
     let d_inserted: usize = dragonfly_conn
         .hset_nx(&formatted_key, METADATA_FIELD, &meta_raw)
         .await?;
-    if inserted != 1 && d_inserted != 1 {
+    if inserted != 1 {
         return Err(Error::DuplicateUsername);
     }
 
@@ -206,7 +206,7 @@ pub async fn get_user_metadata_impl(
     key_prefix: &str,
 ) -> Result<GetUserMetadataV2Res> {
     let mut conn = redis_pool.get().await?;
-    let mut dragonfly_conn = dragonfly_pool.get().await?;
+    //let mut dragonfly_conn = dragonfly_pool.get().await?;
     let user_principal = if let Ok(principal) = Principal::from_text(username_or_principal.as_str())
     {
         principal
