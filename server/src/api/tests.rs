@@ -171,7 +171,7 @@ async fn test_get_user_metadata_existing() {
     let dragonfly_pool = init_dragonfly_redis_for_test()
         .await
         .expect("Dragonfly pool");
-    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
+    let mut dconn = dragonfly_pool.get().await.unwrap();
     let meta_bytes = serde_json::to_vec(&test_metadata).unwrap();
     let _: () = conn
         .hset(user_principal.to_text(), METADATA_FIELD, &meta_bytes)
@@ -243,7 +243,7 @@ async fn test_delete_metadata_bulk() {
 
     // Store test data for each user
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
+    let mut dconn = dragonfly_pool.get().await.unwrap();
     for (i, user) in users.iter().enumerate() {
         let metadata = create_test_user_metadata(5 + i as u64, 500 + i as u64);
         let meta_bytes = serde_json::to_vec(&metadata).unwrap();
@@ -420,7 +420,7 @@ async fn test_get_user_metadata_bulk_multiple_users() {
 
     // Store test data for some users (not all)
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
+    let mut dconn = dragonfly_pool.get().await.unwrap();
     let metadata1 = create_test_user_metadata(20, 2000);
     let meta_bytes1 = serde_json::to_vec(&metadata1).unwrap();
     let _: () = conn
