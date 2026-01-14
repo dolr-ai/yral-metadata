@@ -1,6 +1,6 @@
 use super::implementation::*;
 use crate::{
-    dragonfly::{init_dragonfly_redis_for_test, DragonflyPool, TEST_KEY_PREFIX},
+    dragonfly::{DragonflyPool, TEST_KEY_PREFIX, format_to_dragonfly_key, init_dragonfly_redis_for_test},
     test_utils::test_helpers::*,
 };
 use candid::Principal;
@@ -459,6 +459,7 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
 
     // Store test data
     let mut conn = redis_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get().await.unwrap();
     for (i, user) in users.iter().enumerate() {
         let metadata = create_test_user_metadata(i as u64, i as u64);
         let meta_bytes = serde_json::to_vec(&metadata).unwrap();
@@ -466,6 +467,7 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
             .hset(user.to_text(), METADATA_FIELD, &meta_bytes)
             .await
             .unwrap();
+        let _: () = dconn.hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()), METADATA_FIELD, &meta_bytes).await.unwrap();
     }
 
     // Execute

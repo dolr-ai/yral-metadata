@@ -354,12 +354,13 @@ pub async fn get_user_metadata_bulk_impl(
     let futures_stream = stream::iter(req.users.iter().cloned())
         .map(|principal| {
             let redis_pool = redis_pool.clone();
+            let dragonfly_pool = dragonfly_pool.clone();
             async move {
                 let user = principal.to_text();
 
                 // Get a new connection for this operation
                 let mut conn = redis_pool.get().await?;
-                let mut dragonfly_conn = dragonfly_pool.get().await?;
+                let mut dconn = dragonfly_pool.get().await?;
                 let meta_raw: Option<Box<[u8]>> = conn.hget(&user, METADATA_FIELD).await?;
 
                 let metadata = match meta_raw {
