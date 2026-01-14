@@ -241,7 +241,7 @@ async fn test_delete_metadata_bulk() {
 
     // Store test data for each user
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
     for (i, user) in users.iter().enumerate() {
         let metadata = create_test_user_metadata(5 + i as u64, 500 + i as u64);
         let meta_bytes = serde_json::to_vec(&metadata).unwrap();
@@ -356,7 +356,7 @@ async fn test_delete_metadata_bulk_large_batch() {
     // Store test data concurrently using futures
     use futures::future::join_all;
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
 
     let tasks: Vec<_> = users
         .iter()
@@ -364,13 +364,15 @@ async fn test_delete_metadata_bulk_large_batch() {
         .map(|(i, user)| {
             let user_key = user.to_text();
             let mut conn = conn.clone();
+            let mut dconn = dconn.clone();
             async move {
                 let metadata = create_test_user_metadata(i as u64, i as u64);
                 let meta_bytes = serde_json::to_vec(&metadata).unwrap();
                 let _: () = conn
-                    .hset(user_key, METADATA_FIELD, &meta_bytes)
+                    .hset(&user_key, METADATA_FIELD, &meta_bytes)
                     .await
                     .unwrap();
+                let _: () = dconn.hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &user_key), METADATA_FIELD, &meta_bytes).await.unwrap();
             }
         })
         .collect();
@@ -501,7 +503,7 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
 
     // Store test data
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
     for (i, user) in users.iter().enumerate() {
         let metadata = create_test_user_metadata(i as u64, i as u64);
         let meta_bytes = serde_json::to_vec(&metadata).unwrap();

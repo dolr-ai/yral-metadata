@@ -214,6 +214,12 @@ impl RedisManager {
             }
         }
     }
+
+    pub async fn get_dedicated(&self) -> Result<MultiplexedConnection, redis::RedisError> {
+        let client = self.sentinel_client.write().await.get_client()?;
+        let new_conn = client.get_multiplexed_async_connection().await?;
+        Ok(new_conn)
+    }
 }
 
 pub fn normalize_pem(pem: String) -> Vec<u8> {
