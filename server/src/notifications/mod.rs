@@ -20,7 +20,7 @@ pub mod traits;
 
 use crate::{
     api::METADATA_FIELD,
-    consts::{format_to_dragonfly_key, YRAL_METADATA_KEY_PREFIX},
+    dragonfly::{format_to_dragonfly_key, YRAL_METADATA_KEY_PREFIX},
     services::error_wrappers::{ErrorWrapper, OkWrapper},
     state::AppState,
     utils::error::{Error, Result},

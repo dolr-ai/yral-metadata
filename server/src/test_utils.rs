@@ -1,8 +1,6 @@
 #[cfg(test)]
 pub mod test_helpers {
     use candid::Principal;
-    use redis::aio::ConnectionManager;
-    use redis::ClientTlsConfig;
     use std::collections::HashSet;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
@@ -10,7 +8,7 @@ pub mod test_helpers {
     use std::{fs, thread};
     use types::{SetUserMetadataReqMetadata, UserMetadata};
 
-    use crate::state::DragonflyPool;
+    use crate::dragonfly::DragonflyPool;
     use crate::{
         state::{init_redis_with_url, RedisPool},
         utils::error::Result,

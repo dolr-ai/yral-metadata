@@ -1,7 +1,6 @@
 use super::implementation::*;
 use crate::{
-    consts::TEST_KEY_PREFIX,
-    state::{init_dragonfly_redis_for_test, DragonflyPool},
+    dragonfly::{init_dragonfly_redis_for_test, DragonflyPool, TEST_KEY_PREFIX},
     test_utils::test_helpers::*,
 };
 use candid::Principal;

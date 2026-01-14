@@ -6,8 +6,8 @@ use yral_canisters_client::{
 };
 
 use crate::{
-    consts::{format_to_dragonfly_key, YRAL_METADATA_KEY_PREFIX},
-    state::{DragonflyPool, RedisPool},
+    dragonfly::{format_to_dragonfly_key, DragonflyPool, YRAL_METADATA_KEY_PREFIX},
+    state::RedisPool,
     utils::error::{Error, Result},
 };
 

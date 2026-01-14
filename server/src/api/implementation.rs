@@ -20,8 +20,8 @@ use types::{
 };
 
 use crate::{
-    consts::{format_to_dragonfly_key},
-    state::{DragonflyPool, RedisPool},
+    dragonfly::{format_to_dragonfly_key, DragonflyPool},
+    state::RedisPool,
     utils::error::{Error, Result},
 };
 

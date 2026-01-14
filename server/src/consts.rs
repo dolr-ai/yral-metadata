@@ -9,10 +9,3 @@ pub static CLAIMS: Lazy<Claims> = Lazy::new(|| Claims {
 });
 
 pub const YRAL_AUTH_V2_ACCESS_TOKEN_ISS: &str = "https://auth.yral.com";
-
-pub const YRAL_METADATA_KEY_PREFIX: &str = "yral-metadata";
-pub const TEST_KEY_PREFIX: &str = "test";
-
-pub fn format_to_dragonfly_key(key_prefix: &str, key: &str) -> String {
-    format!("{}:{}", key_prefix, key)
-}

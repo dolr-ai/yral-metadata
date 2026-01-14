@@ -1,9 +1,9 @@
 use crate::{
     api::METADATA_FIELD,
-    consts::{format_to_dragonfly_key, YRAL_METADATA_KEY_PREFIX},
+    dragonfly::{format_to_dragonfly_key, DragonflyPool, YRAL_METADATA_KEY_PREFIX},
     notifications::traits::RedisConnection,
     services::error_wrappers::{ErrorWrapper, OkWrapper},
-    state::{AppState, DragonflyPool, RedisPool},
+    state::{AppState, RedisPool},
     utils::error::{Error, Result},
 };
 use axum::{

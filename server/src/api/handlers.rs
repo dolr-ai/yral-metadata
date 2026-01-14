@@ -18,7 +18,7 @@ use crate::{
         get_user_metadata_bulk_impl, get_user_metadata_impl, set_user_metadata_impl,
         set_user_metadata_using_admin_identity_impl,
     },
-    consts::YRAL_METADATA_KEY_PREFIX,
+    dragonfly::YRAL_METADATA_KEY_PREFIX,
     services::error_wrappers::{ErrorWrapper, NullOk, OkWrapper},
     state::{self, AppState},
     utils::{

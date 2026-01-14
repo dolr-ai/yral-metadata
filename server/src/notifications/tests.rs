@@ -1,6 +1,6 @@
 mod tests {
     use crate::notifications::traits::RedisConnection;
-    use crate::{api::METADATA_FIELD, consts::TEST_KEY_PREFIX}; // Import METADATA_FIELD
+    use crate::{api::METADATA_FIELD, dragonfly::TEST_KEY_PREFIX}; // Import METADATA_FIELD
     use axum::Json;
     use tracing_subscriber::fmt::writer::Tee;
     use types::{

@@ -1,6 +1,6 @@
 use crate::{
     api::METADATA_FIELD,
-    consts::{format_to_dragonfly_key, TEST_KEY_PREFIX},
+    dragonfly::{format_to_dragonfly_key, TEST_KEY_PREFIX},
     firebase::notifications::utils::{
         Operation as FirebaseUtilOperation, Request as FirebaseUtilRequest,
     },
