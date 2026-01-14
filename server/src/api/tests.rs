@@ -35,6 +35,7 @@ async fn test_set_user_metadata_valid_request() {
 
     // Check data was stored
     let mut conn = redis_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get().await.unwrap();
     let stored: Option<Vec<u8>> = conn
         .hget(user_principal.to_text(), METADATA_FIELD)
         .await
@@ -57,8 +58,11 @@ async fn test_set_user_metadata_valid_request() {
         .hdel(unique_key.clone(), metadata.user_canister_id.to_text())
         .await
         .unwrap();
-    let _: () = conn.del(unique_key).await.unwrap();
+    let _: () = dconn.hdel(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),metadata.user_canister_id.to_text()).await.unwrap();
+    let _: () = conn.del(unique_key.clone()).await.unwrap();
+    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key)).await.unwrap();
     let _: () = conn.del(username_info_key(user_name)).await.unwrap();
+    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key(user_name))).await.unwrap();
 }
 
 #[tokio::test]
@@ -433,7 +437,7 @@ async fn test_get_user_metadata_bulk_multiple_users() {
         .await
         .unwrap();
     let _: () = dconn
-        .hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &users[2].to_text()), METADATA_FIELD, &meta_bytes1)
+        .hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &users[2].to_text()), METADATA_FIELD, &meta_bytes2)
         .await
         .unwrap();
 
