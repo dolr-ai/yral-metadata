@@ -34,8 +34,8 @@ pub async fn init_dragonfly_redis() -> Result<DragonflyPool> {
         root_cert: Some(ca_bytes),
     };
 
-    let hosts_str = std::env::var("DRAGONFLY_HOST")
-        .expect("DRAGONFLY_HOST environment variable not set")
+    let hosts_str = std::env::var("DRAGONFLY_HOSTS")
+        .expect("DRAGONFLY_HOSTS environment variable not set")
         .trim()
         .to_string();
 
@@ -88,8 +88,8 @@ pub async fn init_dragonfly_redis_for_test() -> Result<DragonflyPool> {
         root_cert: Some(ca_bytes),
     };
 
-    let hosts_str = std::env::var("DRAGONFLY_HOST")
-        .expect("DRAGONFLY_HOST environment variable not set")
+    let hosts_str = std::env::var("DRAGONFLY_HOSTS")
+        .expect("DRAGONFLY_HOSTS environment variable not set")
         .trim()
         .to_string();
 

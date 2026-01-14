@@ -58,6 +58,11 @@ jobs:
           flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID="$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID" --app "$APP_NAME" --stage
           flyctl secrets set QSTASH_CURRENT_SIGNING_KEY="$QSTASH_CURRENT_SIGNING_KEY" --app "$APP_NAME" --stage
           flyctl secrets set QSTASH_NEXT_SIGNING_KEY="$QSTASH_NEXT_SIGNING_KEY" --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_PASSWORD="$DRAGONFLY_PASSWORD" --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_HOSTS="$DRAGONFLY_HOSTS" --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_CA_CERT="$DRAGONFLY_CA_CERT" --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_CLIENT_CERT="$DRAGONFLY_CLIENT_CERT" --app "$APP_NAME" --stage
+          flyctl secrets set DRAGONFLY_CLIENT_KEY="$DRAGONFLY_CLIENT_KEY" --app "$APP_NAME" --stage
 
           echo "Redeploying preview app to apply secrets..."
           flyctl deploy --app "$APP_NAME" --remote-only --detach
@@ -73,3 +78,8 @@ jobs:
           GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
           QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
           QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
+          DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
+          DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
+          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT}}
+          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT}}
+          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY}}
