@@ -8,7 +8,7 @@ pub mod test_helpers {
     use std::{fs, thread};
     use types::{SetUserMetadataReqMetadata, UserMetadata};
 
-    use crate::dragonfly::DragonflyPool;
+    use crate::dragonfly::{DragonflyPool, TEST_KEY_PREFIX};
     use crate::{
         state::{init_redis_with_url, RedisPool},
         utils::error::Result,
@@ -134,6 +134,20 @@ pub mod test_helpers {
         use redis::AsyncCommands;
 
         let mut conn = redis_pool.get().await?;
+        let pattern = format!("{}*", key_prefix);
+        let keys: Vec<String> = conn.keys(&pattern).await?;
+
+        if !keys.is_empty() {
+            let _: () = conn.del(keys).await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn cleanup_dragonfly_test_data(dragonfly_pool: &DragonflyPool, key_prefix: &str) -> Result<()> {
+         use redis::AsyncCommands;
+
+        let mut conn = dragonfly_pool.get().await?;
         let pattern = format!("{}*", key_prefix);
         let keys: Vec<String> = conn.keys(&pattern).await?;
 
