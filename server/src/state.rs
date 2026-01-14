@@ -1,7 +1,9 @@
 use crate::auth::init_jwt;
 use crate::auth::JwtDetails;
 use crate::config::AppConfig;
-use crate::dragonfly::{init_dragonfly_redis, DragonflyPool};
+use crate::dragonfly::{
+    get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis, DragonflyPool,
+};
 use crate::firebase::Firebase;
 use crate::qstash::QStashState;
 use crate::utils::error::{Error, Result};
@@ -25,9 +27,17 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(app_config: &AppConfig) -> Result<Self> {
+        let ca_cert_bytes = get_ca_cert_pem()?;
+        let client_cert_bytes = get_client_cert_pem()?;
+        let client_key_bytes = get_client_key_pem()?;
         Ok(AppState {
             redis: init_redis(app_config).await?,
-            dragonfly_redis: init_dragonfly_redis().await?,
+            dragonfly_redis: init_dragonfly_redis(
+                ca_cert_bytes,
+                client_cert_bytes,
+                client_key_bytes,
+            )
+            .await?,
             jwt_details: init_jwt(app_config)?,
             yral_auth_jwt: YralAuthJwt::init(app_config.yral_auth_public_key.clone())?,
             firebase: Firebase::new()

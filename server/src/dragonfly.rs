@@ -21,17 +21,17 @@ pub fn format_to_dragonfly_key(key_prefix: &str, key: &str) -> String {
     format!("{}:{}", key_prefix, key)
 }
 
-pub async fn init_dragonfly_redis() -> Result<DragonflyPool> {
-    let ca_bytes = get_ca_cert_pem().expect("failed to read ca-cert bytes");
-    let cert_bytes = get_client_cert_pem().expect("failed to read client cert bytes");
-    let key_bytes = get_client_key_pem().expect("failed to read client key bytes");
-
+pub async fn init_dragonfly_redis(
+    ca_cert_bytes: Vec<u8>,
+    client_cert_bytes: Vec<u8>,
+    client_key_bytes: Vec<u8>,
+) -> Result<DragonflyPool> {
     let tls_certs = redis::TlsCertificates {
         client_tls: Some(ClientTlsConfig {
-            client_cert: cert_bytes,
-            client_key: key_bytes,
+            client_cert: client_cert_bytes,
+            client_key: client_key_bytes,
         }),
-        root_cert: Some(ca_bytes),
+        root_cert: Some(ca_cert_bytes),
     };
 
     let hosts_str = std::env::var("DRAGONFLY_HOSTS")
@@ -188,7 +188,7 @@ impl RedisManager {
     }
 }
 
-fn normalize_pem(pem: String) -> Vec<u8> {
+pub fn normalize_pem(pem: String) -> Vec<u8> {
     let normalized = pem
         .replace("\\n", "\n")
         .replace("\\r\\n", "\n")
@@ -204,20 +204,55 @@ fn normalize_pem(pem: String) -> Vec<u8> {
     }
 }
 
-fn get_ca_cert_pem() -> Result<Vec<u8>> {
+pub fn get_ca_cert_pem() -> Result<Vec<u8>> {
     Ok(normalize_pem(
         std::env::var("DRAGONFLY_CA_CERT").expect("DRAGONFLY_CA_CERT env var not set"),
     ))
 }
 
-fn get_client_cert_pem() -> Result<Vec<u8>> {
+pub fn get_client_cert_pem() -> Result<Vec<u8>> {
     Ok(normalize_pem(
         std::env::var("DRAGONFLY_CLIENT_CERT").expect("DRAGONFLY_CLIENT_CERT env var not set"),
     ))
 }
 
-fn get_client_key_pem() -> Result<Vec<u8>> {
+pub fn get_client_key_pem() -> Result<Vec<u8>> {
     Ok(normalize_pem(
         std::env::var("DRAGONFLY_CLIENT_KEY").expect("DRAGONFLY_CLIENT_KEY env var not set"),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use redis::AsyncCommands;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_dragonfly_connection() {
+        if std::env::var("DRAGONFLY_PASSWORD").is_err() {
+            println!("Skipping test: DRAGONFLY_PASSWORD not set");
+            return;
+        }
+
+        let client = init_dragonfly_redis_for_test()
+            .await
+            .expect("Failed to init dragonfly redis client");
+
+        // Get a connection from pool
+        let mut conn = client.get().await.expect("Failed to get Redis connection");
+
+        // Write
+        let _: () = conn.set("test:hello", "hi").await.expect("SET failed");
+
+        // Read
+        let result: Option<String> = conn.get("test:hello").await.expect("GET failed");
+
+        assert_eq!(result.as_deref(), Some("hi"), "Stored value should match");
+
+        // Cleanup
+        let _: () = conn.del("test:hello").await.expect("DEL failed");
+
+        println!("Kvrocks cluster connection test passed!");
+    }
 }
