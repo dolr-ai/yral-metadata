@@ -376,7 +376,7 @@ pub async fn get_user_metadata_bulk_impl(
                 Ok::<(Principal, GetUserMetadataRes), Error>((principal, metadata))
             }
         })
-        .buffer_unordered(10); // Process up to 10 requests concurrently
+        .buffer_unordered(5); // Process up to 5 requests concurrently
 
     // Collect all results into a HashMap
     let results: HashMap<Principal, GetUserMetadataRes> = futures_stream.try_collect().await?;
