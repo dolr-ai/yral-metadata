@@ -21,6 +21,7 @@ async fn test_set_user_metadata_valid_request() {
 
     let mut conn = redis_pool.get().await.unwrap();
     let mut dconn = dragonfly_pool.get().await.unwrap();
+    let _: () = conn.del(username_info_key(user_name)).await.unwrap();
     let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key(user_name))).await.unwrap();
 
     // Execute - using core implementation that skips signature verification
