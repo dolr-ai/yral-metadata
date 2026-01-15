@@ -1,20 +1,19 @@
 use crate::utils::error::{Error, Result};
-use redis::AsyncCommands;
+use bb8::{ManageConnection, Pool};
 use redis::aio::ConnectionLike;
 use redis::aio::MultiplexedConnection;
 use redis::sentinel::SentinelClient;
 use redis::sentinel::SentinelClientBuilder;
 use redis::sentinel::SentinelServerType;
+use redis::AsyncCommands;
 use redis::ClientTlsConfig;
 use redis::ConnectionAddr;
+use redis::RedisError;
 use std::fs;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use bb8::{Pool, ManageConnection};
-use redis::RedisError;
 pub type DragonflyPool = Pool<SentinelConnectionManager>;
-
 
 pub const REDIS_SENTINEL_PORT: u16 = 26379;
 pub const SENTINEL_SERVICE_NAME: &str = "mymaster";
@@ -79,7 +78,8 @@ pub async fn init_dragonfly_redis(
     builder = builder.set_client_to_redis_tls_mode(redis::TlsMode::Secure);
 
     let sentinel_client = builder.build().expect("Failed to build SentinelClient");
-    let conn_man = SentinelConnectionManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
+    let conn_man =
+        SentinelConnectionManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
 
     let pool = DragonflyPool::builder().build(conn_man).await?;
     Ok(pool)
@@ -139,80 +139,16 @@ pub async fn init_dragonfly_redis_for_test() -> Result<DragonflyPool> {
     builder = builder.set_client_to_redis_tls_mode(redis::TlsMode::Secure);
 
     let sentinel_client = builder.build().expect("Failed to build SentinelClient");
-    let conn_man = SentinelConnectionManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
+    let conn_man =
+        SentinelConnectionManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
 
     let pool = DragonflyPool::builder()
-    .max_size(50)
-    .connection_timeout(Duration::from_secs(10))
-    .build(conn_man).await?;
+        .max_size(50)
+        .connection_timeout(Duration::from_secs(10))
+        .build(conn_man)
+        .await?;
     Ok(pool)
 }
-
-// // Redis Manager with multiplexed connection
-// pub struct RedisManager {
-//     sentinel_client: Arc<RwLock<SentinelClient>>,
-//     master_name: String,
-//     connection: RwLock<Option<MultiplexedConnection>>,
-// }
-
-// impl RedisManager {
-//     pub fn new(
-//         sentinel_client: SentinelClient,
-//         master_name: String,
-//     ) -> Result<Self, redis::RedisError> {
-//         Ok(Self {
-//             sentinel_client: Arc::new(RwLock::new(sentinel_client)),
-//             master_name,
-//             connection: RwLock::new(None),
-//         })
-//     }
-
-//     // Get or refresh multiplexed connection
-//     async fn get_connection(&self) -> Result<MultiplexedConnection, redis::RedisError> {
-//         let mut conn_guard = self.connection.write().await;
-
-//         // Check if existing connection is still valid
-//         if let Some(ref mut conn) = *conn_guard {
-//             // Try a simple ping to verify connection
-//             if conn.req_packed_command(&redis::cmd("PING")).await.is_ok() {
-//                 return Ok(conn.clone());
-//             }
-//         }
-
-//         let client = self.sentinel_client.write().await.get_client()?;
-//         let new_conn = client.get_multiplexed_async_connection().await?;
-
-//         *conn_guard = Some(new_conn.clone());
-//         Ok(new_conn)
-//     }
-
-//     // Get a cloned connection for use (cheap clone, shares underlying connection)
-//     pub async fn get(&self) -> Result<MultiplexedConnection, redis::RedisError> {
-//         let mut attempts = 0;
-//         let max_attempts = 20;
-
-//         loop {
-//             attempts += 1;
-
-//             match self.get_connection().await {
-//                 Ok(conn) => return Ok(conn),
-//                 Err(e) if attempts < max_attempts => {
-//                     // Clear cached connection on error
-//                     *self.connection.write().await = None;
-//                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-//                     continue;
-//                 }
-//                 Err(e) => return Err(e),
-//             }
-//         }
-//     }
-
-//     pub async fn get_dedicated(&self) -> Result<MultiplexedConnection, redis::RedisError> {
-//         let client = self.sentinel_client.write().await.get_client()?;
-//         let new_conn = client.get_multiplexed_async_connection().await?;
-//         Ok(new_conn)
-//     }
-// }
 
 pub fn normalize_pem(pem: String) -> Vec<u8> {
     let normalized = pem
@@ -248,8 +184,6 @@ pub fn get_client_key_pem() -> Result<Vec<u8>> {
     ))
 }
 
-
-
 #[derive(Clone)]
 pub struct SentinelConnectionManager {
     sentinel_client: Arc<RwLock<SentinelClient>>, // Assuming this is your wrapper or redis::Sentinel
@@ -258,7 +192,7 @@ pub struct SentinelConnectionManager {
 
 impl SentinelConnectionManager {
     pub fn new(sentinel_client: SentinelClient, master_name: String) -> Result<Self> {
-        let sentinel_client = Arc::new(RwLock::new(sentinel_client)); 
+        let sentinel_client = Arc::new(RwLock::new(sentinel_client));
         Ok(Self {
             sentinel_client,
             master_name,
@@ -276,17 +210,17 @@ impl ManageConnection for SentinelConnectionManager {
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
         // Lock your sentinel client to get the real client
         let mut sentinel = self.sentinel_client.write().await;
-        
+
         // Use your existing logic to get the client for the current master
         // This implicitly asks Sentinel "Who is the master right now?"
-        let client = sentinel.get_client()?; 
-        
+        let client = sentinel.get_client()?;
+
         // Create the async connection
         client.get_multiplexed_async_connection().await
     }
 
-    // Validates connections before handing them to you. 
-    // If a failover happened, the old master might still accept PINGs, 
+    // Validates connections before handing them to you.
+    // If a failover happened, the old master might still accept PINGs,
     // but usually, it will close or error out eventually.
     async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         let pong: String = redis::cmd("PING").query_async(conn).await?;
