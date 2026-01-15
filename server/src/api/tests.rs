@@ -506,8 +506,7 @@ async fn test_get_user_metadata_bulk_empty_request() {
 async fn test_get_user_metadata_bulk_concurrent_processing() {
     // Setup
     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool()
-        .await;
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.expect("failed to create dragonfly pool");
 
     // Create 20 test users to test concurrent processing
     let users: Vec<Principal> = (0..20).map(|_| generate_unique_test_principal()).collect();
