@@ -207,7 +207,7 @@ impl RedisManager {
                 Err(e) if attempts < max_attempts => {
                     // Clear cached connection on error
                     *self.connection.write().await = None;
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
                     continue;
                 }
                 Err(e) => return Err(e),
