@@ -143,7 +143,7 @@ pub async fn init_dragonfly_redis_for_test() -> Result<DragonflyPool> {
 
     let pool = DragonflyPool::builder()
     .max_size(50)
-    .connection_timeout(Duration::from_secs(30))
+    .connection_timeout(Duration::from_secs(10))
     .build(conn_man).await?;
     Ok(pool)
 }
