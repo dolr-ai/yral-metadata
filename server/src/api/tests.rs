@@ -35,7 +35,7 @@ async fn test_set_user_metadata_valid_request() {
     .await;
 
     // Verify
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Failed: {:?}", result);
 
     // Check data was stored
     let stored: Option<Vec<u8>> = conn
@@ -524,7 +524,7 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
         get_user_metadata_bulk_impl(&redis_pool, &dragonfly_pool, req, TEST_KEY_PREFIX).await;
 
     // Verify
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "failed : {:?}", result);
     let results = result.unwrap();
     assert_eq!(results.len(), 20);
 
