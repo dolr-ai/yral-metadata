@@ -61,14 +61,15 @@ pub async fn register_device(
     );
 
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
-    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await?;
+    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await.map_err(Error::Bb8)?;
     let redis_service = &mut *redis_conn_pooled;
+    let dragonfly_service= &mut *dragonfly_conn_pooled;
     let firebase_service = &state.firebase;
 
     register_device_impl(
         firebase_service,
         redis_service,
-        &mut dragonfly_conn_pooled,
+        dragonfly_service,
         user_principal,
         Json(req),
         YRAL_METADATA_KEY_PREFIX,
@@ -342,13 +343,15 @@ pub async fn unregister_device(
     Json(req): Json<UnregisterDeviceReq>,
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
+    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await.map_err(Error::Bb8)?;
+
     let redis_service = &mut *redis_conn_pooled;
-    let mut dragonfly_service = state.dragonfly_redis.get().await?;
+    let dragonfly_service = &mut *dragonfly_conn_pooled;
     let firebase_service = &state.firebase;
     unregister_device_impl(
         firebase_service,
         redis_service,
-        &mut dragonfly_service,
+        dragonfly_service,
         user_principal,
         Json(req),
         YRAL_METADATA_KEY_PREFIX,
@@ -503,15 +506,17 @@ pub async fn send_notification(
     );
 
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
+    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await.map_err(Error::Bb8)?;
+
     let redis_service = &mut *redis_conn_pooled;
-    let mut dragonfly_service = state.dragonfly_redis.get().await?;
+    let dragonfly_service = &mut *dragonfly_conn_pooled;
     let firebase_service = &state.firebase;
 
     send_notification_impl(
         Some(&headers),
         firebase_service,
         redis_service,
-        &mut dragonfly_service,
+        dragonfly_service,
         user_principal,
         Json(req),
         YRAL_METADATA_KEY_PREFIX,

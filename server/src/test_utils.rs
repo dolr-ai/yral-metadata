@@ -147,7 +147,7 @@ pub mod test_helpers {
     pub async fn cleanup_dragonfly_test_data(dragonfly_pool: &DragonflyPool, key_prefix: &str) -> Result<()> {
          use redis::AsyncCommands;
 
-        let mut conn = dragonfly_pool.get_dedicated().await?;
+        let mut conn = dragonfly_pool.get().await?;
         let pattern = format!("{}*", key_prefix);
         let keys: Vec<String> = conn.keys(&pattern).await?;
 

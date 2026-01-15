@@ -506,7 +506,7 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
 
     // Store test data
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
+    let mut dconn = dragonfly_pool.get().await.unwrap();
     for (i, user) in users.iter().enumerate() {
         let metadata = create_test_user_metadata(i as u64, i as u64);
         let meta_bytes = serde_json::to_vec(&metadata).unwrap();

@@ -250,7 +250,7 @@ pub async fn delete_metadata_bulk_impl(
     let usernames: Arc<FrozenVec<String>> = Arc::new(FrozenVec::new());
 
     let conn = redis_pool.get().await?;
-    let mut dragonfly_conn = dragonfly_pool.get_dedicated().await?;
+    let mut dragonfly_conn = dragonfly_pool.get().await?;
     let mut inner_stream = stream::iter(users.users.iter().copied())
         .map(|user_principal| {
             let mut conn = conn.clone();
