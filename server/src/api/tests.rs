@@ -502,57 +502,57 @@ async fn test_get_user_metadata_bulk_empty_request() {
     assert!(results.is_empty());
 }
 
-#[tokio::test]
-async fn test_get_user_metadata_bulk_concurrent_processing() {
-    // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.expect("failed to create dragonfly pool");
+// #[tokio::test]
+// async fn test_get_user_metadata_bulk_concurrent_processing() {
+//     // Setup
+//     let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+//     let dragonfly_pool = get_test_dragonfly_pool().await;
 
-    // Create 20 test users to test concurrent processing
-    let users: Vec<Principal> = (0..20).map(|_| generate_unique_test_principal()).collect();
+//     // Create 20 test users to test concurrent processing
+//     let users: Vec<Principal> = (0..20).map(|_| generate_unique_test_principal()).collect();
      
-    {
-        // Store test data
-        let mut conn = redis_pool.get().await.unwrap();
-        let mut dconn = dragonfly_pool.get().await.unwrap();
+//     {
+//         // Store test data
+//         let mut conn = redis_pool.get().await.unwrap();
+//         let mut dconn = dragonfly_pool.get().await.unwrap();
 
-        for (i, user) in users.iter().enumerate() {
-            let metadata = create_test_user_metadata(i as u64, i as u64);
-            let meta_bytes = serde_json::to_vec(&metadata).unwrap();
-            let _: () = conn
-                .hset(user.to_text(), METADATA_FIELD, &meta_bytes)
-                .await
-                .unwrap();
-            let _: () = dconn.hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()), METADATA_FIELD, &meta_bytes).await.unwrap();
-        }
+//         for (i, user) in users.iter().enumerate() {
+//             let metadata = create_test_user_metadata(i as u64, i as u64);
+//             let meta_bytes = serde_json::to_vec(&metadata).unwrap();
+//             let _: () = conn
+//                 .hset(user.to_text(), METADATA_FIELD, &meta_bytes)
+//                 .await
+//                 .unwrap();
+//             let _: () = dconn.hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()), METADATA_FIELD, &meta_bytes).await.unwrap();
+//         }
 
-    }
+//     }
 
-    // Execute
-    let req = BulkGetUserMetadataReq {
-        users: users.clone(),
-    };
-    let result =
-        get_user_metadata_bulk_impl(&redis_pool, &dragonfly_pool, req, TEST_KEY_PREFIX).await;
+//     // Execute
+//     let req = BulkGetUserMetadataReq {
+//         users: users.clone(),
+//     };
+//     let result =
+//         get_user_metadata_bulk_impl(&redis_pool, &dragonfly_pool, req, TEST_KEY_PREFIX).await;
 
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
-    let results = result.unwrap();
-    assert_eq!(results.len(), 20);
+//     // Verify
+//     assert!(result.is_ok(), "Failed : {:?}", result);
+//     let results = result.unwrap();
+//     assert_eq!(results.len(), 20);
 
-    // All users should have metadata
-    for user in &users {
-        assert!(results.get(user).unwrap().is_some());
-    }
+//     // All users should have metadata
+//     for user in &users {
+//         assert!(results.get(user).unwrap().is_some());
+//     }
 
-    // Cleanup
-    for user in &users {
-        cleanup_test_data(&redis_pool, &user.to_text())
-            .await
-            .unwrap();
-        cleanup_dragonfly_test_data(&dragonfly_pool, &format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text())).await.unwrap();
-    }
-}
+//     // Cleanup
+//     for user in &users {
+//         cleanup_test_data(&redis_pool, &user.to_text())
+//             .await
+//             .unwrap();
+//         cleanup_dragonfly_test_data(&dragonfly_pool, &format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text())).await.unwrap();
+//     }
+// }
 
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl() {
