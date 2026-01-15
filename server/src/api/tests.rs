@@ -1,3 +1,5 @@
+use std::{thread::sleep, time::Duration};
+
 use super::implementation::*;
 use crate::{
     dragonfly::{DragonflyPool, TEST_KEY_PREFIX, format_to_dragonfly_key, init_dragonfly_redis_for_test},
@@ -519,7 +521,13 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
                 .unwrap();
             let _: () = dconn.hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()), METADATA_FIELD, &meta_bytes).await.unwrap();
         }
+
+        //dropping connection
+        drop(conn);
+        drop(dconn);
+        sleep(Duration::from_secs(10));
     }
+
     // Execute
     let req = BulkGetUserMetadataReq {
         users: users.clone(),
