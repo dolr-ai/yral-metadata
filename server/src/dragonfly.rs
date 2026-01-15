@@ -197,7 +197,7 @@ impl RedisManager {
     // Get a cloned connection for use (cheap clone, shares underlying connection)
     pub async fn get(&self) -> Result<MultiplexedConnection, redis::RedisError> {
         let mut attempts = 0;
-        let max_attempts = 10;
+        let max_attempts = 15;
 
         loop {
             attempts += 1;
