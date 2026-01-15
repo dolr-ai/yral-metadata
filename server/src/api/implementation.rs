@@ -400,7 +400,7 @@ pub async fn get_canister_to_principal_bulk_impl(
     }
 
     let mut conn = redis_pool.get().await?;
-    let mut dragonfly_conn = dragonfly_pool.get_dedicated().await?;
+    // let mut dragonfly_conn = dragonfly_pool.get().await?;
     let mut mappings = HashMap::new();
 
     // Process in batches to avoid potential issues with very large requests

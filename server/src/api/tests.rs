@@ -174,7 +174,7 @@ async fn test_get_user_metadata_existing() {
     let dragonfly_pool = init_dragonfly_redis_for_test()
         .await
         .expect("Dragonfly pool");
-    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
+    let mut dconn = dragonfly_pool.get().await.unwrap();
     let meta_bytes = serde_json::to_vec(&test_metadata).unwrap();
     let _: () = conn
         .hset(user_principal.to_text(), METADATA_FIELD, &meta_bytes)
@@ -361,7 +361,7 @@ async fn test_delete_metadata_bulk_large_batch() {
     // Store test data concurrently using futures
     use futures::future::join_all;
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
+    let mut dconn = dragonfly_pool.get().await.unwrap();
 
     let tasks: Vec<_> = users
         .iter()
@@ -373,7 +373,7 @@ async fn test_delete_metadata_bulk_large_batch() {
                 let metadata = create_test_user_metadata(i as u64, i as u64);
                 let meta_bytes = serde_json::to_vec(&metadata).unwrap();
                 let _: () = conn
-                    .hset(&user_key, METADATA_FIELD, &meta_bytes)
+                    .hset(user_key, METADATA_FIELD, &meta_bytes)
                     .await
                     .unwrap();
             }
@@ -423,7 +423,7 @@ async fn test_get_user_metadata_bulk_multiple_users() {
 
     // Store test data for some users (not all)
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
+    let mut dconn = dragonfly_pool.get().await.unwrap();
     let metadata1 = create_test_user_metadata(20, 2000);
     let meta_bytes1 = serde_json::to_vec(&metadata1).unwrap();
     let _: () = conn
