@@ -111,7 +111,7 @@ async fn test_set_user_metadata_updates_existing() {
     .await;
 
     // Verify
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Failed : {:?}", result);
 
     // Check updated data
     let stored: Option<Vec<u8>> = conn
@@ -133,7 +133,7 @@ async fn test_set_user_metadata_updates_existing() {
         TEST_KEY_PREFIX,
     )
     .await;
-    assert!(result.is_ok());
+     assert!(result.is_ok(), "Failed : {:?}", result);
 
     // Check updated data
     let stored: Option<Vec<u8>> = conn
@@ -192,7 +192,7 @@ async fn test_get_user_metadata_existing() {
     .await;
 
     // Verify
-    assert!(result.is_ok());
+     assert!(result.is_ok(), "Failed : {:?}", result);
     let metadata = result.unwrap();
     assert!(metadata.is_some());
     let metadata = metadata.unwrap();
@@ -225,7 +225,7 @@ async fn test_get_user_metadata_not_found() {
     .await;
 
     // Verify
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Failed : {:?}", result);
     assert!(result.unwrap().is_none());
 }
 
@@ -290,7 +290,7 @@ async fn test_delete_metadata_bulk() {
     .await;
 
     // Verify
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Failed : {:?}", result);
 
     // Check all user data was deleted
     for user in &users {
@@ -335,7 +335,7 @@ async fn test_delete_metadata_bulk_empty_list() {
     .await;
 
     // Verify
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Failed : {:?}", result);
 
     // Cleanup
     let mut conn = redis_pool.get().await.unwrap();
@@ -454,7 +454,7 @@ async fn test_get_user_metadata_bulk_multiple_users() {
         get_user_metadata_bulk_impl(&redis_pool, &dragonfly_pool, req, TEST_KEY_PREFIX).await;
 
     // Verify
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Failed : {:?}", result);
     let results = result.unwrap();
     assert_eq!(results.len(), 3);
 
@@ -525,7 +525,7 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
         get_user_metadata_bulk_impl(&redis_pool, &dragonfly_pool, req, TEST_KEY_PREFIX).await;
 
     // Verify
-    assert!(result.is_ok(), "failed : {:?}", result);
+    assert!(result.is_ok(), "Failed : {:?}", result);
     let results = result.unwrap();
     assert_eq!(results.len(), 20);
 
@@ -598,7 +598,7 @@ async fn test_get_canister_to_principal_bulk_impl() {
     .await;
 
     // Verify
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Failed : {:?}", result);
     let res = result.unwrap();
     assert_eq!(res.mappings.len(), 3);
 
@@ -667,7 +667,7 @@ async fn test_get_canister_to_principal_bulk_impl_partial_results() {
     .await;
 
     // Verify
-    assert!(result.is_ok());
+     assert!(result.is_ok(), "Failed : {:?}", result);
     let res = result.unwrap();
     assert_eq!(res.mappings.len(), 2); // Only 2 mappings should be returned
 
@@ -701,7 +701,7 @@ async fn test_get_canister_to_principal_bulk_impl_empty_request() {
     .await;
 
     // Verify
-    assert!(result.is_ok());
+     assert!(result.is_ok(), "Failed : {:?}", result);
     let res = result.unwrap();
     assert!(res.mappings.is_empty());
 
@@ -754,7 +754,7 @@ async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
     .await;
 
     // Verify - should succeed but return empty mappings since the principal is invalid
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Failed : {:?}", result);
     let res = result.unwrap();
     assert!(res.mappings.is_empty());
 
@@ -815,7 +815,7 @@ async fn test_get_canister_to_principal_bulk_impl_large_batch() {
     .await;
 
     // Verify
-    assert!(result.is_ok());
+    assert!(result.is_ok(), "Failed : {:?}", result);
     let res = result.unwrap();
     assert_eq!(res.mappings.len(), 2500);
 
