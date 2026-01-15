@@ -197,7 +197,7 @@ impl RedisManager {
     // Get a cloned connection for use (cheap clone, shares underlying connection)
     pub async fn get(&self) -> Result<MultiplexedConnection, redis::RedisError> {
         let mut attempts = 0;
-        let max_attempts = 15;
+        let max_attempts = 20;
 
         loop {
             attempts += 1;
@@ -207,7 +207,7 @@ impl RedisManager {
                 Err(e) if attempts < max_attempts => {
                     // Clear cached connection on error
                     *self.connection.write().await = None;
-                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     continue;
                 }
                 Err(e) => return Err(e),
