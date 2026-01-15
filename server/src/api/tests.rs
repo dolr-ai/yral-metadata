@@ -420,32 +420,34 @@ async fn test_get_user_metadata_bulk_multiple_users() {
         generate_unique_test_principal(),
         generate_unique_test_principal(),
     ];
+    
+    {
+        // Store test data for some users (not all)
+        let mut conn = redis_pool.get().await.unwrap();
+        let mut dconn = dragonfly_pool.get().await.unwrap();
+        let metadata1 = create_test_user_metadata(20, 2000);
+        let meta_bytes1 = serde_json::to_vec(&metadata1).unwrap();
+        let _: () = conn
+            .hset(users[0].to_text(), METADATA_FIELD, &meta_bytes1)
+            .await
+            .unwrap();
+        let _: () = dconn
+            .hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &users[0].to_text()), METADATA_FIELD, &meta_bytes1)
+            .await
+            .unwrap();
 
-    // Store test data for some users (not all)
-    let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
-    let metadata1 = create_test_user_metadata(20, 2000);
-    let meta_bytes1 = serde_json::to_vec(&metadata1).unwrap();
-    let _: () = conn
-        .hset(users[0].to_text(), METADATA_FIELD, &meta_bytes1)
-        .await
-        .unwrap();
-    let _: () = dconn
-        .hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &users[0].to_text()), METADATA_FIELD, &meta_bytes1)
-        .await
-        .unwrap();
+        let metadata2 = create_test_user_metadata(22, 2002);
+        let meta_bytes2 = serde_json::to_vec(&metadata2).unwrap();
+        let _: () = conn
+            .hset(users[2].to_text(), METADATA_FIELD, &meta_bytes2)
+            .await
+            .unwrap();
+        let _: () = dconn
+            .hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &users[2].to_text()), METADATA_FIELD, &meta_bytes2)
+            .await
+            .unwrap();
 
-    let metadata2 = create_test_user_metadata(22, 2002);
-    let meta_bytes2 = serde_json::to_vec(&metadata2).unwrap();
-    let _: () = conn
-        .hset(users[2].to_text(), METADATA_FIELD, &meta_bytes2)
-        .await
-        .unwrap();
-    let _: () = dconn
-        .hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &users[2].to_text()), METADATA_FIELD, &meta_bytes2)
-        .await
-        .unwrap();
-
+    }
     // Execute
     let req = BulkGetUserMetadataReq {
         users: users.clone(),
@@ -503,20 +505,21 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
 
     // Create 20 test users to test concurrent processing
     let users: Vec<Principal> = (0..20).map(|_| generate_unique_test_principal()).collect();
-
-    // Store test data
-    let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
-    for (i, user) in users.iter().enumerate() {
-        let metadata = create_test_user_metadata(i as u64, i as u64);
-        let meta_bytes = serde_json::to_vec(&metadata).unwrap();
-        let _: () = conn
-            .hset(user.to_text(), METADATA_FIELD, &meta_bytes)
-            .await
-            .unwrap();
-        let _: () = dconn.hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()), METADATA_FIELD, &meta_bytes).await.unwrap();
+     
+    {
+        // Store test data
+        let mut conn = redis_pool.get().await.unwrap();
+        let mut dconn = dragonfly_pool.get().await.unwrap();
+        for (i, user) in users.iter().enumerate() {
+            let metadata = create_test_user_metadata(i as u64, i as u64);
+            let meta_bytes = serde_json::to_vec(&metadata).unwrap();
+            let _: () = conn
+                .hset(user.to_text(), METADATA_FIELD, &meta_bytes)
+                .await
+                .unwrap();
+            let _: () = dconn.hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()), METADATA_FIELD, &meta_bytes).await.unwrap();
+        }
     }
-
     // Execute
     let req = BulkGetUserMetadataReq {
         users: users.clone(),
