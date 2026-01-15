@@ -9,6 +9,7 @@ use redis::ClientTlsConfig;
 use redis::ConnectionAddr;
 use std::fs;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use bb8::{Pool, ManageConnection};
 use redis::RedisError;
@@ -140,7 +141,10 @@ pub async fn init_dragonfly_redis_for_test() -> Result<DragonflyPool> {
     let sentinel_client = builder.build().expect("Failed to build SentinelClient");
     let conn_man = SentinelConnectionManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
 
-    let pool = DragonflyPool::builder().build(conn_man).await?;
+    let pool = DragonflyPool::builder()
+    .max_size(50)
+    .connection_timeout(Duration::from_secs(20))
+    .build(conn_man).await?;
     Ok(pool)
 }
 
