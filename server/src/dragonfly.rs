@@ -142,8 +142,8 @@ pub async fn init_dragonfly_redis_for_test() -> Result<DragonflyPool> {
     let conn_man = SentinelConnectionManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
 
     let pool = DragonflyPool::builder()
-    .max_size(50)
-    .connection_timeout(Duration::from_secs(20))
+    .max_size(20)
+    .connection_timeout(Duration::from_secs(30))
     .build(conn_man).await?;
     Ok(pool)
 }
