@@ -77,11 +77,6 @@ async fn test_set_user_metadata_updates_existing() {
     let user_principal = generate_unique_test_principal();
     let unique_key = generate_unique_test_key_prefix();
 
-    let _: () = conn.del(username_info_key("originalname")).await.unwrap();
-    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, "originalname")).await.unwrap();
-    let _: () = conn.del(username_info_key("updatedname")).await.unwrap();
-    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, "updatedname")).await.unwrap();
-
     // First request
     let metadata1 = create_test_metadata_req(200, "originalname");
     set_user_metadata_core(
@@ -153,9 +148,9 @@ async fn test_set_user_metadata_updates_existing() {
     let _: () = conn.del(unique_key.clone()).await.unwrap();
     let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key)).await.unwrap();
     let _: () = conn.del(username_info_key("originalname")).await.unwrap();
-    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, "originalname")).await.unwrap();
+    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key("originalname"))).await.unwrap();
     let _: () = conn.del(username_info_key("updatedname")).await.unwrap();
-    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, "updatedname")).await.unwrap();
+    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key("updatedname"))).await.unwrap();
 
 }
 
@@ -171,7 +166,7 @@ async fn test_get_user_metadata_existing() {
     let dragonfly_pool = init_dragonfly_redis_for_test()
         .await
         .expect("Dragonfly pool");
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
     let meta_bytes = serde_json::to_vec(&test_metadata).unwrap();
     let _: () = conn
         .hset(user_principal.to_text(), METADATA_FIELD, &meta_bytes)
@@ -420,7 +415,7 @@ async fn test_get_user_metadata_bulk_multiple_users() {
 
     // Store test data for some users (not all)
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_dedicated().await.unwrap();
     let metadata1 = create_test_user_metadata(20, 2000);
     let meta_bytes1 = serde_json::to_vec(&metadata1).unwrap();
     let _: () = conn
