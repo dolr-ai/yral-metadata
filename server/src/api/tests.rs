@@ -77,6 +77,11 @@ async fn test_set_user_metadata_updates_existing() {
     let user_principal = generate_unique_test_principal();
     let unique_key = generate_unique_test_key_prefix();
 
+    let _: () = conn.del(username_info_key("originalname")).await.unwrap();
+    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key("originalname"))).await.unwrap();
+    let _: () = conn.del(username_info_key("updatedname")).await.unwrap();
+    let _: () = dconn.del(format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key("updatedname"))).await.unwrap();
+    
     // First request
     let metadata1 = create_test_metadata_req(200, "originalname");
     set_user_metadata_core(
