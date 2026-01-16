@@ -359,7 +359,7 @@ pub async fn init_dragonfly_redis(
             .await;
     });
 
-    // Build the pool with optimal ettings
+    // Build the pool with optimal settings
     let pool = DragonflyPool::builder()
         .max_size(20) // Maximum connections
         .min_idle(Some(5)) // Keep 5 warm connections ready
@@ -368,6 +368,14 @@ pub async fn init_dragonfly_redis(
         .max_lifetime(Some(Duration::from_secs(1800))) // Refresh all connections every 30 min
         .build(conn_man)
         .await?;
+
+    // Warm up the cache by making a connection and executing PING
+    // This ensures the master is cached before real requests come in
+    {
+        let mut conn = pool.get().await?;
+        let _: String = redis::cmd("PING").query_async(&mut *conn).await?;
+        tracing::info!("Dragonfly pool warmed up successfully");
+    }
 
     tracing::info!(
         max_size = 20,
@@ -428,11 +436,17 @@ pub async fn init_dragonfly_redis_for_test() -> Result<DragonflyPool> {
     let pool = DragonflyPool::builder()
         .max_size(50)
         .min_idle(Some(5))
-        .connection_timeout(Duration::from_secs(10))
+        .connection_timeout(Duration::from_secs(30)) // Longer timeout for test environments
         .idle_timeout(Some(Duration::from_secs(300)))
         .max_lifetime(Some(Duration::from_secs(1800)))
         .build(conn_man)
         .await?;
+
+    // Warm up the cache by making a connection and executing PING
+    {
+        let mut conn = pool.get().await?;
+        let _: String = redis::cmd("PING").query_async(&mut *conn).await?;
+    }
 
     Ok(pool)
 }
