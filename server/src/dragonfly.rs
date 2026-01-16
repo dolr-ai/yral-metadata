@@ -19,6 +19,7 @@ pub const REDIS_SENTINEL_PORT: u16 = 26379;
 pub const SENTINEL_SERVICE_NAME: &str = "mymaster";
 
 pub const YRAL_METADATA_KEY_PREFIX: &str = "yral-metadata";
+pub const TEST_KEY_PREFIX: &str = "test";
 
 const SENTINEL_RECONNECT_DELAY: Duration = Duration::from_secs(1);
 
@@ -438,6 +439,7 @@ pub async fn init_dragonfly_redis_for_test() -> Result<DragonflyPool> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use redis::AsyncCommands;
 
     #[tokio::test]
