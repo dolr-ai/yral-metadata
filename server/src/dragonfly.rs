@@ -271,6 +271,66 @@ impl DragonflyPool {
         })
     }
 
+    /// Get a validated connection that has been verified with a PING
+    /// Use this when you need to ensure the connection is definitely working
+    pub async fn get_validated(&self) -> std::result::Result<PooledConnection, RedisError> {
+        let pool_size = self.slots.len();
+        let start_index = self.next_index.fetch_add(1, Ordering::Relaxed) % pool_size;
+
+        // Try each slot, validating with PING
+        for offset in 0..pool_size {
+            let index = (start_index + offset) % pool_size;
+            let slot = &self.slots[index];
+
+            // Skip connections already marked unhealthy
+            if !slot.is_healthy.load(Ordering::Relaxed) {
+                continue;
+            }
+
+            let guard = slot.connection.read().await;
+            if let Some(conn) = guard.as_ref() {
+                let mut conn_clone = conn.clone();
+                drop(guard); // Release lock before PING
+
+                // Validate with PING
+                match redis::cmd("PING").query_async::<String>(&mut conn_clone).await {
+                    Ok(pong) if pong == "PONG" => {
+                        return Ok(PooledConnection {
+                            slot: slot.clone(),
+                            conn: conn_clone,
+                        });
+                    }
+                    _ => {
+                        // Mark as unhealthy and try next
+                        slot.is_healthy.store(false, Ordering::Relaxed);
+                        tracing::debug!(slot = index, "Connection failed validation, marked unhealthy");
+                    }
+                }
+            }
+        }
+
+        // All connections failed validation, create a fresh one
+        tracing::warn!("All pool connections failed validation, creating fresh connection");
+        let conn = self.connection_manager.connect().await?;
+
+        // Find a slot to store this new connection
+        for slot in &self.slots {
+            if !slot.is_healthy.load(Ordering::Relaxed)
+                && !slot.reconnecting.load(Ordering::Relaxed)
+            {
+                let mut guard = slot.connection.write().await;
+                *guard = Some(conn.clone());
+                slot.is_healthy.store(true, Ordering::Relaxed);
+                break;
+            }
+        }
+
+        Ok(PooledConnection {
+            slot: self.slots[0].clone(),
+            conn,
+        })
+    }
+
     /// Mark a connection as unhealthy (called when an operation fails)
     pub fn mark_unhealthy(&self, index: usize) {
         if index < self.slots.len() {
@@ -741,10 +801,11 @@ pub async fn init_dragonfly_redis_for_test() -> Result<Arc<DragonflyPool>> {
     });
 
     // Build the custom connection pool with test settings
+    // Use more aggressive health checking for tests since connections may go stale
     let config = PoolConfig {
         pool_size: 50,
-        ping_interval: Duration::from_secs(30),
-        reconnect_delay: Duration::from_secs(1),
+        ping_interval: Duration::from_secs(5),  // More frequent health checks for tests
+        reconnect_delay: Duration::from_millis(500),  // Faster reconnection
     };
 
     let pool = DragonflyPool::new(conn_man_arc, config).await?;
