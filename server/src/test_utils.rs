@@ -150,7 +150,7 @@ pub mod test_helpers {
     ) -> Result<()> {
         use redis::AsyncCommands;
 
-        let mut conn = dragonfly_pool.get_validated().await?;
+        let mut conn = dragonfly_pool.get().await?;
         let pattern = format!("{}*", key_prefix);
         let keys: Vec<String> = conn.keys(&pattern).await?;
 

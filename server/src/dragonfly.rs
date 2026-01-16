@@ -4,6 +4,7 @@ use redis::aio::MultiplexedConnection;
 use redis::sentinel::SentinelClient;
 use redis::sentinel::SentinelClientBuilder;
 use redis::sentinel::SentinelServerType;
+use redis::AsyncConnectionConfig;
 use redis::Client;
 use redis::ClientTlsConfig;
 use redis::ConnectionAddr;
@@ -656,16 +657,27 @@ impl SentinelConnectionManager {
 
 impl SentinelConnectionManager {
     /// Create a new multiplexed connection to the Redis master
+    /// Uses longer timeouts for remote TLS connections
     pub async fn connect(&self) -> std::result::Result<MultiplexedConnection, RedisError> {
+        // Configure longer timeouts for TLS connections over network
+        let config = AsyncConnectionConfig::new()
+            .set_response_timeout(Some(Duration::from_secs(30)))
+            .set_connection_timeout(Some(Duration::from_secs(10)));
+
         // Try with cached master first
         match self.get_master_client().await {
-            Ok(client) => match client.get_multiplexed_async_connection().await {
-                Ok(conn) => return Ok(conn),
-                Err(e) => {
-                    tracing::warn!(error = %e, "Connection to cached master failed, invalidating cache");
-                    self.on_failover_detected().await;
+            Ok(client) => {
+                match client
+                    .get_multiplexed_async_connection_with_config(&config)
+                    .await
+                {
+                    Ok(conn) => return Ok(conn),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Connection to cached master failed, invalidating cache");
+                        self.on_failover_detected().await;
+                    }
                 }
-            },
+            }
             Err(e) => {
                 tracing::warn!(error = %e, "Failed to get master client");
             }
@@ -673,7 +685,9 @@ impl SentinelConnectionManager {
 
         // Retry after cache invalidation
         let client = self.get_master_client().await?;
-        client.get_multiplexed_async_connection().await
+        client
+            .get_multiplexed_async_connection_with_config(&config)
+            .await
     }
 }
 
