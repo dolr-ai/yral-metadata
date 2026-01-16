@@ -144,8 +144,11 @@ pub mod test_helpers {
         Ok(())
     }
 
-    pub async fn cleanup_dragonfly_test_data(dragonfly_pool: &DragonflyPool, key_prefix: &str) -> Result<()> {
-         use redis::AsyncCommands;
+    pub async fn cleanup_dragonfly_test_data(
+        dragonfly_pool: &DragonflyPool,
+        key_prefix: &str,
+    ) -> Result<()> {
+        use redis::AsyncCommands;
 
         let mut conn = dragonfly_pool.get().await?;
         let pattern = format!("{}*", key_prefix);

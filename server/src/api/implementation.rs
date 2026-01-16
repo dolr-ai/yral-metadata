@@ -133,7 +133,13 @@ pub async fn set_user_metadata_core(
     let _: bool = conn
         .hset(can2prin_key, new_meta.user_canister_id.to_text(), &user)
         .await?;
-    let _ : bool = dragonfly_conn.hset(format_to_dragonfly_key(key_prefix, can2prin_key), new_meta.user_canister_id.to_text(), &user).await?;
+    let _: bool = dragonfly_conn
+        .hset(
+            format_to_dragonfly_key(key_prefix, can2prin_key),
+            new_meta.user_canister_id.to_text(),
+            &user,
+        )
+        .await?;
 
     Ok(())
 }
