@@ -1,4 +1,4 @@
-use std::{thread::sleep, time::Duration};
+use std::sync::Arc;
 
 use super::implementation::*;
 use crate::{
@@ -14,16 +14,15 @@ use types::{BulkGetUserMetadataReq, BulkUsers, CanisterToPrincipalReq};
 use tokio::sync::OnceCell;
 
 //Create static reference for the pool
-static GLOBAL_POOL: OnceCell<DragonflyPool> = OnceCell::const_new();
+static GLOBAL_POOL: OnceCell<Arc<DragonflyPool>> = OnceCell::const_new();
 
 //sCreate an initialization function
-pub async fn get_test_dragonfly_pool() -> &'static DragonflyPool {
+pub async fn get_test_dragonfly_pool() -> &'static Arc<DragonflyPool> {
     GLOBAL_POOL
         .get_or_init(|| async {
-            let dragonfly_pool = init_dragonfly_redis_for_test()
+            init_dragonfly_redis_for_test()
                 .await
-                .expect("failed to initialized dragonfly pool");
-            dragonfly_pool
+                .expect("failed to initialized dragonfly pool")
         })
         .await
 }

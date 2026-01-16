@@ -10,6 +10,7 @@ use crate::utils::error::{Error, Result};
 use crate::utils::yral_auth_jwt::YralAuthJwt;
 use ic_agent::identity::Secp256k1Identity;
 use ic_agent::Agent;
+use std::sync::Arc;
 pub type RedisPool = bb8::Pool<bb8_redis::RedisConnectionManager>;
 
 pub static IC_AGENT_URL: &str = "https://ic0.app";
@@ -17,7 +18,7 @@ pub static IC_AGENT_URL: &str = "https://ic0.app";
 #[derive(Clone)]
 pub struct AppState {
     pub redis: RedisPool,
-    pub dragonfly_redis: DragonflyPool,
+    pub dragonfly_redis: Arc<DragonflyPool>,
     pub jwt_details: JwtDetails,
     pub yral_auth_jwt: YralAuthJwt,
     pub firebase: Firebase,

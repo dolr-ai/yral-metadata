@@ -29,7 +29,7 @@ pub enum Error {
     #[error("{0}")]
     #[schema(value_type = RedisErrorDetail)]
     Redis(#[from] RedisError),
-    #[error("{0}")]
+    #[error("connection pool error: {0}")]
     #[schema(value_type = Bb8RedisErrorDetail)]
     Bb8(#[from] bb8::RunError<RedisError>),
     #[error("failed to deserialize json {0}")]

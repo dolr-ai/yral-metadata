@@ -61,7 +61,7 @@ pub async fn register_device(
     );
 
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
-    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await.map_err(Error::Bb8)?;
+    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await?;
     let redis_service = &mut *redis_conn_pooled;
     let dragonfly_service = &mut *dragonfly_conn_pooled;
     let firebase_service = &state.firebase;
@@ -343,7 +343,7 @@ pub async fn unregister_device(
     Json(req): Json<UnregisterDeviceReq>,
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
-    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await.map_err(Error::Bb8)?;
+    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await?;
 
     let redis_service = &mut *redis_conn_pooled;
     let dragonfly_service = &mut *dragonfly_conn_pooled;
@@ -506,7 +506,7 @@ pub async fn send_notification(
     );
 
     let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
-    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await.map_err(Error::Bb8)?;
+    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await?;
 
     let redis_service = &mut *redis_conn_pooled;
     let dragonfly_service = &mut *dragonfly_conn_pooled;
