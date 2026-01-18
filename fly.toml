@@ -2,6 +2,8 @@
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
+# fly.toml - used for PR preview deployments on Fly.io
+# Production deployment is on Hetzner (see deploy-hetzner.yml)
 
 app = 'yral-metadata'
 primary_region = 'sin'

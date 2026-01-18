@@ -4,10 +4,11 @@ pub mod test_helpers {
     use std::collections::HashSet;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
-    use std::thread;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{fs, thread};
     use types::{SetUserMetadataReqMetadata, UserMetadata};
 
+    use crate::dragonfly::{DragonflyPool, TEST_KEY_PREFIX};
     use crate::{
         state::{init_redis_with_url, RedisPool},
         utils::error::Result,
@@ -23,6 +24,11 @@ pub mod test_helpers {
 
     /// Create a test Redis pool
     pub async fn create_test_redis_pool() -> Result<RedisPool> {
+        // Install rustls crypto provider for TLS connections
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .ok();
+
         let redis_url = std::env::var("TEST_REDIS_URL").unwrap();
 
         init_redis_with_url(&redis_url).await
@@ -133,6 +139,23 @@ pub mod test_helpers {
         use redis::AsyncCommands;
 
         let mut conn = redis_pool.get().await?;
+        let pattern = format!("{}*", key_prefix);
+        let keys: Vec<String> = conn.keys(&pattern).await?;
+
+        if !keys.is_empty() {
+            let _: () = conn.del(keys).await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn cleanup_dragonfly_test_data(
+        dragonfly_pool: &DragonflyPool,
+        key_prefix: &str,
+    ) -> Result<()> {
+        use redis::AsyncCommands;
+
+        let mut conn = dragonfly_pool.get().await?;
         let pattern = format!("{}*", key_prefix);
         let keys: Vec<String> = conn.keys(&pattern).await?;
 

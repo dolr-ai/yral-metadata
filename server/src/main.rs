@@ -3,6 +3,7 @@ mod api;
 mod auth;
 mod config;
 mod consts;
+mod dragonfly;
 mod firebase;
 mod middleware;
 mod notifications;

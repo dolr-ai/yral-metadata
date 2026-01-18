@@ -10,8 +10,32 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_check:
+  test:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Rust Setup
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "stable"
+
+      - name: Run tests
+        # Need to do sequential tests as upstash has really bad timeouts under load most of the bulk methods wont have more than 5 queries at a time, so it should be fine.
+        run: cargo test -- --test-threads=1 --no-capture
+        env:
+          TEST_REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
+          DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
+          DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
+          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT }}
+          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT }}
+          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY }}
+
+  # Build on GitHub-hosted runner
+  build:
+    runs-on: ubuntu-latest
+    needs: test
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -27,11 +51,6 @@ jobs:
         with:
           packages: musl-tools # provides musl-gcc
           version: 1.0
-
-      - name: Run tests
-        run: cargo test
-        env:
-          TEST_REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
 
       - name: Build the project to `musl` output
         working-directory: ./server
