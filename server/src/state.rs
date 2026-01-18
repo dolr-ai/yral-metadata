@@ -72,8 +72,14 @@ pub async fn init_redis(conf: &AppConfig) -> Result<RedisPool> {
 }
 
 pub async fn init_redis_with_url(redis_url: &str) -> Result<RedisPool> {
+    use std::time::Duration;
+
     let manager = bb8_redis::RedisConnectionManager::new(redis_url)?;
     RedisPool::builder()
+        .max_size(10)
+        .min_idle(None) // Don't pre-create connections
+        .connection_timeout(Duration::from_secs(30))
+        .idle_timeout(Some(Duration::from_secs(60)))
         .build(manager)
         .await
         .map_err(Error::Redis)

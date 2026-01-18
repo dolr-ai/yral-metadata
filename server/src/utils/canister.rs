@@ -111,7 +111,7 @@ pub async fn populate_canister_to_principal_index(
         }
 
         if let Err(e) = dragonfly_pipe
-            .query_async::<()>(&mut *dragonfly_conn)
+            .query_async::<()>(&mut dragonfly_conn)
             .await
         {
             log::error!("Failed to insert batch into Dragonfly: {}", e);

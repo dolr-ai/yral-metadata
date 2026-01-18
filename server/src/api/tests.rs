@@ -1,44 +1,24 @@
-use std::sync::Arc;
-
 use super::implementation::*;
 use crate::{
-    dragonfly::{
-        format_to_dragonfly_key, init_dragonfly_redis_for_test, DragonflyPool, TEST_KEY_PREFIX,
-    },
+    dragonfly::{format_to_dragonfly_key, init_dragonfly_redis_for_test, TEST_KEY_PREFIX},
     test_utils::test_helpers::*,
 };
 use candid::Principal;
 use redis::AsyncCommands;
 use types::{BulkGetUserMetadataReq, BulkUsers, CanisterToPrincipalReq};
 
-use tokio::sync::OnceCell;
-
-//Create static reference for the pool
-static GLOBAL_POOL: OnceCell<Arc<DragonflyPool>> = OnceCell::const_new();
-
-//sCreate an initialization function
-pub async fn get_test_dragonfly_pool() -> &'static Arc<DragonflyPool> {
-    GLOBAL_POOL
-        .get_or_init(|| async {
-            init_dragonfly_redis_for_test()
-                .await
-                .expect("failed to initialized dragonfly pool")
-        })
-        .await
-}
-
 #[tokio::test]
 async fn test_set_user_metadata_valid_request() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
     let user_principal = generate_unique_test_principal();
     let user_name = "testuser";
     let metadata = create_test_metadata_req(100, user_name);
     let unique_key = generate_unique_test_key_prefix();
 
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
     let _: () = conn.del(username_info_key(user_name)).await.unwrap();
     let _: () = dconn
         .del(format_to_dragonfly_key(
@@ -51,7 +31,7 @@ async fn test_set_user_metadata_valid_request() {
     // Execute - using core implementation that skips signature verification
     let result = set_user_metadata_core(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         user_principal,
         &metadata,
         &unique_key,
@@ -81,7 +61,7 @@ async fn test_set_user_metadata_valid_request() {
         .await
         .unwrap();
     cleanup_dragonfly_test_data(
-        dragonfly_pool,
+        &dragonfly_pool,
         &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()),
     )
     .await
@@ -115,10 +95,10 @@ async fn test_set_user_metadata_valid_request() {
 #[tokio::test]
 async fn test_set_user_metadata_updates_existing() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
     let user_principal = generate_unique_test_principal();
     let unique_key = generate_unique_test_key_prefix();
 
@@ -143,7 +123,7 @@ async fn test_set_user_metadata_updates_existing() {
     let metadata1 = create_test_metadata_req(200, "originalname");
     set_user_metadata_core(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         user_principal,
         &metadata1,
         &unique_key,
@@ -156,7 +136,7 @@ async fn test_set_user_metadata_updates_existing() {
     let metadata2 = create_test_metadata_req(200, "updatedname");
     let result = set_user_metadata_core(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         user_principal,
         &metadata2,
         &unique_key,
@@ -180,7 +160,7 @@ async fn test_set_user_metadata_updates_existing() {
     let metadata3 = create_test_metadata_req(300, "");
     let result = set_user_metadata_core(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         user_principal,
         &metadata3,
         &unique_key,
@@ -203,7 +183,7 @@ async fn test_set_user_metadata_updates_existing() {
         .await
         .unwrap();
     cleanup_dragonfly_test_data(
-        dragonfly_pool,
+        &dragonfly_pool,
         &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()),
     )
     .await
@@ -238,14 +218,14 @@ async fn test_set_user_metadata_updates_existing() {
 #[tokio::test]
 async fn test_get_user_metadata_existing() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+    let redis_pool = create_test_redis_pool().await.unwrap();
     let user_principal = generate_unique_test_principal();
     let test_metadata = create_test_user_metadata(3, 300);
 
     // Store test data
     let mut conn = redis_pool.get().await.unwrap();
-    let dragonfly_pool = get_test_dragonfly_pool().await;
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
     let meta_bytes = serde_json::to_vec(&test_metadata).unwrap();
     let _: () = conn
         .hset(user_principal.to_text(), METADATA_FIELD, &meta_bytes)
@@ -263,7 +243,7 @@ async fn test_get_user_metadata_existing() {
     // Execute
     let result = get_user_metadata_impl(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         user_principal.to_text(),
         TEST_KEY_PREFIX,
     )
@@ -282,7 +262,7 @@ async fn test_get_user_metadata_existing() {
         .await
         .unwrap();
     cleanup_dragonfly_test_data(
-        dragonfly_pool,
+        &dragonfly_pool,
         &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()),
     )
     .await
@@ -292,14 +272,14 @@ async fn test_get_user_metadata_existing() {
 #[tokio::test]
 async fn test_get_user_metadata_not_found() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
     let user_principal = generate_unique_test_principal();
 
     // Execute
     let result = get_user_metadata_impl(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         user_principal.to_text(),
         TEST_KEY_PREFIX,
     )
@@ -313,8 +293,8 @@ async fn test_get_user_metadata_not_found() {
 #[tokio::test]
 async fn test_delete_metadata_bulk() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
     let unique_key = generate_unique_test_key_prefix();
     // Create test users
     let users = vec![
@@ -325,7 +305,7 @@ async fn test_delete_metadata_bulk() {
 
     // Store test data for each user
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
     for (i, user) in users.iter().enumerate() {
         let metadata = create_test_user_metadata(5 + i as u64, 500 + i as u64);
         let meta_bytes = serde_json::to_vec(&metadata).unwrap();
@@ -365,7 +345,7 @@ async fn test_delete_metadata_bulk() {
     };
     let result = delete_metadata_bulk_impl(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         &bulk_users,
         &unique_key,
         TEST_KEY_PREFIX,
@@ -402,8 +382,8 @@ async fn test_delete_metadata_bulk() {
 #[tokio::test]
 async fn test_delete_metadata_bulk_empty_list() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
 
     let unique_key = generate_unique_test_key_prefix();
     let bulk_users = BulkUsers { users: vec![] };
@@ -411,7 +391,7 @@ async fn test_delete_metadata_bulk_empty_list() {
     // Execute
     let result = delete_metadata_bulk_impl(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         &bulk_users,
         &unique_key,
         TEST_KEY_PREFIX,
@@ -423,7 +403,7 @@ async fn test_delete_metadata_bulk_empty_list() {
 
     // Cleanup
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
     let _: () = conn.del(unique_key.clone()).await.unwrap();
     let _: () = dconn
         .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
@@ -434,38 +414,29 @@ async fn test_delete_metadata_bulk_empty_list() {
 #[tokio::test]
 async fn test_delete_metadata_bulk_large_batch() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
     let unique_key = generate_unique_test_key_prefix();
 
-    // Create 1500 test users (more than chunk size of 1000)
-    let users: Vec<Principal> = (0..1500)
+    // Create 300 test users for batch testing
+    let users: Vec<Principal> = (0..300)
         .map(|_| generate_unique_test_principal())
         .collect();
 
-    // Store test data concurrently using futures
-    use futures::future::join_all;
+    // Store test data using batched pipeline (chunks of 200 to avoid Upstash timeout)
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
 
-    let tasks: Vec<_> = users
-        .iter()
-        .enumerate()
-        .map(|(i, user)| {
-            let user_key = user.to_text();
-            let mut conn = conn.clone();
-            async move {
-                let metadata = create_test_user_metadata(i as u64, i as u64);
-                let meta_bytes = serde_json::to_vec(&metadata).unwrap();
-                let _: () = conn
-                    .hset(user_key, METADATA_FIELD, &meta_bytes)
-                    .await
-                    .unwrap();
-            }
-        })
-        .collect();
-
-    join_all(tasks).await;
+    // Batch writes in chunks to avoid timeout on remote Redis
+    for chunk in users.chunks(200) {
+        let mut pipe = redis::pipe();
+        for (i, user) in chunk.iter().enumerate() {
+            let metadata = create_test_user_metadata(i as u64, i as u64);
+            let meta_bytes = serde_json::to_vec(&metadata).unwrap();
+            pipe.hset(user.to_text(), METADATA_FIELD, meta_bytes);
+        }
+        let _: () = pipe.query_async(&mut *conn).await.unwrap();
+    }
 
     // Execute
     let bulk_users = BulkUsers {
@@ -473,7 +444,7 @@ async fn test_delete_metadata_bulk_large_batch() {
     };
     let result = delete_metadata_bulk_impl(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         &bulk_users,
         &unique_key,
         TEST_KEY_PREFIX,
@@ -498,8 +469,8 @@ async fn test_delete_metadata_bulk_large_batch() {
 #[tokio::test]
 async fn test_get_user_metadata_bulk_multiple_users() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
     // Create test users
     let users = vec![
         generate_unique_test_principal(),
@@ -510,7 +481,7 @@ async fn test_get_user_metadata_bulk_multiple_users() {
     {
         // Store test data for some users (not all)
         let mut conn = redis_pool.get().await.unwrap();
-        let mut dconn = dragonfly_pool.get().await.unwrap();
+        let mut dconn = dragonfly_pool.get_validated().await.unwrap();
         let metadata1 = create_test_user_metadata(20, 2000);
         let meta_bytes1 = serde_json::to_vec(&metadata1).unwrap();
         let _: () = conn
@@ -546,7 +517,7 @@ async fn test_get_user_metadata_bulk_multiple_users() {
         users: users.clone(),
     };
     let result =
-        get_user_metadata_bulk_impl(&redis_pool, dragonfly_pool, req, TEST_KEY_PREFIX).await;
+        get_user_metadata_bulk_impl(&redis_pool, &dragonfly_pool, req, TEST_KEY_PREFIX).await;
 
     // Verify
     assert!(result.is_ok(), "Failed : {:?}", result);
@@ -566,7 +537,7 @@ async fn test_get_user_metadata_bulk_multiple_users() {
             .await
             .unwrap();
         cleanup_dragonfly_test_data(
-            dragonfly_pool,
+            &dragonfly_pool,
             &format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()),
         )
         .await
@@ -577,13 +548,13 @@ async fn test_get_user_metadata_bulk_multiple_users() {
 #[tokio::test]
 async fn test_get_user_metadata_bulk_empty_request() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
 
     // Execute
     let req = BulkGetUserMetadataReq { users: vec![] };
     let result =
-        get_user_metadata_bulk_impl(&redis_pool, dragonfly_pool, req, TEST_KEY_PREFIX).await;
+        get_user_metadata_bulk_impl(&redis_pool, &dragonfly_pool, req, TEST_KEY_PREFIX).await;
 
     // Verify
     assert!(result.is_ok());
@@ -594,8 +565,8 @@ async fn test_get_user_metadata_bulk_empty_request() {
 #[tokio::test]
 async fn test_get_user_metadata_bulk_concurrent_processing() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
 
     // Create 20 test users to test concurrent processing
     let users: Vec<Principal> = (0..20).map(|_| generate_unique_test_principal()).collect();
@@ -603,7 +574,7 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
     {
         // Store test data
         let mut conn = redis_pool.get().await.unwrap();
-        let mut dconn = dragonfly_pool.get().await.unwrap();
+        let mut dconn = dragonfly_pool.get_validated().await.unwrap();
 
         for (i, user) in users.iter().enumerate() {
             let metadata = create_test_user_metadata(i as u64, i as u64);
@@ -622,7 +593,7 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
         users: users.clone(),
     };
     let result =
-        get_user_metadata_bulk_impl(&redis_pool, dragonfly_pool, req, TEST_KEY_PREFIX).await;
+        get_user_metadata_bulk_impl(&redis_pool, &dragonfly_pool, req, TEST_KEY_PREFIX).await;
 
     // Verify
     assert!(result.is_ok(), "Failed : {:?}", result);
@@ -639,17 +610,17 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
         cleanup_test_data(&redis_pool, &user.to_text())
             .await
             .unwrap();
-        cleanup_dragonfly_test_data(dragonfly_pool, &format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text())).await.unwrap();
+        cleanup_dragonfly_test_data(&dragonfly_pool, &format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text())).await.unwrap();
     }
 }
 
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+    let redis_pool = create_test_redis_pool().await.unwrap();
     let mut conn = redis_pool.get().await.unwrap();
-    let dragonfly_pool = get_test_dragonfly_pool().await;
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
 
     let unique_key = generate_unique_test_key_prefix();
 
@@ -691,7 +662,7 @@ async fn test_get_canister_to_principal_bulk_impl() {
     let req = CanisterToPrincipalReq { canisters };
     let result = get_canister_to_principal_bulk_impl(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         req,
         &unique_key,
         TEST_KEY_PREFIX,
@@ -719,10 +690,10 @@ async fn test_get_canister_to_principal_bulk_impl() {
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_partial_results() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
     let unique_key = generate_unique_test_key_prefix();
 
     // Create unique test principals for this test
@@ -769,7 +740,7 @@ async fn test_get_canister_to_principal_bulk_impl_partial_results() {
     let req = CanisterToPrincipalReq { canisters };
     let result = get_canister_to_principal_bulk_impl(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         req,
         &unique_key,
         TEST_KEY_PREFIX,
@@ -796,15 +767,15 @@ async fn test_get_canister_to_principal_bulk_impl_partial_results() {
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_empty_request() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
     let unique_key = generate_unique_test_key_prefix();
 
     // Execute with empty request
     let req = CanisterToPrincipalReq { canisters: vec![] };
     let result = get_canister_to_principal_bulk_impl(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         req,
         &unique_key,
         TEST_KEY_PREFIX,
@@ -822,10 +793,10 @@ async fn test_get_canister_to_principal_bulk_impl_empty_request() {
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
-    let dragonfly_pool = get_test_dragonfly_pool().await;
+    let redis_pool = create_test_redis_pool().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
     let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
     let unique_key = generate_unique_test_key_prefix();
 
     let canister_id = generate_unique_test_principal();
@@ -855,7 +826,7 @@ async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
     };
     let result = get_canister_to_principal_bulk_impl(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         req,
         &unique_key,
         TEST_KEY_PREFIX,
@@ -878,10 +849,10 @@ async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_large_batch() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.expect("Redis pool");
+    let redis_pool = create_test_redis_pool().await.unwrap();
     let mut conn = redis_pool.get().await.unwrap();
-    let dragonfly_pool = get_test_dragonfly_pool().await;
-    let mut dconn = dragonfly_pool.get().await.unwrap();
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
     let unique_key = generate_unique_test_key_prefix();
     // clean
     let _: () = conn.del(unique_key.clone()).await.unwrap();
@@ -890,8 +861,8 @@ async fn test_get_canister_to_principal_bulk_impl_large_batch() {
         .await
         .unwrap();
 
-    // Create 2500 test mappings (more than BATCH_SIZE of 1000)
-    let canister_principals: Vec<(Principal, Principal)> = (0..2500)
+    // Create 500 test mappings for batch testing
+    let canister_principals: Vec<(Principal, Principal)> = (0..500)
         .map(|_| {
             (
                 generate_unique_test_principal(),
@@ -905,25 +876,30 @@ async fn test_get_canister_to_principal_bulk_impl_large_batch() {
         .map(|(c, p)| (c.to_text(), p.to_text()))
         .collect();
 
-    // Store test data in Redis
-    let _: () = conn
-        .hset_multiple(unique_key.clone(), &canister_principals_txt)
-        .await
-        .unwrap();
-    let _: () = conn
-        .hset_multiple(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
-            &canister_principals_txt,
-        )
-        .await
-        .unwrap();
+    // Store test data in Redis using pipeline (batch in chunks of 500 to avoid timeout)
+    for chunk in canister_principals_txt.chunks(500) {
+        let _: () = conn
+            .hset_multiple(unique_key.clone(), chunk)
+            .await
+            .unwrap();
+    }
+    // Store in dragonfly
+    for chunk in canister_principals_txt.chunks(500) {
+        let _: () = dconn
+            .hset_multiple(
+                format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
+                chunk,
+            )
+            .await
+            .unwrap();
+    }
 
     // Execute - request all canisters
     let canisters = canister_principals.iter().map(|(c, _)| *c).collect();
     let req = CanisterToPrincipalReq { canisters };
     let result = get_canister_to_principal_bulk_impl(
         &redis_pool,
-        dragonfly_pool,
+        &dragonfly_pool,
         req,
         &unique_key,
         TEST_KEY_PREFIX,
@@ -933,10 +909,10 @@ async fn test_get_canister_to_principal_bulk_impl_large_batch() {
     // Verify
     assert!(result.is_ok(), "Failed : {:?}", result);
     let res = result.unwrap();
-    assert_eq!(res.mappings.len(), 2500);
+    assert_eq!(res.mappings.len(), 500);
 
     // Spot check some mappings across different batches
-    let sample_indices = [0, 500, 1000, 1500, 2499];
+    let sample_indices = [0, 100, 200, 300, 499];
     for &idx in sample_indices.iter() {
         if let Some((canister_id, user_principal)) = canister_principals.get(idx) {
             assert_eq!(res.mappings.get(canister_id), Some(user_principal));

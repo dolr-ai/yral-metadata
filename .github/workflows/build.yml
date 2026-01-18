@@ -23,7 +23,8 @@ jobs:
           toolchain: "stable"
 
       - name: Run tests
-        run: cargo test -- --test-threads=4
+        # Need to do sequential tests as upstash has really bad timeouts under load most of the bulk methods wont have more than 5 queries at a time, so it should be fine.
+        run: cargo test -- --test-threads=1 --no-capture
         env:
           TEST_REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
           DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}

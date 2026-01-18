@@ -178,7 +178,7 @@ pub async fn set_user_email_impl(
             .hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
             .ignore();
         dragonfly_pipe
-            .query_async::<()>(&mut *dragonfly_conn)
+            .query_async::<()>(&mut dragonfly_conn)
             .await?;
     }
 
@@ -231,7 +231,7 @@ pub async fn set_signup_datetime_impl(
             .hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
             .ignore();
         dragonfly_pipe
-            .query_async::<()>(&mut *dragonfly_conn)
+            .query_async::<()>(&mut dragonfly_conn)
             .await?;
     }
 

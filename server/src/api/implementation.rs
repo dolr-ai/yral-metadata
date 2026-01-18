@@ -136,7 +136,7 @@ pub async fn set_user_metadata_core(
             &user,
         )
         .ignore();
-    dragonfly_pipe.query_async::<()>(&mut *dragonfly_conn).await?;
+    dragonfly_pipe.query_async::<()>(&mut dragonfly_conn).await?;
 
     Ok(())
 }
@@ -257,12 +257,18 @@ pub async fn delete_metadata_bulk_impl(
     let mut conn = redis_pool.get().await?;
     let mut dragonfly_conn = dragonfly_pool.get().await?;
 
-    // Step 1: Fetch all metadata using pipeline (one round trip)
-    let mut fetch_pipe = redis::pipe();
-    for key in &keys {
-        fetch_pipe.hget(key, METADATA_FIELD);
+    // Step 1: Fetch all metadata using batched pipeline (chunks of 200 to avoid timeout)
+    const BATCH_SIZE: usize = 200;
+    let mut metadata_results: Vec<Option<Vec<u8>>> = Vec::with_capacity(keys.len());
+
+    for chunk in keys.chunks(BATCH_SIZE) {
+        let mut fetch_pipe = redis::pipe();
+        for key in chunk {
+            fetch_pipe.hget(key, METADATA_FIELD);
+        }
+        let chunk_results: Vec<Option<Vec<u8>>> = fetch_pipe.query_async(&mut *conn).await?;
+        metadata_results.extend(chunk_results);
     }
-    let metadata_results: Vec<Option<Vec<u8>>> = fetch_pipe.query_async(&mut *conn).await?;
 
     // Collect canister IDs and usernames to delete
     let mut canister_ids = Vec::new();
@@ -287,52 +293,53 @@ pub async fn delete_metadata_bulk_impl(
         .map(|name| format_to_dragonfly_key(key_prefix, name))
         .collect();
 
-    // Step 2: Build delete pipeline for Redis (all deletes in one round trip)
-    let mut redis_del_pipe = redis::pipe();
-
-    // Delete user metadata keys
-    if !keys.is_empty() {
-        redis_del_pipe.del(&keys).ignore();
+    // Step 2: Delete from Redis in batches
+    // Delete user metadata keys in chunks
+    for chunk in keys.chunks(BATCH_SIZE) {
+        let mut pipe = redis::pipe();
+        pipe.del(chunk).ignore();
+        pipe.query_async::<()>(&mut *conn).await?;
     }
 
-    // Delete from reverse index
-    if !canister_ids.is_empty() {
-        redis_del_pipe.hdel(can2prin_key, &canister_ids).ignore();
+    // Delete from reverse index in chunks
+    for chunk in canister_ids.chunks(BATCH_SIZE) {
+        let mut pipe = redis::pipe();
+        pipe.hdel(can2prin_key, chunk).ignore();
+        pipe.query_async::<()>(&mut *conn).await?;
     }
 
-    // Delete usernames
-    if !usernames.is_empty() {
-        redis_del_pipe.del(&usernames).ignore();
+    // Delete usernames in chunks
+    for chunk in usernames.chunks(BATCH_SIZE) {
+        let mut pipe = redis::pipe();
+        pipe.del(chunk).ignore();
+        pipe.query_async::<()>(&mut *conn).await?;
     }
 
-    redis_del_pipe.query_async::<()>(&mut *conn).await?;
-
-    // Step 3: Build delete pipeline for Dragonfly (all deletes in one round trip)
-    let mut dragonfly_del_pipe = redis::pipe();
-
-    // Delete user metadata keys
-    if !formatted_keys.is_empty() {
-        dragonfly_del_pipe.del(&formatted_keys).ignore();
+    // Step 3: Delete from Dragonfly in batches
+    // Delete user metadata keys in chunks
+    for chunk in formatted_keys.chunks(BATCH_SIZE) {
+        let mut pipe = redis::pipe();
+        pipe.del(chunk).ignore();
+        pipe.query_async::<()>(&mut dragonfly_conn).await?;
     }
 
-    // Delete from reverse index
-    if !formatted_canister_ids.is_empty() {
-        dragonfly_del_pipe
-            .hdel(
-                &format_to_dragonfly_key(key_prefix, can2prin_key),
-                &formatted_canister_ids,
-            )
-            .ignore();
+    // Delete from reverse index in chunks
+    for chunk in formatted_canister_ids.chunks(BATCH_SIZE) {
+        let mut pipe = redis::pipe();
+        pipe.hdel(
+            &format_to_dragonfly_key(key_prefix, can2prin_key),
+            chunk,
+        )
+        .ignore();
+        pipe.query_async::<()>(&mut dragonfly_conn).await?;
     }
 
-    // Delete usernames
-    if !formatted_usernames.is_empty() {
-        dragonfly_del_pipe.del(&formatted_usernames).ignore();
+    // Delete usernames in chunks
+    for chunk in formatted_usernames.chunks(BATCH_SIZE) {
+        let mut pipe = redis::pipe();
+        pipe.del(chunk).ignore();
+        pipe.query_async::<()>(&mut dragonfly_conn).await?;
     }
-
-    dragonfly_del_pipe
-        .query_async::<()>(&mut *dragonfly_conn)
-        .await?;
 
     Ok(())
 }
@@ -395,8 +402,8 @@ pub async fn get_canister_to_principal_bulk_impl(
     // let mut dragonfly_conn = dragonfly_pool.get().await?;
     let mut mappings = HashMap::new();
 
-    // Process in batches to avoid potential issues with very large requests
-    const BATCH_SIZE: usize = 1000;
+    // Process in batches to avoid timeout on remote Redis
+    const BATCH_SIZE: usize = 200;
 
     for batch in req.canisters.chunks(BATCH_SIZE) {
         // Convert canister IDs to strings for Redis
