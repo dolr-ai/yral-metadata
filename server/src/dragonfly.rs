@@ -131,7 +131,10 @@ impl DragonflyPool {
             let guard = self.cached_conn.read().await;
             if let Some(conn) = guard.as_ref() {
                 let mut conn_clone = conn.clone();
-                if let Ok(pong) = redis::cmd("PING").query_async::<String>(&mut conn_clone).await {
+                if let Ok(pong) = redis::cmd("PING")
+                    .query_async::<String>(&mut conn_clone)
+                    .await
+                {
                     if pong == "PONG" {
                         return Ok(conn_clone);
                     }
@@ -521,10 +524,16 @@ mod tests {
             .expect("Failed to init dragonfly redis pool");
 
         // Get a validated connection
-        let mut conn = pool.get_validated().await.expect("Failed to get validated connection");
+        let mut conn = pool
+            .get_validated()
+            .await
+            .expect("Failed to get validated connection");
 
         // Write and read
-        let _: () = conn.set("test:validated", "works").await.expect("SET failed");
+        let _: () = conn
+            .set("test:validated", "works")
+            .await
+            .expect("SET failed");
         let result: Option<String> = conn.get("test:validated").await.expect("GET failed");
         assert_eq!(result.as_deref(), Some("works"));
 
@@ -543,7 +552,8 @@ mod tests {
         // Build and execute pipeline
         let mut pipe = redis::pipe();
         for i in 0..10 {
-            pipe.set(format!("test:pipe:{}", i), format!("value_{}", i)).ignore();
+            pipe.set(format!("test:pipe:{}", i), format!("value_{}", i))
+                .ignore();
         }
         let _: () = pipe.query_async(&mut conn).await.expect("Pipeline failed");
 

@@ -136,7 +136,9 @@ pub async fn set_user_metadata_core(
             &user,
         )
         .ignore();
-    dragonfly_pipe.query_async::<()>(&mut dragonfly_conn).await?;
+    dragonfly_pipe
+        .query_async::<()>(&mut dragonfly_conn)
+        .await?;
 
     Ok(())
 }
@@ -326,11 +328,8 @@ pub async fn delete_metadata_bulk_impl(
     // Delete from reverse index in chunks
     for chunk in formatted_canister_ids.chunks(BATCH_SIZE) {
         let mut pipe = redis::pipe();
-        pipe.hdel(
-            &format_to_dragonfly_key(key_prefix, can2prin_key),
-            chunk,
-        )
-        .ignore();
+        pipe.hdel(&format_to_dragonfly_key(key_prefix, can2prin_key), chunk)
+            .ignore();
         pipe.query_async::<()>(&mut dragonfly_conn).await?;
     }
 

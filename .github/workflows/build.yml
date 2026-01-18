@@ -10,9 +10,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Run tests on self-hosted runner (same network as Dragonfly for low latency)
   test:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3

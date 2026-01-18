@@ -79,7 +79,8 @@ pub async fn populate_canister_to_principal_index(
     let mut conn = redis_pool.get().await?;
     let mut dragonfly_conn = dragonfly_pool.get().await?;
 
-    let dragonfly_key = format_to_dragonfly_key(YRAL_METADATA_KEY_PREFIX, CANISTER_TO_PRINCIPAL_KEY);
+    let dragonfly_key =
+        format_to_dragonfly_key(YRAL_METADATA_KEY_PREFIX, CANISTER_TO_PRINCIPAL_KEY);
 
     for batch in user_principal_canister_list.chunks(batch_size) {
         // Convert to format needed for Redis
@@ -110,10 +111,7 @@ pub async fn populate_canister_to_principal_index(
             dragonfly_pipe.hset(&dragonfly_key, canister_id, user_principal);
         }
 
-        if let Err(e) = dragonfly_pipe
-            .query_async::<()>(&mut dragonfly_conn)
-            .await
-        {
+        if let Err(e) = dragonfly_pipe.query_async::<()>(&mut dragonfly_conn).await {
             log::error!("Failed to insert batch into Dragonfly: {}", e);
         }
     }

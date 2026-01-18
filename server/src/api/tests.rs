@@ -419,9 +419,7 @@ async fn test_delete_metadata_bulk_large_batch() {
     let unique_key = generate_unique_test_key_prefix();
 
     // Create 300 test users for batch testing
-    let users: Vec<Principal> = (0..300)
-        .map(|_| generate_unique_test_principal())
-        .collect();
+    let users: Vec<Principal> = (0..300).map(|_| generate_unique_test_principal()).collect();
 
     // Store test data using batched pipeline (chunks of 200 to avoid Upstash timeout)
     let mut conn = redis_pool.get().await.unwrap();
@@ -583,9 +581,15 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
                 .hset(user.to_text(), METADATA_FIELD, &meta_bytes)
                 .await
                 .unwrap();
-            let _: () = dconn.hset(format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()), METADATA_FIELD, &meta_bytes).await.unwrap();
+            let _: () = dconn
+                .hset(
+                    format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()),
+                    METADATA_FIELD,
+                    &meta_bytes,
+                )
+                .await
+                .unwrap();
         }
-
     }
 
     // Execute
@@ -610,7 +614,12 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
         cleanup_test_data(&redis_pool, &user.to_text())
             .await
             .unwrap();
-        cleanup_dragonfly_test_data(&dragonfly_pool, &format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text())).await.unwrap();
+        cleanup_dragonfly_test_data(
+            &dragonfly_pool,
+            &format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()),
+        )
+        .await
+        .unwrap();
     }
 }
 
@@ -878,18 +887,12 @@ async fn test_get_canister_to_principal_bulk_impl_large_batch() {
 
     // Store test data in Redis using pipeline (batch in chunks of 500 to avoid timeout)
     for chunk in canister_principals_txt.chunks(500) {
-        let _: () = conn
-            .hset_multiple(unique_key.clone(), chunk)
-            .await
-            .unwrap();
+        let _: () = conn.hset_multiple(unique_key.clone(), chunk).await.unwrap();
     }
     // Store in dragonfly
     for chunk in canister_principals_txt.chunks(500) {
         let _: () = dconn
-            .hset_multiple(
-                format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
-                chunk,
-            )
+            .hset_multiple(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key), chunk)
             .await
             .unwrap();
     }
