@@ -185,9 +185,9 @@ jobs:
           QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
           DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
           DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
-          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT}}
-          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT}}
-          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY}}
+          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT }}
+          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT }}
+          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY }}
         run: |
           # Create deployment directory if not exists
           ssh $SERVER_USER@$SERVER_HOST "mkdir -p /home/yral-metadata"
@@ -220,11 +220,11 @@ jobs:
             GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID='$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID' \
             QSTASH_CURRENT_SIGNING_KEY='$QSTASH_CURRENT_SIGNING_KEY' \
             QSTASH_NEXT_SIGNING_KEY='$QSTASH_NEXT_SIGNING_KEY' \
-            DRAGONFLY_PASSWORD='$DRAGONFLY_PASSWORD'
-            DRAGONFLY_HOSTS='$DRAGONFLY_HOSTS'
-            DRAGONFLY_CA_CERT='$DRAGONFLY_CA_CERT'
-            DRAGONFLY_CLIENT_CERT='$DRAGONFLY_CLIENT_CERT'
-            DRAGONFLY_CLIENT_KEY='$DRAGONFLY_CLIENT_KEY'
+            DRAGONFLY_PASSWORD='$DRAGONFLY_PASSWORD' \
+            DRAGONFLY_HOSTS='$DRAGONFLY_HOSTS' \
+            DRAGONFLY_CA_CERT='$DRAGONFLY_CA_CERT' \
+            DRAGONFLY_CLIENT_CERT='$DRAGONFLY_CLIENT_CERT' \
+            DRAGONFLY_CLIENT_KEY='$DRAGONFLY_CLIENT_KEY' \
             docker compose up -d
 
             echo 'Waiting for services to start...'
