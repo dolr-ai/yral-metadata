@@ -33,14 +33,14 @@ pub trait FcmService: Send + Sync {
 pub trait RedisConnection: Send + Sync {
     async fn hget<F, RV>(&mut self, key: &str, field: F) -> RedisResult<RV>
     where
-        F: redis::ToRedisArgs + Send + Sync,
+        F: redis::ToSingleRedisArg + Send + Sync,
         RV: redis::FromRedisValue + Send + Sync;
 
     async fn hset<K, F, V>(&mut self, key: K, field: F, value: V) -> RedisResult<bool>
     where
-        K: redis::ToRedisArgs + Send + Sync,
-        F: redis::ToRedisArgs + Send + Sync,
-        V: redis::ToRedisArgs + Send + Sync;
+        K: redis::ToSingleRedisArg + Send + Sync,
+        F: redis::ToSingleRedisArg + Send + Sync,
+        V: redis::ToSingleRedisArg + Send + Sync;
 
     // Test-specific hget that returns UserMetadata directly.
     // The mock implementation will handle this.

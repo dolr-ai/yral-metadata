@@ -1,0 +1,261 @@
+name : Deploy to Hetzner Bare Metal
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: deploy-hetzner-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PROXY_IMAGE_NAME: ${{ github.repository_owner }}/fly-redis-proxy-metadata
+
+jobs:
+  build_check:
+    uses: ./.github/workflows/build.yml
+    with:
+      publish-artifact: true
+    secrets: inherit
+  
+  build-and-push:
+    name: Build and Push Docker Images
+    needs: build_check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-musl
+
+      - name: Make binary executable
+        run: chmod +x target/x86_64-unknown-linux-musl/release/yral-metadata-server
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for yral-metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=raw,value=latest
+      
+      - name: Extract metadata for fly-redis-proxy
+        id: meta-proxy
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.PROXY_IMAGE_NAME }}
+          tags: |
+            type=sha,format=long,prefix=
+            type=raw,value=latest
+
+      - name: Build and push yral-metadata-image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push fly-redis-proxy image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./deploy/fly-redis-proxy
+          file: ./deploy/fly-redis-proxy/Dockerfile
+          push: true
+          tags: ${{ steps.meta-proxy.outputs.tags }}
+          labels: ${{ steps.meta-proxy.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Hetzner Bare Metal
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        server:
+          - name: yral-metadata-1
+            host: 138.201.32.116
+          - name: yral-metadata-2
+            host: 49.12.120.32
+      max-parallel: 1
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HETZNER_BARE_METAL_GITHUB_ACTIONS_SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{matrix.server.host}} >> ~/.ssh/known_hosts
+
+      - name: Check server connectivity
+        run: |
+          ssh -o ConnectTimeout=10 root@${{matrix.server.host}} "echo 'Server connection successful'"
+
+      - name: Install Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Fetch Redis password from Fly
+        id: redis
+        env:
+          FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
+        run: |
+          # Get Redis status and extract password from Private URL
+          OUTPUT=$(flyctl redis status yral-metadata 2>&1)
+          REDIS_URL=$(echo "$OUTPUT" | grep "Private URL" | awk '{print $NF}')
+
+          # Extract password first, then mask it immediately
+          REDIS_PASSWORD=$(echo "$REDIS_URL" | sed -n 's|redis://default:\([^@]*\)@.*|\1|p')
+          if [ -n "$REDIS_PASSWORD" ]; then
+            echo "::add-mask::$REDIS_PASSWORD"
+            echo "::add-mask::$REDIS_URL"
+          fi
+
+          if [ -z "$REDIS_URL" ]; then
+            echo "Error: Could not fetch Redis URL from flyctl redis status"
+            exit 1
+          fi
+          if [ -z "$REDIS_PASSWORD" ]; then
+            echo "Error: Could not extract Redis password from URL"
+            exit 1
+          fi
+          echo "metadata_redis_password=$REDIS_PASSWORD" >> $GITHUB_OUTPUT
+          echo "Redis password fetched successfully"
+
+      - name: Sync deployment files to server
+        run: |
+          rsync -avz --delete \
+            ./deploy/ \
+            root@${{matrix.server.host}}:/home/yral-metadata/
+
+      - name: Log in to GitHub Container Registry on server
+        run: |
+          ssh root@${{matrix.server.host}} "
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          "
+
+      - name: Deploy to ${{ matrix.server.name }} with docker compose
+        env:
+          SERVER_HOST: ${{ matrix.server.host }}
+          SERVER_USER: root
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
+          REDIS_URL: redis://default:${{ steps.redis.outputs.metadata_redis_password }}@fly-redis-proxy:16379
+          JWT_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_PUBLIC_KEY }}
+          YRAL_METADATA_USER_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_USER_NOTIFICATION_API_KEY }}
+          CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
+          GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID }}
+          BACKEND_ADMIN_IDENTITY: ${{ secrets.YRAL_APP_ADMIN_AND_PROPOSAL_SUBMITTER_DFX_IDENTITY_SECP_PRIVATE_KEY }}
+          YRAL_AUTH_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_JWT_VERIFY_PUBLIC_KEY }}
+          GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
+          QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
+          QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
+          DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
+          DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
+          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT }}
+          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT }}
+          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY }}
+        run: |
+          # Create deployment directory if not exists
+          ssh $SERVER_USER@$SERVER_HOST "mkdir -p /home/yral-metadata"
+          
+          ssh $SERVER_USER@$SERVER_HOST "
+            cd /home/yral-metadata
+            
+            echo 'Pulling latest images...'
+            APP_IMAGE=ghcr.io/${{ github.repository }} \
+            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
+            IMAGE_TAG=${{ github.sha }} \
+            docker compose pull
+            
+            echo 'Stopping existing containers...'
+            docker compose down --remove-orphans || true
+            
+            echo 'Starting services...'
+            APP_IMAGE=ghcr.io/${{ github.repository }} \
+            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
+            IMAGE_TAG=${{ github.sha }} \
+            BIND_ADDRESS=0.0.0.0:8080 \
+            FLY_API_TOKEN='$FLY_API_TOKEN' \
+            REDIS_URL='$REDIS_URL' \
+            JWT_PUBLIC_KEY='$JWT_PUBLIC_KEY' \
+            YRAL_METADATA_USER_NOTIFICATION_API_KEY='$YRAL_METADATA_USER_NOTIFICATION_API_KEY' \
+            CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY='$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY' \
+            GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID='$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID' \
+            BACKEND_ADMIN_IDENTITY='$BACKEND_ADMIN_IDENTITY' \
+            YRAL_AUTH_PUBLIC_KEY='$YRAL_AUTH_PUBLIC_KEY' \
+            GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID='$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID' \
+            QSTASH_CURRENT_SIGNING_KEY='$QSTASH_CURRENT_SIGNING_KEY' \
+            QSTASH_NEXT_SIGNING_KEY='$QSTASH_NEXT_SIGNING_KEY' \
+            DRAGONFLY_PASSWORD='$DRAGONFLY_PASSWORD' \
+            DRAGONFLY_HOSTS='$DRAGONFLY_HOSTS' \
+            DRAGONFLY_CA_CERT='$DRAGONFLY_CA_CERT' \
+            DRAGONFLY_CLIENT_CERT='$DRAGONFLY_CLIENT_CERT' \
+            DRAGONFLY_CLIENT_KEY='$DRAGONFLY_CLIENT_KEY' \
+            docker compose up -d
+
+            echo 'Waiting for services to start...'
+            sleep 15
+            echo 'Services status:'
+            docker compose ps
+          "
+      
+      - name: Verify deployment
+        run: |
+          ssh root@${{ matrix.server.host }} "
+            cd /home/yral-metadata
+            echo '=== Container Status ==='
+            docker compose ps
+            echo ''
+            echo '=== Container Logs (last 20 lines) ==='
+            docker compose logs --tail=20 yral-metadata 2>/dev/null || echo 'Logs not yet available'
+          "
+
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Server**: ${{ matrix.server.host }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployment Method**: Docker Compose" >> $GITHUB_STEP_SUMMARY
+          echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
+          echo "  - ghcr.io/${{ github.repository }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "  - ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Services**: fly-redis-proxy, yral-metadata, caddy" >> $GITHUB_STEP_SUMMARY
+          echo "- **Secrets**: Injected via environment variables at runtime" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Wait before next server
+        run: |
+          echo "Waiting 30 seconds before deploying to next server..."
+          sleep 30
