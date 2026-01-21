@@ -1,20 +1,6 @@
 version: '3.8'
 
 services:
-  fly-redis-proxy:
-    image: ${PROXY_IMAGE:-ghcr.io/dolr-ai/fly-redis-proxy}:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    environment:
-      - FLY_API_TOKEN=${FLY_API_TOKEN}
-    networks:
-      - yral-net
-    healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "16379"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-
   yral-metadata:
     image: ${APP_IMAGE:-ghcr.io/dolr-ai/yral-metadata}:${IMAGE_TAG:-latest}
     container_name: yral-metadata
@@ -23,8 +9,6 @@ services:
       - "8080:8080"
     environment:
       - BIND_ADDRESS=0.0.0.0:8080 
-      - FLY_API_TOKEN=${FLY_API_TOKEN} 
-      - REDIS_URL=${REDIS_URL} 
       - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
       - YRAL_METADATA_USER_NOTIFICATION_API_KEY=${YRAL_METADATA_USER_NOTIFICATION_API_KEY}
       - CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY=${CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY}
@@ -38,11 +22,9 @@ services:
       - DRAGONFLY_HOSTS=${DRAGONFLY_HOSTS}
       - DRAGONFLY_CA_CERT=${DRAGONFLY_CA_CERT}
       - DRAGONFLY_CLIENT_CERT=${DRAGONFLY_CLIENT_CERT}
-      - DRAGONFLY_CLIENT_KEY=${DRAGONFLY_CLIENT_KEY}s
+      - DRAGONFLY_CLIENT_KEY=${DRAGONFLY_CLIENT_KEY}
     networks:
       - yral-net
-    depends_on:
-      - fly-redis-proxy
 
   caddy:
       image: caddy:2-alpine
