@@ -86,13 +86,13 @@ pub async fn populate_canister_to_principal_index(
             .map(|(user_principal, canister_id)| (canister_id.to_text(), user_principal.to_text()))
             .collect();
 
-        // Use pipeline for Redis bulk insertion
-        let mut redis_pipe = redis::pipe();
+        // Use pipeline for dragonfly bulk insertion
+        let mut dragonfly_pipe = redis::pipe();
         for (canister_id, user_principal) in &items {
-            redis_pipe.hset(&formatted_key, canister_id, user_principal);
+            dragonfly_pipe.hset(&formatted_key, canister_id, user_principal);
         }
 
-        match redis_pipe.query_async::<()>(&mut dragonfly_conn).await {
+        match dragonfly_pipe.query_async::<()>(&mut dragonfly_conn).await {
             Ok(_) => {
                 processed += batch.len();
             }
