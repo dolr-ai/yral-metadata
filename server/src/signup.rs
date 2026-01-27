@@ -3,7 +3,7 @@ use crate::{
     dragonfly::{format_to_dragonfly_key, DragonflyPool, YRAL_METADATA_KEY_PREFIX},
     notifications::traits::RedisConnection,
     services::error_wrappers::{ErrorWrapper, OkWrapper},
-    state::{AppState, RedisPool},
+    state::AppState,
     utils::error::{Error, Result},
 };
 use axum::{
@@ -52,7 +52,6 @@ pub async fn set_user_email(
             .map_err(|_| Error::AuthTokenMissing)?,
     )?;
     let result = set_user_email_impl(
-        &state.redis,
         &state.dragonfly_redis,
         principal,
         req.payload.email,
@@ -100,7 +99,6 @@ pub async fn set_signup_datetime(
     );
 
     let res = set_signup_datetime_impl(
-        &state.redis,
         &state.dragonfly_redis,
         principal,
         req.already_signed_in,
@@ -120,7 +118,6 @@ pub async fn set_signup_datetime(
 
 /// Optimized with pipelines for batch writes
 pub async fn set_user_email_impl(
-    redis_pool: &RedisPool,
     dragonfly_redis: &DragonflyPool,
     user_principal: Principal,
     email: String,
@@ -136,11 +133,10 @@ pub async fn set_user_email_impl(
     }
 
     // 2. Get Redis connection
-    let mut conn = redis_pool.get().await?;
     let mut dragonfly_conn = dragonfly_redis.get().await?;
 
     // 3. Fetch user metadata from Redis
-    let meta_raw: Option<Box<[u8]>> = conn.hget(&user_key, METADATA_FIELD).await?;
+    let meta_raw: Option<Box<[u8]>> = dragonfly_conn.hget(&formatted_user_key, METADATA_FIELD).await?;
 
     // 4. If metadata exists, update the KYC flag
     let Some(raw) = meta_raw else {
@@ -165,13 +161,6 @@ pub async fn set_user_email_impl(
     if needs_update {
         let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
 
-        // Pipeline for Redis
-        let mut redis_pipe = redis::pipe();
-        redis_pipe
-            .hset(&user_key, METADATA_FIELD, &updated_meta)
-            .ignore();
-        redis_pipe.query_async::<()>(&mut *conn).await?;
-
         // Pipeline for Dragonfly
         let mut dragonfly_pipe = redis::pipe();
         dragonfly_pipe
@@ -187,7 +176,6 @@ pub async fn set_user_email_impl(
 
 /// Optimized with pipelines for batch writes
 pub async fn set_signup_datetime_impl(
-    redis_pool: &RedisPool,
     dragonfly_redis: &DragonflyPool,
     user_principal: Principal,
     already_signed_id: bool,
@@ -197,11 +185,10 @@ pub async fn set_signup_datetime_impl(
     let formatted_user_key = format_to_dragonfly_key(key_prefix, &user_key);
 
     // Get Redis connection
-    let mut conn = redis_pool.get().await?;
     let mut dragonfly_conn = dragonfly_redis.get().await?;
 
     // Fetch user metadata from Redis
-    let meta_raw: Option<Box<[u8]>> = conn.hget(&user_key, METADATA_FIELD).await?;
+    let meta_raw: Option<Box<[u8]>> = dragonfly_conn.hget(&formatted_user_key, METADATA_FIELD).await?;
 
     let Some(raw) = meta_raw else {
         return Err(Error::Unknown(format!("User `{}` not found", user_key)));
@@ -217,13 +204,6 @@ pub async fn set_signup_datetime_impl(
             meta.signup_at = Some(chrono::Utc::now().timestamp());
         }
         let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
-
-        // Pipeline for Redis
-        let mut redis_pipe = redis::pipe();
-        redis_pipe
-            .hset(&user_key, METADATA_FIELD, &updated_meta)
-            .ignore();
-        redis_pipe.query_async::<()>(&mut *conn).await?;
 
         // Pipeline for Dragonfly
         let mut dragonfly_pipe = redis::pipe();

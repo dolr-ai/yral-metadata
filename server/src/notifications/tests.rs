@@ -1,4 +1,5 @@
 mod tests {
+    use crate::dragonfly::format_to_dragonfly_key;
     use crate::notifications::traits::RedisConnection;
     use crate::{api::METADATA_FIELD, dragonfly::TEST_KEY_PREFIX}; // Import METADATA_FIELD
     use axum::Json;
@@ -41,13 +42,11 @@ mod tests {
     #[tokio::test]
     async fn test_register_device_new_user_creates_key() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "aaaaa-aa".to_string();
 
         let initial_metadata = create_actual_user_metadata(&user_principal_text, None);
 
-        mock_redis.add_user(initial_metadata.clone()); // Use add_user helper
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata); // Use add_user helper
 
         let req = Json(MockRegisterDeviceReq {
@@ -58,7 +57,6 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm, // FCM service first
-            &mut mock_redis,
             // Then Redis service
             &mut dragonfly_mock_redis,   // Then Dragonfly Redis service
             user_principal_text.clone(), // Then user principal
@@ -87,8 +85,11 @@ mod tests {
         assert_eq!(group.registration_tokens[0], "new_device_token_1");
         let fcm_notification_key = group.notification_key.clone();
 
-        let updated_metadata_bytes: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let updated_metadata_bytes: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let updated_metadata_bytes =
@@ -109,7 +110,6 @@ mod tests {
     #[tokio::test]
     async fn test_register_device_unmigrated_user_replaces_key() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "gytd5-mqaaa-aaaah-ajwka-cai".to_string();
 
@@ -125,7 +125,6 @@ mod tests {
                 }],
             }),
         );
-        mock_redis.add_user(initial_metadata.clone());
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata);
 
         let notification_key_name =
@@ -149,7 +148,6 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -173,8 +171,11 @@ mod tests {
         assert!(group.registration_tokens.contains(&new_device_token_str));
         assert_eq!(group.notification_key, initial_fcm_key);
 
-        let updated_metadata_bytes: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let updated_metadata_bytes: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let updated_metadata_bytes =
@@ -195,7 +196,6 @@ mod tests {
     #[tokio::test]
     async fn test_register_device_migrated_user_adds_to_key() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "gytd5-mqaaa-aaaah-ajwka-cai".to_string();
 
@@ -213,7 +213,6 @@ mod tests {
         );
         initial_metadata.is_migrated = true;
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
             crate::firebase::notifications::utils::get_notification_key_name_from_principal(
@@ -236,7 +235,6 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -260,8 +258,11 @@ mod tests {
         assert!(group.registration_tokens.contains(&new_device_token_str));
         assert_eq!(group.notification_key, initial_fcm_key);
 
-        let updated_metadata_bytes: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let updated_metadata_bytes: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let updated_metadata_bytes =
@@ -286,7 +287,6 @@ mod tests {
     #[tokio::test]
     async fn test_register_device_reregister_existing_token() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "76qol-iiaaa-aaaak-qelkq-cai".to_string();
 
@@ -303,7 +303,6 @@ mod tests {
             }),
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
             crate::firebase::notifications::utils::get_notification_key_name_from_principal(
@@ -325,7 +324,6 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -348,8 +346,11 @@ mod tests {
         // Key on FCM should remain the initial_fcm_key because the logic is remove then add to *existing* key.
         assert_eq!(group.notification_key, initial_fcm_key);
 
-        let updated_metadata_bytes: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let updated_metadata_bytes: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let updated_metadata_bytes =
@@ -382,7 +383,6 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -399,7 +399,6 @@ mod tests {
     #[tokio::test]
     async fn test_unregister_device_success() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "64jio-xaaaa-aaaao-qdeoa-cai".to_string();
         let token_to_unregister = "token_to_remove".to_string();
@@ -421,7 +420,6 @@ mod tests {
             }),
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
             crate::firebase::notifications::utils::get_notification_key_name_from_principal(
@@ -443,7 +441,6 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -464,8 +461,11 @@ mod tests {
         assert_eq!(group.registration_tokens.len(), 1);
         assert_eq!(group.registration_tokens[0], other_token);
 
-        let updated_metadata_bytes: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let updated_metadata_bytes: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let updated_metadata_bytes =
@@ -484,7 +484,6 @@ mod tests {
     #[tokio::test]
     async fn test_unregister_last_device_removes_group_from_fcm() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "vppwu-fqaaa-aaaah-qhzea-cai".to_string();
         let last_token = "the_last_token".to_string();
@@ -500,7 +499,6 @@ mod tests {
             }),
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
             crate::firebase::notifications::utils::get_notification_key_name_from_principal(
@@ -530,7 +528,6 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -555,8 +552,11 @@ mod tests {
             .registration_tokens
             .is_empty());
 
-        let updated_metadata_bytes: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let updated_metadata_bytes: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let updated_metadata_bytes =
@@ -572,7 +572,6 @@ mod tests {
     #[tokio::test]
     async fn test_unregister_device_not_found() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "eedyd-aaaaa-aaaag-qdxpa-cai".to_string();
         let existing_token = "actual_token".to_string();
@@ -589,7 +588,6 @@ mod tests {
             }),
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
             crate::firebase::notifications::utils::get_notification_key_name_from_principal(
@@ -611,7 +609,6 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -629,8 +626,11 @@ mod tests {
         assert_eq!(group.registration_tokens.len(), 1);
         assert_eq!(group.registration_tokens[0], existing_token);
 
-        let metadata_bytes_opt: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let metadata_bytes_opt: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let metadata_bytes = metadata_bytes_opt.unwrap();
@@ -649,13 +649,11 @@ mod tests {
     #[tokio::test]
     async fn test_unregister_device_no_notification_key() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "iwf4p-syaaa-aaaag-qicra-cai".to_string();
 
         let initial_metadata = create_actual_user_metadata(&user_principal_text, None);
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let req = Json(MockUnregisterDeviceReq {
             registration_token: DeviceRegistrationToken {
@@ -665,7 +663,6 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -682,7 +679,6 @@ mod tests {
     #[tokio::test]
     async fn test_unregister_device_metadata_not_found() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "wf4p-syaaa-aaaag-qicra-cai".to_string();
 
@@ -694,7 +690,6 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -711,7 +706,6 @@ mod tests {
     #[tokio::test]
     async fn test_send_notification_success() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "ijcpr-iqaaa-aaaag-anfnq-cai".to_string();
         let fcm_key = "fcm_key_for_ijcpr-iqaaa-aaaag-anfnq-cai".to_string();
@@ -727,7 +721,6 @@ mod tests {
             }),
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
             crate::firebase::notifications::utils::get_notification_key_name_from_principal(
@@ -758,7 +751,6 @@ mod tests {
         let result = send_notification_impl(
             None, // HttpRequest is None for tests
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -782,7 +774,6 @@ mod tests {
     #[tokio::test]
     async fn test_send_notification_metadata_not_found() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "wrd2k-oyaaa-aaaai-afitq-cai".to_string();
 
@@ -803,7 +794,6 @@ mod tests {
         let result = send_notification_impl(
             None,
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -820,13 +810,11 @@ mod tests {
     #[tokio::test]
     async fn test_send_notification_key_not_found_in_metadata() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "mpvf6-4aaaa-aaaal-qhokq-cai".to_string();
 
         let initial_metadata = create_actual_user_metadata(&user_principal_text, None);
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let notification_payload = types::NotificationPayload {
             title: Some("Test Title".to_string()),
@@ -845,7 +833,6 @@ mod tests {
         let result = send_notification_impl(
             None,
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -862,7 +849,6 @@ mod tests {
     #[tokio::test]
     async fn test_send_notification_fcm_key_not_found_in_fcm_mock() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "vfvsa-lqaaa-aaaag-qetmq-cai".to_string();
         let fcm_key_in_redis = "dangling_fcm_key_in_redis".to_string();
@@ -877,7 +863,6 @@ mod tests {
             }),
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let notification_payload = types::NotificationPayload {
             title: Some("Test Title".to_string()),
@@ -896,7 +881,6 @@ mod tests {
         let result = send_notification_impl(
             None,
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -925,13 +909,11 @@ mod tests {
     #[tokio::test]
     async fn test_register_device_fcm_has_key_redis_missing_key_struct() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "mbwvf-5iaaa-aaaal-affma-cai".to_string();
 
         let initial_metadata_no_key = create_actual_user_metadata(&user_principal_text, None);
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata_no_key.clone());
-        mock_redis.add_user(initial_metadata_no_key);
 
         let notification_key_name =
             crate::firebase::notifications::utils::get_notification_key_name_from_principal(
@@ -955,7 +937,6 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -982,8 +963,11 @@ mod tests {
             .contains(&"old_token_in_fcm".to_string()));
         assert!(group.registration_tokens.contains(&new_device_token_str));
 
-        let updated_metadata_bytes_opt: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let updated_metadata_bytes_opt: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let updated_metadata_bytes =
@@ -1010,7 +994,6 @@ mod tests {
     #[tokio::test]
     async fn test_register_device_fcm_missing_key_redis_has_key() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "ijcpr-iqaaa-aaaag-anfnq-cai".to_string();
         let redis_stale_key = "stale_fcm_key_in_redis".to_string();
@@ -1025,7 +1008,6 @@ mod tests {
             }),
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata_stale_key.clone());
-        mock_redis.add_user(initial_metadata_stale_key);
 
         let new_device_token_str = "new_device_for_ijcpr-iqaaa-aaaag-anfnq-cai".to_string();
         let req = Json(MockRegisterDeviceReq {
@@ -1036,7 +1018,6 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -1063,8 +1044,11 @@ mod tests {
         assert_eq!(group.registration_tokens[0], new_device_token_str);
         let fcm_new_key = group.notification_key.clone();
 
-        let updated_metadata_bytes_opt: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let updated_metadata_bytes_opt: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let updated_metadata_bytes =
@@ -1084,7 +1068,6 @@ mod tests {
     #[tokio::test]
     async fn test_unregister_device_token_in_redis_not_in_fcm_group_exists() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "r4q6s-yyaaa-aaaap-acika-cai".to_string();
         let token_in_redis_only = "token_in_redis_not_fcm".to_string();
@@ -1106,7 +1089,6 @@ mod tests {
             }),
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let notification_key_name =
             crate::firebase::notifications::utils::get_notification_key_name_from_principal(
@@ -1128,7 +1110,6 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -1153,8 +1134,11 @@ mod tests {
         assert_eq!(group.registration_tokens.len(), 1);
         assert_eq!(group.registration_tokens[0], token_in_both);
 
-        let updated_metadata_bytes_opt: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let updated_metadata_bytes_opt: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let updated_metadata_bytes = updated_metadata_bytes_opt.unwrap();
@@ -1168,7 +1152,6 @@ mod tests {
     #[tokio::test]
     async fn test_unregister_device_token_in_redis_fcm_group_gone() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "jkoyy-xaaaa-aaaai-agrba-cai".to_string();
         let token_to_unregister = "token_when_fcm_group_is_gone".to_string();
@@ -1184,7 +1167,6 @@ mod tests {
             }),
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
-        mock_redis.add_user(initial_metadata);
 
         let req = Json(MockUnregisterDeviceReq {
             registration_token: DeviceRegistrationToken {
@@ -1194,7 +1176,6 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut mock_redis,
             &mut dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
@@ -1224,8 +1205,11 @@ mod tests {
             .unwrap()
             .contains_key(&notification_key_name));
 
-        let updated_metadata_bytes_opt: Option<Vec<u8>> = mock_redis
-            .hget(&user_principal_text, METADATA_FIELD)
+        let updated_metadata_bytes_opt: Option<Vec<u8>> = dragonfly_mock_redis
+            .hget(
+                &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal_text),
+                METADATA_FIELD,
+            )
             .await
             .unwrap();
         let updated_metadata_bytes = updated_metadata_bytes_opt.unwrap();

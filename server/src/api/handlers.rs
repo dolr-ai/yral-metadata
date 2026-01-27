@@ -57,7 +57,6 @@ pub async fn set_user_metadata(
     );
 
     let result = set_user_metadata_impl(
-        &state.redis,
         &state.dragonfly_redis,
         principal,
         req,
@@ -102,7 +101,6 @@ pub async fn admin_set_user_metadata(
     })?;
 
     let result = set_user_metadata_using_admin_identity_impl(
-        &state.redis,
         &state.dragonfly_redis,
         admin_principal,
         user_principal,
@@ -137,7 +135,6 @@ pub async fn get_user_metadata(
     );
 
     let result = get_user_metadata_impl(
-        &state.redis,
         &state.dragonfly_redis,
         identifier.clone(),
         YRAL_METADATA_KEY_PREFIX,
@@ -185,7 +182,6 @@ pub async fn delete_metadata_bulk(
     crate::auth::verify_token(token, &state.jwt_details)?;
 
     delete_metadata_bulk_impl(
-        &state.redis,
         &state.dragonfly_redis,
         &req,
         CANISTER_TO_PRINCIPAL_KEY,
@@ -216,18 +212,13 @@ pub async fn get_user_metadata_bulk(
         sentry::Level::Info,
     );
 
-    let result = get_user_metadata_bulk_impl(
-        &state.redis,
-        &state.dragonfly_redis,
-        req,
-        YRAL_METADATA_KEY_PREFIX,
-    )
-    .await
-    .map_err(|e| {
-        log::error!("Error fetching bulk user metadata: {}", e);
-        crate::sentry_utils::capture_api_error(&e, "/metadata-bulk", None);
-        e
-    })?;
+    let result = get_user_metadata_bulk_impl(&state.dragonfly_redis, req, YRAL_METADATA_KEY_PREFIX)
+        .await
+        .map_err(|e| {
+            log::error!("Error fetching bulk user metadata: {}", e);
+            crate::sentry_utils::capture_api_error(&e, "/metadata-bulk", None);
+            e
+        })?;
     Ok(Json(Ok(result)))
 }
 
@@ -245,7 +236,6 @@ pub async fn get_canister_to_principal_bulk(
     Json(req): Json<CanisterToPrincipalReq>,
 ) -> Result<Json<ApiResult<CanisterToPrincipalRes>>> {
     let result = get_canister_to_principal_bulk_impl(
-        &state.redis,
         &state.dragonfly_redis,
         req,
         CANISTER_TO_PRINCIPAL_KEY,

@@ -60,15 +60,12 @@ pub async fn register_device(
         sentry::Level::Info,
     );
 
-    let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
     let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await?;
-    let redis_service = &mut *redis_conn_pooled;
     let dragonfly_service = &mut dragonfly_conn_pooled;
     let firebase_service = &state.firebase;
 
     register_device_impl(
         firebase_service,
-        redis_service,
         dragonfly_service,
         user_principal,
         Json(req),
@@ -87,13 +84,11 @@ pub async fn register_device(
 
 pub async fn register_device_impl<
     F: FcmService,
-    R: RedisConnection,
     D: RedisConnection,
     P: UserPrincipal,
     Req: RegisterDeviceRequest,
 >(
     fcm_service: &F,
-    redis_service: &mut R,
     dragonfly_service: &mut D,
     user_principal: P,
     req: Json<Req>,
@@ -107,8 +102,11 @@ pub async fn register_device_impl<
     let user_id_text = user_principal.to_text();
 
     let mut user_metadata: UserMetadata = {
-        let meta_raw: Option<Vec<u8>> = redis_service
-            .hget(&user_id_text, METADATA_FIELD)
+        let meta_raw: Option<Vec<u8>> = dragonfly_service
+            .hget(
+                &format_to_dragonfly_key(key_prefix, &user_id_text),
+                METADATA_FIELD,
+            )
             .await
             .map_err(Error::Redis)?;
         match meta_raw {
@@ -305,10 +303,6 @@ pub async fn register_device_impl<
     }
 
     let meta_raw_to_save = serde_json::to_vec(&user_metadata).map_err(Error::Deser)?;
-    redis_service
-        .hset(&user_id_text, METADATA_FIELD, &meta_raw_to_save)
-        .await
-        .map_err(Error::Redis)?;
     dragonfly_service
         .hset(
             &format_to_dragonfly_key(key_prefix, &user_id_text),
@@ -342,15 +336,12 @@ pub async fn unregister_device(
     Path(user_principal): Path<Principal>,
     Json(req): Json<UnregisterDeviceReq>,
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
-    let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
     let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await?;
 
-    let redis_service = &mut *redis_conn_pooled;
     let dragonfly_service = &mut dragonfly_conn_pooled;
     let firebase_service = &state.firebase;
     unregister_device_impl(
         firebase_service,
-        redis_service,
         dragonfly_service,
         user_principal,
         Json(req),
@@ -361,13 +352,11 @@ pub async fn unregister_device(
 
 pub async fn unregister_device_impl<
     F: FcmService,
-    R: RedisConnection,
     D: RedisConnection,
     P: UserPrincipal,
     Req: UnregisterDeviceRequest,
 >(
     fcm_service: &F,
-    redis_service: &mut R,
     dragonfly_service: &mut D,
     user_principal: P,
     req: Json<Req>,
@@ -381,8 +370,11 @@ pub async fn unregister_device_impl<
     let user_id_text = user_principal.to_text();
 
     let mut user_metadata: UserMetadata = {
-        let meta_raw: Option<Vec<u8>> = redis_service
-            .hget(&user_id_text, METADATA_FIELD)
+        let meta_raw: Option<Vec<u8>> = dragonfly_service
+            .hget(
+                &format_to_dragonfly_key(key_prefix, &user_id_text),
+                METADATA_FIELD,
+            )
             .await
             .map_err(Error::Redis)?;
         match meta_raw {
@@ -446,10 +438,6 @@ pub async fn unregister_device_impl<
             .retain(|token| token.token != registration_token_obj.token);
 
         let meta_raw_to_save = serde_json::to_vec(&user_metadata).map_err(Error::Deser)?;
-        redis_service
-            .hset(&user_id_text, METADATA_FIELD, &meta_raw_to_save)
-            .await
-            .map_err(Error::Redis)?;
         dragonfly_service
             .hset(
                 &format_to_dragonfly_key(key_prefix, &user_id_text),
@@ -505,17 +493,14 @@ pub async fn send_notification(
         sentry::Level::Info,
     );
 
-    let mut redis_conn_pooled = state.redis.get().await.map_err(Error::Bb8)?;
     let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await?;
 
-    let redis_service = &mut *redis_conn_pooled;
     let dragonfly_service = &mut dragonfly_conn_pooled;
     let firebase_service = &state.firebase;
 
     send_notification_impl(
         Some(&headers),
         firebase_service,
-        redis_service,
         dragonfly_service,
         user_principal,
         Json(req),
@@ -532,15 +517,9 @@ pub async fn send_notification(
     })
 }
 
-pub async fn send_notification_impl<
-    F: FcmService,
-    R: RedisConnection,
-    D: RedisConnection,
-    P: UserPrincipal,
->(
+pub async fn send_notification_impl<F: FcmService, D: RedisConnection, P: UserPrincipal>(
     headers: Option<&HeaderMap>,
     fcm_service: &F,
-    redis_service: &mut R,
     dragonfly_service: &mut D,
     user_principal: P,
     req: Json<SendNotificationReq>,
@@ -586,8 +565,11 @@ pub async fn send_notification_impl<
     }
 
     let user_metadata: UserMetadata = {
-        let meta_raw: Option<Vec<u8>> = redis_service
-            .hget(&user_id_text, METADATA_FIELD)
+        let meta_raw: Option<Vec<u8>> = dragonfly_service
+            .hget(
+                &format_to_dragonfly_key(key_prefix, &user_id_text),
+                METADATA_FIELD,
+            )
             .await
             .map_err(Error::Redis)?;
         match meta_raw {

@@ -9,10 +9,7 @@ pub mod test_helpers {
     use types::{SetUserMetadataReqMetadata, UserMetadata};
 
     use crate::dragonfly::{DragonflyPool, TEST_KEY_PREFIX};
-    use crate::{
-        state::{init_redis_with_url, RedisPool},
-        utils::error::Result,
-    };
+    use crate::utils::error::Result;
 
     /// Global counter for generating unique test principals
     static PRINCIPAL_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -20,18 +17,6 @@ pub mod test_helpers {
     // Thread-local storage for used principals per test thread (currently unused but kept for future use)
     thread_local! {
         static USED_PRINCIPALS: Mutex<HashSet<u64>> = Mutex::new(HashSet::new());
-    }
-
-    /// Create a test Redis pool
-    pub async fn create_test_redis_pool() -> Result<RedisPool> {
-        // Install rustls crypto provider for TLS connections
-        rustls::crypto::ring::default_provider()
-            .install_default()
-            .ok();
-
-        let redis_url = std::env::var("TEST_REDIS_URL").unwrap();
-
-        init_redis_with_url(&redis_url).await
     }
 
     /// Generate a unique test principal that won't collide across threads
@@ -134,21 +119,6 @@ pub mod test_helpers {
         format!("test_{}_{}_{}:", timestamp, thread_hash, counter)
     }
 
-    /// Clean up test data with a specific prefix
-    pub async fn cleanup_test_data(redis_pool: &RedisPool, key_prefix: &str) -> Result<()> {
-        use redis::AsyncCommands;
-
-        let mut conn = redis_pool.get().await?;
-        let pattern = format!("{}*", key_prefix);
-        let keys: Vec<String> = conn.keys(&pattern).await?;
-
-        if !keys.is_empty() {
-            let _: () = conn.del(keys).await?;
-        }
-
-        Ok(())
-    }
-
     pub async fn cleanup_dragonfly_test_data(
         dragonfly_pool: &DragonflyPool,
         key_prefix: &str,
@@ -168,25 +138,43 @@ pub mod test_helpers {
 
     /// Clean up test data for a specific principal
     pub async fn cleanup_test_principal_data(
-        redis_pool: &RedisPool,
+        redis_pool: &DragonflyPool,
         principal: &Principal,
     ) -> Result<()> {
+        use crate::dragonfly::format_to_dragonfly_key;
         use crate::utils::canister::CANISTER_TO_PRINCIPAL_KEY;
         use redis::AsyncCommands;
 
-        let mut conn = redis_pool.get().await?;
+        let mut dconn = redis_pool.get().await?;
         let principal_key = principal.to_text();
 
         // Clean up the principal's metadata
-        let _: () = conn.del(&principal_key).await?;
+        let _: () = dconn
+            .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &principal_key))
+            .await?;
 
         // Clean up any reverse index entries that might reference this principal
-        let reverse_keys: Vec<String> = conn.hkeys(CANISTER_TO_PRINCIPAL_KEY).await?;
+        let reverse_keys: Vec<String> = dconn
+            .hkeys(format_to_dragonfly_key(
+                TEST_KEY_PREFIX,
+                CANISTER_TO_PRINCIPAL_KEY,
+            ))
+            .await?;
         for key in reverse_keys {
-            let value: Option<String> = conn.hget(CANISTER_TO_PRINCIPAL_KEY, &key).await?;
+            let value: Option<String> = dconn
+                .hget(
+                    format_to_dragonfly_key(TEST_KEY_PREFIX, CANISTER_TO_PRINCIPAL_KEY),
+                    &key,
+                )
+                .await?;
             if let Some(value) = value {
                 if value == principal_key {
-                    let _: () = conn.hdel(CANISTER_TO_PRINCIPAL_KEY, &key).await?;
+                    let _: () = dconn
+                        .hdel(
+                            format_to_dragonfly_key(TEST_KEY_PREFIX, CANISTER_TO_PRINCIPAL_KEY),
+                            &key,
+                        )
+                        .await?;
                 }
             }
         }

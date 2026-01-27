@@ -13,7 +13,6 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  PROXY_IMAGE_NAME: ${{ github.repository_owner }}/fly-redis-proxy-metadata
 
 jobs:
   build_check:
@@ -63,15 +62,6 @@ jobs:
           tags: |
             type=sha,format=long,prefix=
             type=raw,value=latest
-      
-      - name: Extract metadata for fly-redis-proxy
-        id: meta-proxy
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.PROXY_IMAGE_NAME }}
-          tags: |
-            type=sha,format=long,prefix=
-            type=raw,value=latest
 
       - name: Build and push yral-metadata-image
         uses: docker/build-push-action@v5
@@ -81,17 +71,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push fly-redis-proxy image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./deploy/fly-redis-proxy
-          file: ./deploy/fly-redis-proxy/Dockerfile
-          push: true
-          tags: ${{ steps.meta-proxy.outputs.tags }}
-          labels: ${{ steps.meta-proxy.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -125,36 +104,6 @@ jobs:
         run: |
           ssh -o ConnectTimeout=10 root@${{matrix.server.host}} "echo 'Server connection successful'"
 
-      - name: Install Fly CLI
-        uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Fetch Redis password from Fly
-        id: redis
-        env:
-          FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
-        run: |
-          # Get Redis status and extract password from Private URL
-          OUTPUT=$(flyctl redis status yral-metadata 2>&1)
-          REDIS_URL=$(echo "$OUTPUT" | grep "Private URL" | awk '{print $NF}')
-
-          # Extract password first, then mask it immediately
-          REDIS_PASSWORD=$(echo "$REDIS_URL" | sed -n 's|redis://default:\([^@]*\)@.*|\1|p')
-          if [ -n "$REDIS_PASSWORD" ]; then
-            echo "::add-mask::$REDIS_PASSWORD"
-            echo "::add-mask::$REDIS_URL"
-          fi
-
-          if [ -z "$REDIS_URL" ]; then
-            echo "Error: Could not fetch Redis URL from flyctl redis status"
-            exit 1
-          fi
-          if [ -z "$REDIS_PASSWORD" ]; then
-            echo "Error: Could not extract Redis password from URL"
-            exit 1
-          fi
-          echo "metadata_redis_password=$REDIS_PASSWORD" >> $GITHUB_OUTPUT
-          echo "Redis password fetched successfully"
-
       - name: Sync deployment files to server
         run: |
           rsync -avz --delete \
@@ -172,8 +121,6 @@ jobs:
           SERVER_HOST: ${{ matrix.server.host }}
           SERVER_USER: root
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
-          REDIS_URL: redis://default:${{ steps.redis.outputs.metadata_redis_password }}@fly-redis-proxy:16379
           JWT_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_PUBLIC_KEY }}
           YRAL_METADATA_USER_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_USER_NOTIFICATION_API_KEY }}
           CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
@@ -197,7 +144,6 @@ jobs:
             
             echo 'Pulling latest images...'
             APP_IMAGE=ghcr.io/${{ github.repository }} \
-            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
             IMAGE_TAG=${{ github.sha }} \
             docker compose pull
             
@@ -206,11 +152,8 @@ jobs:
             
             echo 'Starting services...'
             APP_IMAGE=ghcr.io/${{ github.repository }} \
-            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata \
             IMAGE_TAG=${{ github.sha }} \
             BIND_ADDRESS=0.0.0.0:8080 \
-            FLY_API_TOKEN='$FLY_API_TOKEN' \
-            REDIS_URL='$REDIS_URL' \
             JWT_PUBLIC_KEY='$JWT_PUBLIC_KEY' \
             YRAL_METADATA_USER_NOTIFICATION_API_KEY='$YRAL_METADATA_USER_NOTIFICATION_API_KEY' \
             CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY='$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY' \
@@ -251,8 +194,7 @@ jobs:
           echo "- **Deployment Method**: Docker Compose" >> $GITHUB_STEP_SUMMARY
           echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
           echo "  - ghcr.io/${{ github.repository }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "  - ghcr.io/${{ github.repository_owner }}/fly-redis-proxy-metadata:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Services**: fly-redis-proxy, yral-metadata, caddy" >> $GITHUB_STEP_SUMMARY
+          echo "- **Services**: yral-metadata, caddy" >> $GITHUB_STEP_SUMMARY
           echo "- **Secrets**: Injected via environment variables at runtime" >> $GITHUB_STEP_SUMMARY
       
       - name: Wait before next server

@@ -9,8 +9,6 @@ use serde_with::{serde_as, DisplayFromStr};
 #[derive(Deserialize)]
 pub struct AppConfig {
     pub bind_address: SocketAddr,
-    #[serde_as(as = "DisplayFromStr")]
-    pub redis_url: ConnectionInfo,
     pub jwt_public_key: String,
     pub yral_auth_public_key: String,
     pub backend_admin_identity: String,
