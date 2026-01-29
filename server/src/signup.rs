@@ -136,7 +136,9 @@ pub async fn set_user_email_impl(
     let mut dragonfly_conn = dragonfly_redis.get().await?;
 
     // 3. Fetch user metadata from Redis
-    let meta_raw: Option<Box<[u8]>> = dragonfly_conn.hget(&formatted_user_key, METADATA_FIELD).await?;
+    let meta_raw: Option<Box<[u8]>> = dragonfly_conn
+        .hget(&formatted_user_key, METADATA_FIELD)
+        .await?;
 
     // 4. If metadata exists, update the KYC flag
     let Some(raw) = meta_raw else {
@@ -188,7 +190,9 @@ pub async fn set_signup_datetime_impl(
     let mut dragonfly_conn = dragonfly_redis.get().await?;
 
     // Fetch user metadata from Redis
-    let meta_raw: Option<Box<[u8]>> = dragonfly_conn.hget(&formatted_user_key, METADATA_FIELD).await?;
+    let meta_raw: Option<Box<[u8]>> = dragonfly_conn
+        .hget(&formatted_user_key, METADATA_FIELD)
+        .await?;
 
     let Some(raw) = meta_raw else {
         return Err(Error::Unknown(format!("User `{}` not found", user_key)));

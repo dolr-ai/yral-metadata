@@ -258,22 +258,27 @@ pub async fn get_user_metadata_impl(
             let key_prefix = key_prefix.clone();
 
             async move {
-                let user_principal = if let Ok(principal) =
-                    Principal::from_text(username_or_principal.as_str())
-                {
-                    principal
-                } else {
-                    let key = username_info_key(username_or_principal.as_str());
-                    let meta_raw: Option<Box<[u8]>> = conn
-                        .hget(format_to_dragonfly_key(&key_prefix, &key), METADATA_FIELD)
-                        .await?;
-                    let Some(meta_raw) = meta_raw else {
-                        return Ok(None);
+                let user_principal =
+                    if let Ok(principal) = Principal::from_text(username_or_principal.as_str()) {
+                        principal
+                    } else {
+                        let key = username_info_key(username_or_principal.as_str());
+                        let meta_raw: Option<Box<[u8]>> = conn
+                            .hget(format_to_dragonfly_key(&key_prefix, &key), METADATA_FIELD)
+                            .await?;
+                        let Some(meta_raw) = meta_raw else {
+                            return Ok(None);
+                        };
+                        let meta: UserMetadataByUsername = serde_json::from_slice(&meta_raw)
+                            .map_err(|e| {
+                                redis::RedisError::from((
+                                    redis::ErrorKind::Parse,
+                                    "deserialization failed",
+                                    e.to_string(),
+                                ))
+                            })?;
+                        meta.user_principal
                     };
-                    let meta: UserMetadataByUsername = serde_json::from_slice(&meta_raw)
-                        .map_err(|e| redis::RedisError::from((redis::ErrorKind::Parse, "deserialization failed", e.to_string())))?;
-                    meta.user_principal
-                };
 
                 let meta_raw: Option<Box<[u8]>> = conn
                     .hget(
@@ -284,8 +289,13 @@ pub async fn get_user_metadata_impl(
 
                 match meta_raw {
                     Some(raw) => {
-                        let meta: UserMetadata = serde_json::from_slice(&raw)
-                            .map_err(|e| redis::RedisError::from((redis::ErrorKind::Parse, "deserialization failed", e.to_string())))?;
+                        let meta: UserMetadata = serde_json::from_slice(&raw).map_err(|e| {
+                            redis::RedisError::from((
+                                redis::ErrorKind::Parse,
+                                "deserialization failed",
+                                e.to_string(),
+                            ))
+                        })?;
                         Ok(Some(UserMetadataV2::from_metadata(user_principal, meta)))
                     }
                     None => Ok(None),
