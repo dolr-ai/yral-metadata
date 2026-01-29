@@ -74,7 +74,6 @@ pub async fn populate_canister_to_principal_index(
 
     // Process in batches of 1000
     let batch_size = 1000;
-    let mut dragonfly_conn = dragonfly_pool.get().await?;
 
     let formatted_key =
         format_to_dragonfly_key(YRAL_METADATA_KEY_PREFIX, CANISTER_TO_PRINCIPAL_KEY);
@@ -86,13 +85,23 @@ pub async fn populate_canister_to_principal_index(
             .map(|(user_principal, canister_id)| (canister_id.to_text(), user_principal.to_text()))
             .collect();
 
-        // Use pipeline for dragonfly bulk insertion
-        let mut dragonfly_pipe = redis::pipe();
-        for (canister_id, user_principal) in &items {
-            dragonfly_pipe.hset(&formatted_key, canister_id, user_principal);
-        }
+        // Use pipeline for dragonfly bulk insertion with retry
+        let batch_result = dragonfly_pool
+            .execute_with_retry(|mut conn| {
+                let items = items.clone();
+                let formatted_key = formatted_key.clone();
 
-        match dragonfly_pipe.query_async::<()>(&mut dragonfly_conn).await {
+                async move {
+                    let mut dragonfly_pipe = redis::pipe();
+                    for (canister_id, user_principal) in &items {
+                        dragonfly_pipe.hset(&formatted_key, canister_id, user_principal);
+                    }
+                    dragonfly_pipe.query_async::<()>(&mut conn).await
+                }
+            })
+            .await;
+
+        match batch_result {
             Ok(_) => {
                 processed += batch.len();
             }
