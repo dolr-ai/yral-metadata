@@ -125,53 +125,81 @@ pub async fn set_user_email_impl(
     key_prefix: &str,
 ) -> Result<UserMetadata> {
     let user_key = user_principal.to_text();
-    let formatted_user_key = format_to_dragonfly_key(key_prefix, &user_key);
 
     // 1. Confirm the email is valid
     if !is_valid_email(&email) {
         return Err(Error::InvalidEmail(email));
     }
 
-    // 2. Get Redis connection
-    let mut dragonfly_conn = dragonfly_redis.get().await?;
+    let key_prefix = key_prefix.to_string();
+    let email_clone = email.clone();
 
-    // 3. Fetch user metadata from Redis
-    let meta_raw: Option<Box<[u8]>> = dragonfly_conn.hget(&formatted_user_key, METADATA_FIELD).await?;
+    dragonfly_redis
+        .execute_with_retry(|mut conn| {
+            let user_key = user_key.clone();
+            let key_prefix = key_prefix.clone();
+            let email = email_clone.clone();
 
-    // 4. If metadata exists, update the KYC flag
-    let Some(raw) = meta_raw else {
-        return Err(Error::Unknown(format!("User `{}` not found", user_key)));
-    };
+            async move {
+                let formatted_user_key = format_to_dragonfly_key(&key_prefix, &user_key);
 
-    let mut meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
-    let mut needs_update = false;
+                // Fetch user metadata
+                let meta_raw: Option<Box<[u8]>> =
+                    conn.hget(&formatted_user_key, METADATA_FIELD).await?;
 
-    // 5. Update email only if needed
-    if meta.email.is_none() {
-        meta.email = Some(email);
-        needs_update = true;
-    }
+                let Some(raw) = meta_raw else {
+                    return Err(redis::RedisError::from((
+                        redis::ErrorKind::Parse,
+                        "User not found",
+                    )));
+                };
 
-    if !already_signed_in && meta.signup_at.is_none() {
-        meta.signup_at = Some(chrono::Utc::now().timestamp());
-        needs_update = true;
-    }
+                let mut meta: UserMetadata = serde_json::from_slice(&raw).map_err(|e| {
+                    redis::RedisError::from((
+                        redis::ErrorKind::Parse,
+                        "Deserialization failed",
+                        e.to_string(),
+                    ))
+                })?;
+                let mut needs_update = false;
 
-    // 6. Write updates using pipelines (single round trip each)
-    if needs_update {
-        let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
+                // Update email only if needed
+                if meta.email.is_none() {
+                    meta.email = Some(email);
+                    needs_update = true;
+                }
 
-        // Pipeline for Dragonfly
-        let mut dragonfly_pipe = redis::pipe();
-        dragonfly_pipe
-            .hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
-            .ignore();
-        dragonfly_pipe
-            .query_async::<()>(&mut dragonfly_conn)
-            .await?;
-    }
+                if !already_signed_in && meta.signup_at.is_none() {
+                    meta.signup_at = Some(chrono::Utc::now().timestamp());
+                    needs_update = true;
+                }
 
-    Ok(meta)
+                // Write updates directly
+                if needs_update {
+                    let updated_meta = serde_json::to_vec(&meta).map_err(|e| {
+                        redis::RedisError::from((
+                            redis::ErrorKind::Parse,
+                            "Serialization failed",
+                            e.to_string(),
+                        ))
+                    })?;
+
+                    conn.hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
+                        .await?;
+                }
+
+                Ok(meta)
+            }
+        })
+        .await
+        .map_err(|e| {
+            let err_str = e.to_string();
+            if err_str.contains("User not found") {
+                Error::Unknown(format!("User `{}` not found", user_key))
+            } else {
+                Error::from(e)
+            }
+        })
 }
 
 /// Optimized with pipelines for batch writes
@@ -182,40 +210,67 @@ pub async fn set_signup_datetime_impl(
     key_prefix: &str,
 ) -> Result<UserMetadata> {
     let user_key = user_principal.to_text();
-    let formatted_user_key = format_to_dragonfly_key(key_prefix, &user_key);
+    let key_prefix = key_prefix.to_string();
 
-    // Get Redis connection
-    let mut dragonfly_conn = dragonfly_redis.get().await?;
+    dragonfly_redis
+        .execute_with_retry(|mut conn| {
+            let user_key = user_key.clone();
+            let key_prefix = key_prefix.clone();
 
-    // Fetch user metadata from Redis
-    let meta_raw: Option<Box<[u8]>> = dragonfly_conn.hget(&formatted_user_key, METADATA_FIELD).await?;
+            async move {
+                let formatted_user_key = format_to_dragonfly_key(&key_prefix, &user_key);
 
-    let Some(raw) = meta_raw else {
-        return Err(Error::Unknown(format!("User `{}` not found", user_key)));
-    };
+                // Fetch user metadata
+                let meta_raw: Option<Box<[u8]>> =
+                    conn.hget(&formatted_user_key, METADATA_FIELD).await?;
 
-    let mut meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
+                let Some(raw) = meta_raw else {
+                    return Err(redis::RedisError::from((
+                        redis::ErrorKind::Parse,
+                        "User not found",
+                    )));
+                };
 
-    // Update signup_at only if needed
-    if meta.signup_at.is_none() {
-        if already_signed_id {
-            meta.signup_at = Some((chrono::Utc::now() - chrono::Duration::hours(48)).timestamp());
-        } else {
-            meta.signup_at = Some(chrono::Utc::now().timestamp());
-        }
-        let updated_meta = serde_json::to_vec(&meta).map_err(Error::Deser)?;
+                let mut meta: UserMetadata = serde_json::from_slice(&raw).map_err(|e| {
+                    redis::RedisError::from((
+                        redis::ErrorKind::Parse,
+                        "Deserialization failed",
+                        e.to_string(),
+                    ))
+                })?;
 
-        // Pipeline for Dragonfly
-        let mut dragonfly_pipe = redis::pipe();
-        dragonfly_pipe
-            .hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
-            .ignore();
-        dragonfly_pipe
-            .query_async::<()>(&mut dragonfly_conn)
-            .await?;
-    }
+                // Update signup_at only if needed
+                if meta.signup_at.is_none() {
+                    if already_signed_id {
+                        meta.signup_at =
+                            Some((chrono::Utc::now() - chrono::Duration::hours(48)).timestamp());
+                    } else {
+                        meta.signup_at = Some(chrono::Utc::now().timestamp());
+                    }
+                    let updated_meta = serde_json::to_vec(&meta).map_err(|e| {
+                        redis::RedisError::from((
+                            redis::ErrorKind::Parse,
+                            "Serialization failed",
+                            e.to_string(),
+                        ))
+                    })?;
 
-    Ok(meta)
+                    conn.hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
+                        .await?;
+                }
+
+                Ok(meta)
+            }
+        })
+        .await
+        .map_err(|e| {
+            let err_str = e.to_string();
+            if err_str.contains("User not found") {
+                Error::Unknown(format!("User `{}` not found", user_key))
+            } else {
+                Error::from(e)
+            }
+        })
 }
 
 fn is_valid_email(email: &str) -> bool {

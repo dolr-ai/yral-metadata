@@ -12,6 +12,12 @@ metadata.yral.com {
         health_interval 30s
         health_timeout 10s
 
+        transport http {
+            read_timeout 45s
+            write_timeout 45s
+            dial_timeout 10s
+        }
+
         # Headers
         header_up Host {host}
         header_up X-Real-IP {remote_host}

@@ -60,71 +60,130 @@ pub async fn set_user_metadata_core(
     key_prefix: &str,
 ) -> Result<SetUserMetadataRes> {
     let user = user_principal.to_text();
-    let mut dragonfly_conn = dragonfly_pool.get().await?;
+    let set_metadata = set_metadata.clone();
+    let can2prin_key = can2prin_key.to_string();
+    let key_prefix = key_prefix.to_string();
 
-    let existing_meta: Option<Box<[u8]>> = dragonfly_conn
-        .hget(format_to_dragonfly_key(key_prefix, &user), METADATA_FIELD)
-        .await?;
+    dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let user = user.clone();
+            let set_metadata = set_metadata.clone();
+            let can2prin_key = can2prin_key.clone();
+            let key_prefix = key_prefix.clone();
 
-    if !set_metadata.user_name.is_empty() {
-        set_metadata_for_username(
-            &mut dragonfly_conn,
-            user_principal,
-            set_metadata.user_name.clone(),
-            key_prefix,
-        )
-        .await?;
-    }
-
-    let new_meta = if let Some(existing_meta) = existing_meta {
-        let mut existing: UserMetadata =
-            serde_json::from_slice(&existing_meta).map_err(Error::Deser)?;
-        existing.user_canister_id = set_metadata.user_canister_id;
-
-        if !set_metadata.user_name.is_empty() {
-            if !existing.user_name.is_empty() {
-                let key = username_info_key(&existing.user_name);
-                // Delete old username from both Redis and Dragonfly using pipeline
-                let _d_del: usize = dragonfly_conn
-                    .hdel(&format_to_dragonfly_key(key_prefix, &key), METADATA_FIELD)
+            async move {
+                let existing_meta: Option<Box<[u8]>> = conn
+                    .hget(format_to_dragonfly_key(&key_prefix, &user), METADATA_FIELD)
                     .await?;
+
+                if !set_metadata.user_name.is_empty() {
+                    // Inline username validation and insertion
+                    static USERNAME_REGEX: LazyLock<Regex> =
+                        LazyLock::new(|| Regex::new(r"^([a-zA-Z0-9]){3,15}$").unwrap());
+
+                    if !USERNAME_REGEX.is_match(&set_metadata.user_name) {
+                        return Err(redis::RedisError::from((
+                            redis::ErrorKind::Parse,
+                            "Invalid username format",
+                        )));
+                    }
+
+                    let username_key = username_info_key(&set_metadata.user_name);
+                    let formatted_key = format_to_dragonfly_key(&key_prefix, &username_key);
+                    let meta = UserMetadataByUsername { user_principal };
+                    let meta_raw = serde_json::to_vec(&meta).map_err(|e| {
+                        redis::RedisError::from((
+                            redis::ErrorKind::Parse,
+                            "Serialization failed",
+                            e.to_string(),
+                        ))
+                    })?;
+
+                    let d_inserted: usize = conn
+                        .hset_nx(&formatted_key, METADATA_FIELD, &meta_raw)
+                        .await?;
+                    if d_inserted != 1 {
+                        return Err(redis::RedisError::from((
+                            redis::ErrorKind::Parse,
+                            "Duplicate username",
+                        )));
+                    }
+                }
+
+                let new_meta = if let Some(existing_meta) = existing_meta {
+                    let mut existing: UserMetadata = serde_json::from_slice(&existing_meta)
+                        .map_err(|e| {
+                            redis::RedisError::from((
+                                redis::ErrorKind::Parse,
+                                "Deserialization failed",
+                                e.to_string(),
+                            ))
+                        })?;
+                    existing.user_canister_id = set_metadata.user_canister_id;
+
+                    if !set_metadata.user_name.is_empty() {
+                        if !existing.user_name.is_empty() {
+                            let key = username_info_key(&existing.user_name);
+                            let _d_del: usize = conn
+                                .hdel(&format_to_dragonfly_key(&key_prefix, &key), METADATA_FIELD)
+                                .await?;
+                        }
+                        existing.user_name = set_metadata.user_name.clone();
+                    }
+
+                    existing
+                } else {
+                    UserMetadata {
+                        user_canister_id: set_metadata.user_canister_id,
+                        user_name: set_metadata.user_name.clone(),
+                        notification_key: None,
+                        is_migrated: false,
+                        email: None,
+                        signup_at: None,
+                    }
+                };
+
+                // Serialize metadata
+                let meta_raw = serde_json::to_vec(&new_meta).map_err(|e| {
+                    redis::RedisError::from((
+                        redis::ErrorKind::Parse,
+                        "Serialization failed",
+                        e.to_string(),
+                    ))
+                })?;
+
+                // Use pipeline for Dragonfly writes (2 operations in one round trip)
+                let mut dragonfly_pipe = redis::pipe();
+                dragonfly_pipe
+                    .hset(
+                        &format_to_dragonfly_key(&key_prefix, &user),
+                        METADATA_FIELD,
+                        &meta_raw,
+                    )
+                    .ignore()
+                    .hset(
+                        format_to_dragonfly_key(&key_prefix, &can2prin_key),
+                        new_meta.user_canister_id.to_text(),
+                        &user,
+                    )
+                    .ignore();
+                dragonfly_pipe.query_async::<()>(&mut conn).await?;
+
+                Ok(())
             }
-            existing.user_name = set_metadata.user_name.clone();
-        }
-
-        existing
-    } else {
-        UserMetadata {
-            user_canister_id: set_metadata.user_canister_id,
-            user_name: set_metadata.user_name.clone(),
-            notification_key: None,
-            is_migrated: false,
-            email: None,
-            signup_at: None,
-        }
-    };
-
-    // Serialize metadata
-    let meta_raw = serde_json::to_vec(&new_meta).map_err(Error::Deser)?;
-
-    // Use pipeline for Dragonfly writes (2 operations in one round trip)
-    let mut dragonfly_pipe = redis::pipe();
-    dragonfly_pipe
-        .hset(
-            &format_to_dragonfly_key(key_prefix, &user),
-            METADATA_FIELD,
-            &meta_raw,
-        )
-        .ignore()
-        .hset(
-            format_to_dragonfly_key(key_prefix, can2prin_key),
-            new_meta.user_canister_id.to_text(),
-            &user,
-        )
-        .ignore();
-    dragonfly_pipe
-        .query_async::<()>(&mut dragonfly_conn)
-        .await?;
+        })
+        .await
+        .map_err(|e| {
+            // Convert Redis errors back to our error types
+            let err_str = e.to_string();
+            if err_str.contains("Invalid username") {
+                Error::InvalidUsername
+            } else if err_str.contains("Duplicate username") {
+                Error::DuplicateUsername
+            } else {
+                Error::from(e)
+            }
+        })?;
 
     Ok(())
 }
@@ -191,37 +250,60 @@ pub async fn get_user_metadata_impl(
     username_or_principal: String,
     key_prefix: &str,
 ) -> Result<GetUserMetadataV2Res> {
-    let mut d_conn = dragonfly_pool.get().await?;
-    let user_principal = if let Ok(principal) = Principal::from_text(username_or_principal.as_str())
-    {
-        principal
-    } else {
-        let key = username_info_key(username_or_principal.as_str());
-        let meta_raw: Option<Box<[u8]>> = d_conn
-            .hget(format_to_dragonfly_key(key_prefix, &key), METADATA_FIELD)
-            .await?;
-        let Some(meta_raw) = meta_raw else {
-            return Ok(None);
-        };
-        let meta: UserMetadataByUsername =
-            serde_json::from_slice(&meta_raw).map_err(Error::Deser)?;
-        meta.user_principal
-    };
+    let key_prefix = key_prefix.to_string();
 
-    let meta_raw: Option<Box<[u8]>> = d_conn
-        .hget(
-            format_to_dragonfly_key(key_prefix, &user_principal.to_text()),
-            METADATA_FIELD,
-        )
-        .await?;
+    dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let username_or_principal = username_or_principal.clone();
+            let key_prefix = key_prefix.clone();
 
-    match meta_raw {
-        Some(raw) => {
-            let meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
-            Ok(Some(UserMetadataV2::from_metadata(user_principal, meta)))
-        }
-        None => Ok(None),
-    }
+            async move {
+                let user_principal =
+                    if let Ok(principal) = Principal::from_text(username_or_principal.as_str()) {
+                        principal
+                    } else {
+                        let key = username_info_key(username_or_principal.as_str());
+                        let meta_raw: Option<Box<[u8]>> = conn
+                            .hget(format_to_dragonfly_key(&key_prefix, &key), METADATA_FIELD)
+                            .await?;
+                        let Some(meta_raw) = meta_raw else {
+                            return Ok(None);
+                        };
+                        let meta: UserMetadataByUsername = serde_json::from_slice(&meta_raw)
+                            .map_err(|e| {
+                                redis::RedisError::from((
+                                    redis::ErrorKind::Parse,
+                                    "deserialization failed",
+                                    e.to_string(),
+                                ))
+                            })?;
+                        meta.user_principal
+                    };
+
+                let meta_raw: Option<Box<[u8]>> = conn
+                    .hget(
+                        format_to_dragonfly_key(&key_prefix, &user_principal.to_text()),
+                        METADATA_FIELD,
+                    )
+                    .await?;
+
+                match meta_raw {
+                    Some(raw) => {
+                        let meta: UserMetadata = serde_json::from_slice(&raw).map_err(|e| {
+                            redis::RedisError::from((
+                                redis::ErrorKind::Parse,
+                                "deserialization failed",
+                                e.to_string(),
+                            ))
+                        })?;
+                        Ok(Some(UserMetadataV2::from_metadata(user_principal, meta)))
+                    }
+                    None => Ok(None),
+                }
+            }
+        })
+        .await
+        .map_err(Error::from)
 }
 
 /// Core implementation for bulk delete of user metadata
@@ -242,62 +324,77 @@ pub async fn delete_metadata_bulk_impl(
         .map(|k| format_to_dragonfly_key(key_prefix, k))
         .collect();
 
-    let mut dragonfly_conn = dragonfly_pool.get().await?;
+    let can2prin_key = can2prin_key.to_string();
+    let key_prefix = key_prefix.to_string();
 
-    // Step 1: Fetch all metadata using batched pipeline (chunks of 200 to avoid timeout)
-    const BATCH_SIZE: usize = 200;
-    let mut metadata_results: Vec<Option<Vec<u8>>> = Vec::with_capacity(keys.len());
+    dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let keys = keys.clone();
+            let formatted_keys = formatted_keys.clone();
+            let can2prin_key = can2prin_key.clone();
+            let key_prefix = key_prefix.clone();
 
-    for chunk in keys.chunks(BATCH_SIZE) {
-        let mut fetch_pipe = redis::pipe();
-        for key in chunk {
-            fetch_pipe.hget(format_to_dragonfly_key(key_prefix, &key), METADATA_FIELD);
-        }
-        let chunk_results: Vec<Option<Vec<u8>>> =
-            fetch_pipe.query_async(&mut dragonfly_conn).await?;
-        metadata_results.extend(chunk_results);
-    }
+            async move {
+                // Step 1: Fetch all metadata using batched pipeline (chunks of 200 to avoid timeout)
+                const BATCH_SIZE: usize = 200;
+                let mut metadata_results: Vec<Option<Vec<u8>>> = Vec::with_capacity(keys.len());
 
-    // Collect canister IDs and usernames to delete
-    let mut canister_ids = Vec::new();
-    let mut usernames = Vec::new();
+                for chunk in keys.chunks(BATCH_SIZE) {
+                    let mut fetch_pipe = redis::pipe();
+                    for key in chunk {
+                        fetch_pipe.hget(format_to_dragonfly_key(&key_prefix, &key), METADATA_FIELD);
+                    }
+                    let chunk_results: Vec<Option<Vec<u8>>> =
+                        fetch_pipe.query_async(&mut conn).await?;
+                    metadata_results.extend(chunk_results);
+                }
 
-    for meta_raw in metadata_results.into_iter().flatten() {
-        if let Ok(meta) = serde_json::from_slice::<UserMetadata>(&meta_raw) {
-            canister_ids.push(meta.user_canister_id.to_text());
-            if !meta.user_name.is_empty() {
-                usernames.push(username_info_key(&meta.user_name));
+                // Collect canister IDs and usernames to delete
+                let mut canister_ids = Vec::new();
+                let mut usernames = Vec::new();
+
+                for meta_raw in metadata_results.into_iter().flatten() {
+                    if let Ok(meta) = serde_json::from_slice::<UserMetadata>(&meta_raw) {
+                        canister_ids.push(meta.user_canister_id.to_text());
+                        if !meta.user_name.is_empty() {
+                            usernames.push(username_info_key(&meta.user_name));
+                        }
+                    }
+                }
+
+                let formatted_usernames: Vec<String> = usernames
+                    .iter()
+                    .map(|name| format_to_dragonfly_key(&key_prefix, name))
+                    .collect();
+
+                // Step 2: Delete from Dragonfly in batches
+                // Delete user metadata keys in chunks
+                for chunk in formatted_keys.chunks(BATCH_SIZE) {
+                    let mut pipe = redis::pipe();
+                    pipe.del(chunk).ignore();
+                    pipe.query_async::<()>(&mut conn).await?;
+                }
+
+                // Delete from reverse index in chunks
+                for chunk in canister_ids.chunks(BATCH_SIZE) {
+                    let mut pipe = redis::pipe();
+                    pipe.hdel(&format_to_dragonfly_key(&key_prefix, &can2prin_key), chunk)
+                        .ignore();
+                    pipe.query_async::<()>(&mut conn).await?;
+                }
+
+                // Delete usernames in chunks
+                for chunk in formatted_usernames.chunks(BATCH_SIZE) {
+                    let mut pipe = redis::pipe();
+                    pipe.del(chunk).ignore();
+                    pipe.query_async::<()>(&mut conn).await?;
+                }
+
+                Ok(())
             }
-        }
-    }
-
-    let formatted_usernames: Vec<String> = usernames
-        .iter()
-        .map(|name| format_to_dragonfly_key(key_prefix, name))
-        .collect();
-
-    // Step 2: Delete from Dragonfly in batches
-    // Delete user metadata keys in chunks
-    for chunk in formatted_keys.chunks(BATCH_SIZE) {
-        let mut pipe = redis::pipe();
-        pipe.del(chunk).ignore();
-        pipe.query_async::<()>(&mut dragonfly_conn).await?;
-    }
-
-    // Delete from reverse index in chunks
-    for chunk in canister_ids.chunks(BATCH_SIZE) {
-        let mut pipe = redis::pipe();
-        pipe.hdel(&format_to_dragonfly_key(key_prefix, can2prin_key), chunk)
-            .ignore();
-        pipe.query_async::<()>(&mut dragonfly_conn).await?;
-    }
-
-    // Delete usernames in chunks
-    for chunk in formatted_usernames.chunks(BATCH_SIZE) {
-        let mut pipe = redis::pipe();
-        pipe.del(chunk).ignore();
-        pipe.query_async::<()>(&mut dragonfly_conn).await?;
-    }
+        })
+        .await
+        .map_err(Error::from)?;
 
     Ok(())
 }
@@ -313,26 +410,36 @@ pub async fn get_user_metadata_bulk_impl(
         return Ok(HashMap::new());
     }
 
-    let mut dconn = dragonfly_pool.get().await?;
+    let key_prefix = key_prefix.to_string();
+    let users = req.users.clone();
 
-    // Build pipeline for all HGET operations (one round trip for all users)
-    let mut pipe = redis::pipe();
-    for principal in &req.users {
-        pipe.hget(
-            format_to_dragonfly_key(key_prefix, &principal.to_text()),
-            METADATA_FIELD,
-        );
-    }
+    let results: Vec<Option<Vec<u8>>> = dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let users = users.clone();
+            let key_prefix = key_prefix.clone();
 
-    // Execute pipeline and get all results
-    let results: Vec<Option<Vec<u8>>> = pipe.query_async(&mut dconn).await?;
+            async move {
+                // Build pipeline for all HGET operations (one round trip for all users)
+                let mut pipe = redis::pipe();
+                for principal in &users {
+                    pipe.hget(
+                        format_to_dragonfly_key(&key_prefix, &principal.to_text()),
+                        METADATA_FIELD,
+                    );
+                }
+
+                // Execute pipeline and get all results
+                pipe.query_async(&mut conn).await
+            }
+        })
+        .await?;
 
     // Build result map
     let mut result_map = HashMap::with_capacity(req.users.len());
     for (principal, meta_raw) in req.users.iter().zip(results.into_iter()) {
-        let metadata = match meta_raw {
+        let metadata: Option<UserMetadata> = match meta_raw {
             Some(raw) => {
-                let meta: UserMetadata = serde_json::from_slice(&raw).map_err(Error::Deser)?;
+                let meta: UserMetadata = serde_json::from_slice(&raw[..]).map_err(Error::Deser)?;
                 Some(meta)
             }
             None => None,
@@ -357,33 +464,49 @@ pub async fn get_canister_to_principal_bulk_impl(
         });
     }
 
-    let mut dconn = dragonfly_pool.get().await?;
-    let mut mappings = HashMap::new();
+    let can2prin_key = can2prin_key.to_string();
+    let key_prefix = key_prefix.to_string();
+    let canisters = req.canisters.clone();
 
-    // Process in batches to avoid timeout on remote Redis
-    const BATCH_SIZE: usize = 200;
+    let mappings = dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let canisters = canisters.clone();
+            let can2prin_key = can2prin_key.clone();
+            let key_prefix = key_prefix.clone();
 
-    for batch in req.canisters.chunks(BATCH_SIZE) {
-        // Convert canister IDs to strings for Redis
-        let canister_ids: Vec<String> = batch.iter().map(|c| c.to_text()).collect();
+            async move {
+                let mut mappings = HashMap::new();
 
-        // Use HMGET to fetch multiple values at once from the Redis hash
-        let values: Vec<Option<String>> = dconn
-            .hmget(
-                format_to_dragonfly_key(key_prefix, can2prin_key),
-                &canister_ids,
-            )
-            .await?;
+                // Process in batches to avoid timeout on remote Redis
+                const BATCH_SIZE: usize = 200;
 
-        // Process results for this batch
-        for (i, canister_id) in batch.iter().enumerate() {
-            if let Some(Some(principal_str)) = values.get(i) {
-                if let Ok(user_principal) = Principal::from_text(principal_str) {
-                    mappings.insert(*canister_id, user_principal);
+                for batch in canisters.chunks(BATCH_SIZE) {
+                    // Convert canister IDs to strings for Redis
+                    let canister_ids: Vec<String> = batch.iter().map(|c| c.to_text()).collect();
+
+                    // Use HMGET to fetch multiple values at once from the Redis hash
+                    let values: Vec<Option<String>> = conn
+                        .hmget(
+                            format_to_dragonfly_key(&key_prefix, &can2prin_key),
+                            &canister_ids,
+                        )
+                        .await?;
+
+                    // Process results for this batch
+                    for (i, canister_id) in batch.iter().enumerate() {
+                        if let Some(Some(principal_str)) = values.get(i) {
+                            if let Ok(user_principal) = Principal::from_text(principal_str) {
+                                mappings.insert(*canister_id, user_principal);
+                            }
+                        }
+                    }
                 }
+
+                Ok(mappings)
             }
-        }
-    }
+        })
+        .await
+        .map_err(Error::from)?;
 
     Ok(CanisterToPrincipalRes { mappings })
 }
