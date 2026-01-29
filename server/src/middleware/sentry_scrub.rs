@@ -175,6 +175,11 @@ fn scrub_contexts(contexts: &mut BTreeMap<String, Context>) {
 
 /// Main scrubbing function to be used in Sentry's before_send hook
 pub fn scrub_sensitive_data(mut event: Event<'static>) -> Option<Event<'static>> {
+    // Filter out INFO level events - don't send them to Sentry
+    if event.level == sentry::Level::Info {
+        return None;
+    }
+
     // Scrub request data
     if let Some(request) = &mut event.request {
         scrub_request(request);
