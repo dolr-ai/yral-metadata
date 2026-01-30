@@ -20,8 +20,7 @@ impl FcmService for Firebase {
         &self,
         body: serde_json::Value,
     ) -> Result<Option<String>, Error> {
-        let body_str = body.to_string();
-        self.update_notification_devices(body_str).await
+        self.update_notification_devices(body).await
     }
 
     async fn send_message_to_group(

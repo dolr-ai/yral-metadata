@@ -75,11 +75,20 @@ pub mod utils {
 }
 
 impl Firebase {
-    pub async fn update_notification_devices(&self, data: String) -> Result<Option<String>> {
-        let is_remove_operation = data.contains("remove");
+    pub async fn update_notification_devices(&self, body: serde_json::Value) -> Result<Option<String>> {
+        let is_remove_operation = body.get("operation")
+            .and_then(|v| v.as_str())
+            .map(|s| s == "remove")
+            .unwrap_or(false);
 
         let client = Client::new();
         let url = "https://fcm.googleapis.com/fcm/notification";
+
+        log::info!(
+            "[update_notification_devices] Operation: {}, Request body: {:?}",
+            body.get("operation").and_then(|v| v.as_str()).unwrap_or("unknown"),
+            body
+        );
 
         let firebase_token = self
             .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
@@ -87,43 +96,59 @@ impl Firebase {
         let response = client
             .post(url)
             .header("Authorization", format!("Bearer {}", firebase_token))
-            .header("Content-Type", "application/json")
             .header(
                 "project_id",
                 env::var("GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID")
                     .map_err(|e| Error::Unknown(e.to_string()))?,
             )
             .header("access_token_auth", "true")
-            .body(data)
+            .json(&body)
             .send()
             .await;
 
         match response {
             Ok(response) => {
-                if !response.status().is_success() {
-                    log::error!("Error updating notification devices: {:?}", response);
-                    return Err(Error::FirebaseApiErr(
-                        response
-                            .text()
-                            .await
-                            .map_err(|e| Error::Unknown(e.to_string()))?,
-                    ));
+                let status = response.status();
+                if !status.is_success() {
+                    let error_text = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Failed to read error body".to_string());
+                    log::error!(
+                        "[update_notification_devices] FCM device group operation failed: Status: {}, Body: {}",
+                        status,
+                        error_text
+                    );
+                    return Err(Error::FirebaseApiErr(error_text));
                 }
 
                 if is_remove_operation {
+                    log::info!(
+                        "[update_notification_devices] Successfully removed device from group"
+                    );
                     return Ok(None);
                 }
 
                 match response.json::<HashMap<String, String>>().await {
-                    Ok(response) => Ok(Some(response["notification_key"].clone())),
+                    Ok(response) => {
+                        let notification_key = response["notification_key"].clone();
+                        log::info!(
+                            "[update_notification_devices] Successfully updated device group, notification_key: {}",
+                            notification_key
+                        );
+                        Ok(Some(notification_key))
+                    }
                     Err(err) => Err(Error::FirebaseApiErr(format!(
-                        "error parsing json: {}",
+                        "error parsing json response: {}",
                         err
                     ))),
                 }
             }
             Err(err) => {
-                log::error!("Error updating notification devices: {:?}", err);
+                log::error!(
+                    "[update_notification_devices] Request failed: {:?}",
+                    err
+                );
                 Err(Error::FirebaseApiErr(err.to_string()))
             }
         }
@@ -153,12 +178,17 @@ impl Firebase {
             "https://fcm.googleapis.com/v1/projects/{}/messages:send",
             project_id_string
         );
-        log::info!("[send_message_to_group] FCM URL: {}", url);
+
+        log::info!(
+            "[send_message_to_group] Sending to device group with {} tokens using notification_key",
+            notification_key.registration_tokens.len()
+        );
 
         let firebase_token = self
             .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
             .await?;
 
+        // Use notification_key as the token - FCM v1 API supports device groups this way
         let message_body = json!({
             "message": {
                 "token": notification_key.key,
@@ -170,29 +200,25 @@ impl Firebase {
                 "fcm_options": fcm_options
             }
         });
-        log::info!(
-            "[send_message_to_group] FCM Message Body: {:?}",
-            message_body
-        );
 
         let response = client
             .post(url)
             .header("Authorization", format!("Bearer {}", firebase_token))
             .header("Content-Type", "application/json")
-            .json(&message_body) // Send the JSON payload
+            .json(&message_body)
             .send()
             .await;
 
         match response {
             Ok(response) => {
-                let status = response.status(); // Clone status before consuming body
+                let status = response.status();
                 if !status.is_success() {
                     let error_text = response
                         .text()
                         .await
                         .unwrap_or_else(|_| "Failed to read error body".to_string());
                     log::error!(
-                        "Error sending FCM message: Status: {}, Body: {}",
+                        "[send_message_to_group] FCM send failed: Status: {}, Body: {}",
                         status,
                         error_text
                     );
@@ -206,14 +232,14 @@ impl Firebase {
                         .await
                         .unwrap_or_else(|_| "Failed to read success body".to_string());
                     log::info!(
-                        "Successfully sent FCM message. Response: {:?}",
+                        "[send_message_to_group] Successfully sent to device group. Response: {:?}",
                         response_text
                     );
                     Ok(())
                 }
             }
             Err(err) => {
-                log::error!("Error sending FCM message request: {:?}", err);
+                log::error!("[send_message_to_group] Request failed: {:?}", err);
                 Err(Error::FirebaseApiErr(err.to_string()))
             }
         }
