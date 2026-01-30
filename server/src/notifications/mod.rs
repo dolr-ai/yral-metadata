@@ -20,7 +20,7 @@ pub mod traits;
 
 use crate::{
     api::METADATA_FIELD,
-    dragonfly::{format_to_dragonfly_key, YRAL_METADATA_KEY_PREFIX},
+    dragonfly::{format_to_dragonfly_key, DragonflyPool, YRAL_METADATA_KEY_PREFIX},
     services::error_wrappers::{ErrorWrapper, OkWrapper},
     state::AppState,
     utils::error::{Error, Result},
@@ -33,17 +33,28 @@ use crate::notifications::traits::{
 use serde::Serialize;
 use types::DeviceRegistrationToken;
 
-/// Fetches user metadata from Dragonfly/Redis
-async fn fetch_user_metadata<D: RedisConnection>(
-    dragonfly_service: &mut D,
+/// Fetches user metadata from Dragonfly/Redis with retry logic
+async fn fetch_user_metadata(
+    dragonfly_pool: &Arc<DragonflyPool>,
     key_prefix: &str,
     user_id_text: &str,
 ) -> Result<UserMetadata> {
-    let meta_raw: Option<Vec<u8>> = dragonfly_service
-        .hget(
-            &format_to_dragonfly_key(key_prefix, user_id_text),
-            METADATA_FIELD,
-        )
+    let key_prefix = key_prefix.to_string();
+    let user_id_text = user_id_text.to_string();
+
+    let meta_raw: Option<Vec<u8>> = dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let key_prefix = key_prefix.clone();
+            let user_id_text = user_id_text.clone();
+
+            async move {
+                conn.hget(
+                    &format_to_dragonfly_key(&key_prefix, &user_id_text),
+                    METADATA_FIELD,
+                )
+                .await
+            }
+        })
         .await
         .map_err(Error::Redis)?;
 
@@ -53,20 +64,32 @@ async fn fetch_user_metadata<D: RedisConnection>(
     }
 }
 
-/// Saves user metadata to Dragonfly/Redis
-async fn save_user_metadata<D: RedisConnection>(
-    dragonfly_service: &mut D,
+/// Saves user metadata to Dragonfly/Redis with retry logic
+async fn save_user_metadata(
+    dragonfly_pool: &Arc<DragonflyPool>,
     key_prefix: &str,
     user_id_text: &str,
     user_metadata: &UserMetadata,
 ) -> Result<()> {
     let meta_raw = serde_json::to_vec(user_metadata).map_err(Error::Deser)?;
-    dragonfly_service
-        .hset(
-            &format_to_dragonfly_key(key_prefix, user_id_text),
-            METADATA_FIELD,
-            &meta_raw,
-        )
+    let key_prefix = key_prefix.to_string();
+    let user_id_text = user_id_text.to_string();
+
+    dragonfly_pool
+        .execute_with_retry(|mut conn| {
+            let key_prefix = key_prefix.clone();
+            let user_id_text = user_id_text.clone();
+            let meta_raw = meta_raw.clone();
+
+            async move {
+                conn.hset(
+                    &format_to_dragonfly_key(&key_prefix, &user_id_text),
+                    METADATA_FIELD,
+                    &meta_raw,
+                )
+                .await
+            }
+        })
         .await
         .map_err(Error::Redis)?;
     Ok(())
@@ -222,13 +245,9 @@ pub async fn register_device(
         sentry::Level::Info,
     );
 
-    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await?;
-    let dragonfly_service = &mut dragonfly_conn_pooled;
-    let firebase_service = &state.firebase;
-
     register_device_impl(
-        firebase_service,
-        dragonfly_service,
+        &state.firebase,
+        &state.dragonfly_redis,
         user_principal,
         Json(req),
         YRAL_METADATA_KEY_PREFIX,
@@ -246,12 +265,11 @@ pub async fn register_device(
 
 pub async fn register_device_impl<
     F: FcmService,
-    D: RedisConnection,
     P: UserPrincipal,
     Req: RegisterDeviceRequest,
 >(
     fcm_service: &F,
-    dragonfly_service: &mut D,
+    dragonfly_pool: &Arc<DragonflyPool>,
     user_principal: P,
     req: Json<Req>,
     key_prefix: &str,
@@ -263,7 +281,7 @@ pub async fn register_device_impl<
 
     let user_id_text = user_principal.to_text();
 
-    let mut user_metadata = match fetch_user_metadata(dragonfly_service, key_prefix, &user_id_text).await {
+    let mut user_metadata = match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
         Ok(metadata) => metadata,
         Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
     };
@@ -338,7 +356,7 @@ pub async fn register_device_impl<
     );
 
     // Save to Redis
-    save_user_metadata(dragonfly_service, key_prefix, &user_id_text, &user_metadata).await?;
+    save_user_metadata(dragonfly_pool, key_prefix, &user_id_text, &user_metadata).await?;
 
     log::info!("Device registered successfully for user: {}", user_id_text);
 
@@ -365,13 +383,9 @@ pub async fn unregister_device(
     Path(user_principal): Path<Principal>,
     Json(req): Json<UnregisterDeviceReq>,
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
-    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await?;
-
-    let dragonfly_service = &mut dragonfly_conn_pooled;
-    let firebase_service = &state.firebase;
     unregister_device_impl(
-        firebase_service,
-        dragonfly_service,
+        &state.firebase,
+        &state.dragonfly_redis,
         user_principal,
         Json(req),
         YRAL_METADATA_KEY_PREFIX,
@@ -381,12 +395,11 @@ pub async fn unregister_device(
 
 pub async fn unregister_device_impl<
     F: FcmService,
-    D: RedisConnection,
     P: UserPrincipal,
     Req: UnregisterDeviceRequest,
 >(
     fcm_service: &F,
-    dragonfly_service: &mut D,
+    dragonfly_pool: &Arc<DragonflyPool>,
     user_principal: P,
     req: Json<Req>,
     key_prefix: &str,
@@ -398,7 +411,7 @@ pub async fn unregister_device_impl<
 
     let user_id_text = user_principal.to_text();
 
-    let mut user_metadata = match fetch_user_metadata(dragonfly_service, key_prefix, &user_id_text).await {
+    let mut user_metadata = match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
         Ok(metadata) => metadata,
         Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
     };
@@ -452,7 +465,7 @@ pub async fn unregister_device_impl<
             .registration_tokens
             .retain(|token| token.token != registration_token_obj.token);
 
-        save_user_metadata(dragonfly_service, key_prefix, &user_id_text, &user_metadata).await?;
+        save_user_metadata(dragonfly_pool, key_prefix, &user_id_text, &user_metadata).await?;
 
         log::info!("Device unregistered successfully for user: {}", user_id_text);
         Ok(Json(Ok(())))
@@ -498,15 +511,10 @@ pub async fn send_notification(
         sentry::Level::Info,
     );
 
-    let mut dragonfly_conn_pooled = state.dragonfly_redis.get().await?;
-
-    let dragonfly_service = &mut dragonfly_conn_pooled;
-    let firebase_service = &state.firebase;
-
     send_notification_impl(
         Some(&headers),
-        firebase_service,
-        dragonfly_service,
+        &state.firebase,
+        &state.dragonfly_redis,
         user_principal,
         Json(req),
         YRAL_METADATA_KEY_PREFIX,
@@ -522,10 +530,10 @@ pub async fn send_notification(
     })
 }
 
-pub async fn send_notification_impl<F: FcmService, D: RedisConnection, P: UserPrincipal>(
+pub async fn send_notification_impl<F: FcmService, P: UserPrincipal>(
     headers: Option<&HeaderMap>,
     fcm_service: &F,
-    dragonfly_service: &mut D,
+    dragonfly_pool: &Arc<DragonflyPool>,
     user_principal: P,
     req: Json<SendNotificationReq>,
     key_prefix: &str,
@@ -560,7 +568,7 @@ pub async fn send_notification_impl<F: FcmService, D: RedisConnection, P: UserPr
     }
 
     // Fetch user metadata
-    let user_metadata = match fetch_user_metadata(dragonfly_service, key_prefix, &user_id_text).await {
+    let user_metadata = match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
         Ok(metadata) => metadata,
         Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
     };
