@@ -93,6 +93,7 @@ impl Firebase {
         let response = client
             .get(&url)
             .header("Authorization", format!("Bearer {}", firebase_token))
+            .header("Content-Type", "application/json")
             .header(
                 "project_id",
                 env::var("GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID")
