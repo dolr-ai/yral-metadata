@@ -21,16 +21,13 @@ jobs:
         with:
           toolchain: "stable"
 
-      # - name: Run tests
-      #   # Need to do sequential tests as upstash has really bad timeouts under load most of the bulk methods wont have more than 5 queries at a time, so it should be fine.
-      #   run: cargo test -- --test-threads=1 --no-capture
-      #   env:
-      #     TEST_REDIS_URL: ${{ secrets.TEST_REDIS_URL }}
-      #     DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
-      #     DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
-      #     DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT }}
-      #     DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT }}
-      #     DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY }}
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test -- --test-threads=1 --nocapture
+        env:
+          CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
+          GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ secrets.GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
 
   # Build on GitHub-hosted runner
   build:
