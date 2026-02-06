@@ -16,6 +16,10 @@ use types::{
 
 // --- Implement FcmService for Firebase ---
 impl FcmService for Firebase {
+    async fn get_notification_key(&self, notification_key_name: &str) -> Result<String, Error> {
+        self.get_notification_key(notification_key_name).await
+    }
+
     async fn update_notification_devices(
         &self,
         body: serde_json::Value,

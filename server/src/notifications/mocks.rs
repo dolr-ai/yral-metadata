@@ -204,6 +204,17 @@ impl MockFCM {
 }
 
 impl FcmService for MockFCM {
+    async fn get_notification_key(&self, notification_key_name: &str) -> Result<String, Error> {
+        let groups = self.notification_groups.read().unwrap();
+        match groups.get(notification_key_name) {
+            Some(group) => Ok(group.notification_key.clone()),
+            None => Err(Error::FirebaseApiErr(format!(
+                "MockFCM: notification_key_name '{}' not found",
+                notification_key_name
+            ))),
+        }
+    }
+
     async fn update_notification_devices(
         &self,
         body: serde_json::Value,
@@ -292,20 +303,23 @@ impl FcmService for MockFCM {
         data_payload: SendNotificationReq,
     ) -> Result<(), Error> {
         let groups = self.notification_groups.read().unwrap();
-        if let Some(_group) = groups
+        match groups
             .iter()
             .find(|(_, g)| g.notification_key == notification_key.key)
         {
-            println!(
-                "Mock sending message to group: {:?} with payload: {:?}",
-                notification_key.key, data_payload
-            );
-            Ok(())
-        } else {
-            Err(Error::Unknown(format!(
-                "Notification key not found in mock: {:?}",
-                notification_key.key
-            )))
+            Some(group) if group.1.registration_tokens.is_empty() => Err(Error::FirebaseApiErr(
+                "FCM send failed: 404 Not Found - UNREGISTERED".to_string(),
+            )),
+            Some(_) => {
+                println!(
+                    "Mock sending message to group: {:?} with payload: {:?}",
+                    notification_key.key, data_payload
+                );
+                Ok(())
+            }
+            None => Err(Error::FirebaseApiErr(
+                "FCM send failed: 404 Not Found - UNREGISTERED".to_string(),
+            )),
         }
     }
 }

@@ -170,38 +170,89 @@ async fn create_notification_group<F: FcmService>(
     notification_key_name: &str,
     token: &str,
 ) -> Result<String> {
-    let create_body =
-        firebase_utils::get_create_request_body(notification_key_name.to_string(), token.to_string());
+    let create_body = firebase_utils::get_create_request_body(
+        notification_key_name.to_string(),
+        token.to_string(),
+    );
     fcm_service
         .update_notification_devices(serialize_fcm_request(&create_body)?)
         .await?
-        .ok_or_else(|| Error::Unknown("FCM did not return a notification key after creation".to_string()))
+        .ok_or_else(|| {
+            Error::Unknown("FCM did not return a notification key after creation".to_string())
+        })
+}
+
+/// Retrieves the notification_key for a group from FCM and updates Redis metadata
+async fn recover_notification_key<F: FcmService>(
+    fcm_service: &F,
+    dragonfly_pool: &Arc<DragonflyPool>,
+    notification_key_name: &str,
+    user_metadata: &mut UserMetadata,
+    key_prefix: &str,
+    user_id_text: &str,
+) -> Result<String> {
+    // Try to extract from error response first, otherwise GET from FCM
+    let fetched_key = fcm_service
+        .get_notification_key(notification_key_name)
+        .await?;
+
+    log::info!(
+        "[recover_notification_key] Retrieved key for '{}' from FCM, updating Redis",
+        notification_key_name
+    );
+
+    // Update user metadata with the recovered key
+    match user_metadata.notification_key.as_mut() {
+        Some(nk) => {
+            nk.key = fetched_key.clone();
+        }
+        None => {
+            user_metadata.notification_key = Some(NotificationKey {
+                key: fetched_key.clone(),
+                registration_tokens: vec![],
+            });
+        }
+    }
+    save_user_metadata(dragonfly_pool, key_prefix, user_id_text, user_metadata).await?;
+
+    Ok(fetched_key)
 }
 
 /// Handles the case when trying to create a group that already exists
 async fn handle_existing_group_error<F: FcmService>(
     fcm_service: &F,
+    dragonfly_pool: &Arc<DragonflyPool>,
     err_text: &str,
     notification_key_name: &str,
     token: &str,
+    user_metadata: &mut UserMetadata,
+    key_prefix: &str,
+    user_id_text: &str,
 ) -> Result<String> {
-    let error_json: serde_json::Value = serde_json::from_str(err_text).map_err(|_| {
-        Error::FirebaseApiErr(format!(
-            "Failed to parse FCM error for existing key: {}",
-            err_text
-        ))
-    })?;
+    // Try to extract notification_key from the error response JSON
+    let existing_key = serde_json::from_str::<serde_json::Value>(err_text)
+        .ok()
+        .and_then(|json| {
+            json.get("notification_key")
+                .and_then(|val| val.as_str())
+                .map(|s| s.to_string())
+        });
 
-    let existing_key = error_json
-        .get("notification_key")
-        .and_then(|val| val.as_str())
-        .ok_or_else(|| {
-            Error::FirebaseApiErr(format!(
-                "FCM error missing notification_key field: {}",
-                err_text
-            ))
-        })?
-        .to_string();
+    let existing_key = match existing_key {
+        Some(key) => key,
+        None => {
+            // Error response doesn't include the key, fetch from FCM and update Redis
+            recover_notification_key(
+                fcm_service,
+                dragonfly_pool,
+                notification_key_name,
+                user_metadata,
+                key_prefix,
+                user_id_text,
+            )
+            .await?
+        }
+    };
 
     // Add the token to the existing group
     let add_body = firebase_utils::get_add_request_body(
@@ -263,11 +314,7 @@ pub async fn register_device(
     })
 }
 
-pub async fn register_device_impl<
-    F: FcmService,
-    P: UserPrincipal,
-    Req: RegisterDeviceRequest,
->(
+pub async fn register_device_impl<F: FcmService, P: UserPrincipal, Req: RegisterDeviceRequest>(
     fcm_service: &F,
     dragonfly_pool: &Arc<DragonflyPool>,
     user_principal: P,
@@ -281,26 +328,32 @@ pub async fn register_device_impl<
 
     let user_id_text = user_principal.to_text();
 
-    let mut user_metadata = match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
-        Ok(metadata) => metadata,
-        Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
-    };
+    let mut user_metadata =
+        match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
+            Ok(metadata) => metadata,
+            Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
+        };
 
-    // Clear notification key for unmigrated users
-    if !user_metadata.is_migrated {
-        user_metadata.notification_key = None;
-        user_metadata.is_migrated = true;
-    }
-
-    let original_key = user_metadata.notification_key.as_ref().map(|nk| nk.key.clone());
-    let notification_key_name = firebase_utils::get_notification_key_name_from_principal(&user_id_text);
+    let original_key = user_metadata
+        .notification_key
+        .as_ref()
+        .map(|nk| nk.key.clone());
+    let notification_key_name =
+        firebase_utils::get_notification_key_name_from_principal(&user_id_text);
     let token = registration_token_obj.token.clone();
 
     // Register device with FCM
     let (notification_key_from_firebase, is_create) = match &user_metadata.notification_key {
         Some(existing_key) => {
             // Try to add to existing group
-            match add_device_to_existing_group(fcm_service, &notification_key_name, existing_key, &token).await {
+            match add_device_to_existing_group(
+                fcm_service,
+                &notification_key_name,
+                existing_key,
+                &token,
+            )
+            .await
+            {
                 Ok(Some(key)) => {
                     crate::sentry_utils::add_firebase_breadcrumb(
                         "update_notification_devices",
@@ -310,17 +363,56 @@ pub async fn register_device_impl<
                     (key, false)
                 }
                 Err(Error::FirebaseApiErr(err_text)) if err_text.contains("not found") => {
-                    // Group not found in FCM, create new one
+                    // Key is stale in Redis, fetch real key from FCM and update Redis
                     crate::sentry_utils::add_firebase_breadcrumb(
                         "update_notification_devices",
                         &user_id_text,
                         false,
                     );
                     log::warn!(
-                        "Notification group '{}' not found in FCM. Creating new group.",
+                        "Notification key not found in FCM for '{}'. Recovering from FCM.",
                         notification_key_name
                     );
-                    (create_notification_group(fcm_service, &notification_key_name, &token).await?, true)
+                    let recovered_key = recover_notification_key(
+                        fcm_service,
+                        dragonfly_pool,
+                        &notification_key_name,
+                        &mut user_metadata,
+                        key_prefix,
+                        &user_id_text,
+                    )
+                    .await;
+
+                    match recovered_key {
+                        Ok(key) => {
+                            // Retry add with recovered key
+                            let add_body = firebase_utils::get_add_request_body(
+                                notification_key_name.clone(),
+                                key.clone(),
+                                token.clone(),
+                            );
+                            fcm_service
+                                .update_notification_devices(serialize_fcm_request(&add_body)?)
+                                .await?;
+                            (key, false)
+                        }
+                        Err(_) => {
+                            // FCM doesn't have the group either, create fresh
+                            log::warn!(
+                                "Could not recover key for '{}'. Creating new group.",
+                                notification_key_name
+                            );
+                            (
+                                create_notification_group(
+                                    fcm_service,
+                                    &notification_key_name,
+                                    &token,
+                                )
+                                .await?,
+                                true,
+                            )
+                        }
+                    }
                 }
                 Ok(None) => {
                     return Err(Error::Unknown(
@@ -338,8 +430,21 @@ pub async fn register_device_impl<
                     if err_text.contains("notification_key_name exists")
                         || err_text.contains("notification_key") =>
                 {
-                    // Group already exists, add to it
-                    (handle_existing_group_error(fcm_service, &err_text, &notification_key_name, &token).await?, false)
+                    // Group already exists in FCM, fetch key and add to it
+                    (
+                        handle_existing_group_error(
+                            fcm_service,
+                            dragonfly_pool,
+                            &err_text,
+                            &notification_key_name,
+                            &token,
+                            &mut user_metadata,
+                            key_prefix,
+                            &user_id_text,
+                        )
+                        .await?,
+                        false,
+                    )
                 }
                 Err(e) => return Err(e),
             }
@@ -411,10 +516,11 @@ pub async fn unregister_device_impl<
 
     let user_id_text = user_principal.to_text();
 
-    let mut user_metadata = match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
-        Ok(metadata) => metadata,
-        Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
-    };
+    let mut user_metadata =
+        match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
+            Ok(metadata) => metadata,
+            Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
+        };
 
     let notification_key_name =
         firebase_utils::get_notification_key_name_from_principal(&user_id_text);
@@ -446,7 +552,8 @@ pub async fn unregister_device_impl<
         Ok(_) => {
             log::info!(
                 "Removed device from FCM group for user {}: {}",
-                user_id_text, registration_token_obj.token
+                user_id_text,
+                registration_token_obj.token
             );
         }
         Err(Error::FirebaseApiErr(err_text)) if err_text.contains("not found") => {
@@ -467,7 +574,10 @@ pub async fn unregister_device_impl<
 
         save_user_metadata(dragonfly_pool, key_prefix, &user_id_text, &user_metadata).await?;
 
-        log::info!("Device unregistered successfully for user: {}", user_id_text);
+        log::info!(
+            "Device unregistered successfully for user: {}",
+            user_id_text
+        );
         Ok(Json(Ok(())))
     } else {
         log::warn!(
@@ -556,7 +666,10 @@ pub async fn send_notification_impl<F: FcmService, P: UserPrincipal>(
         let provided_token = match auth_header {
             Some(header) if header.starts_with("Bearer ") => &header[7..],
             _ => {
-                log::warn!("Authorization header missing or malformed for user: {}", user_id_text);
+                log::warn!(
+                    "Authorization header missing or malformed for user: {}",
+                    user_id_text
+                );
                 return Ok(Json(Err(ApiError::Unauthorized)));
             }
         };
@@ -568,22 +681,47 @@ pub async fn send_notification_impl<F: FcmService, P: UserPrincipal>(
     }
 
     // Fetch user metadata
-    let user_metadata = match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
-        Ok(metadata) => metadata,
-        Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
-    };
+    let mut user_metadata =
+        match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
+            Ok(metadata) => metadata,
+            Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
+        };
 
     // Get notification key
-    let Some(notification_key) = user_metadata.notification_key else {
+    let Some(notification_key) = user_metadata.notification_key.clone() else {
         log::warn!("Notification key not found for user: {}", user_id_text);
         return Ok(Json(Err(ApiError::NotificationKeyNotFound)));
     };
 
     // Send notification
-    fcm_service
+    match fcm_service
         .send_message_to_group(notification_key, req.0)
-        .await?;
-
-    log::info!("Successfully sent notification for user: {}", user_id_text);
-    Ok(Json(Ok(())))
+        .await
+    {
+        Ok(()) => {
+            log::info!("Successfully sent notification for user: {}", user_id_text);
+            Ok(Json(Ok(())))
+        }
+        Err(Error::FirebaseApiErr(ref err_text))
+            if err_text.contains("UNREGISTERED") || err_text.contains("not found") =>
+        {
+            log::warn!(
+                "Notification key is stale for user: {}. Clearing notification_key from metadata. Error: {}",
+                user_id_text, err_text
+            );
+            // Clear stale notification key so user can re-register
+            user_metadata.notification_key = None;
+            if let Err(save_err) =
+                save_user_metadata(dragonfly_pool, key_prefix, &user_id_text, &user_metadata).await
+            {
+                log::error!(
+                    "Failed to clear stale notification_key for user {}: {:?}",
+                    user_id_text,
+                    save_err
+                );
+            }
+            Ok(Json(Err(ApiError::NotificationKeyNotFound)))
+        }
+        Err(e) => Err(e),
+    }
 }

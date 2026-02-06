@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::env;
 
 use reqwest::Client;
@@ -29,6 +28,11 @@ pub mod utils {
         #[serde(skip_serializing_if = "Option::is_none")]
         pub notification_key: Option<String>,
         pub registration_ids: Vec<String>,
+    }
+
+    #[derive(Deserialize)]
+    pub struct NotificationKeyResponse {
+        pub notification_key: String,
     }
 
     pub fn get_notification_key_name_from_principal(principal_id: &String) -> String {
@@ -75,8 +79,66 @@ pub mod utils {
 }
 
 impl Firebase {
-    pub async fn update_notification_devices(&self, body: serde_json::Value) -> Result<Option<String>> {
-        let is_remove_operation = body.get("operation")
+    pub async fn get_notification_key(&self, notification_key_name: &str) -> Result<String> {
+        let client = Client::new();
+        let url = format!(
+            "https://fcm.googleapis.com/fcm/notification?notification_key_name={}",
+            notification_key_name
+        );
+
+        let firebase_token = self
+            .get_access_token(&["https://www.googleapis.com/auth/firebase.messaging"])
+            .await?;
+
+        let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", firebase_token))
+            .header(
+                "project_id",
+                env::var("GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID")
+                    .map_err(|e| Error::Unknown(e.to_string()))?,
+            )
+            .header("access_token_auth", "true")
+            .send()
+            .await;
+
+        match response {
+            Ok(response) => {
+                let status = response.status();
+                if !status.is_success() {
+                    let error_text = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Failed to read error body".to_string());
+                    log::error!(
+                        "[get_notification_key] Failed to retrieve key for '{}': Status: {}, Body: {}",
+                        notification_key_name, status, error_text
+                    );
+                    return Err(Error::FirebaseApiErr(error_text));
+                }
+
+                let body: utils::NotificationKeyResponse = response.json().await.map_err(|e| {
+                    Error::FirebaseApiErr(format!(
+                        "Failed to parse get_notification_key response: {}",
+                        e
+                    ))
+                })?;
+
+                Ok(body.notification_key)
+            }
+            Err(err) => {
+                log::error!("[get_notification_key] Request failed: {:?}", err);
+                Err(Error::FirebaseApiErr(err.to_string()))
+            }
+        }
+    }
+
+    pub async fn update_notification_devices(
+        &self,
+        body: serde_json::Value,
+    ) -> Result<Option<String>> {
+        let is_remove_operation = body
+            .get("operation")
             .and_then(|v| v.as_str())
             .map(|s| s == "remove")
             .unwrap_or(false);
@@ -86,7 +148,9 @@ impl Firebase {
 
         log::info!(
             "[update_notification_devices] Operation: {}, Request body: {:?}",
-            body.get("operation").and_then(|v| v.as_str()).unwrap_or("unknown"),
+            body.get("operation")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown"),
             body
         );
 
@@ -129,14 +193,13 @@ impl Firebase {
                     return Ok(None);
                 }
 
-                match response.json::<HashMap<String, String>>().await {
-                    Ok(response) => {
-                        let notification_key = response["notification_key"].clone();
+                match response.json::<utils::NotificationKeyResponse>().await {
+                    Ok(parsed) => {
                         log::info!(
                             "[update_notification_devices] Successfully updated device group, notification_key: {}",
-                            notification_key
+                            parsed.notification_key
                         );
-                        Ok(Some(notification_key))
+                        Ok(Some(parsed.notification_key))
                     }
                     Err(err) => Err(Error::FirebaseApiErr(format!(
                         "error parsing json response: {}",
@@ -145,10 +208,7 @@ impl Firebase {
                 }
             }
             Err(err) => {
-                log::error!(
-                    "[update_notification_devices] Request failed: {:?}",
-                    err
-                );
+                log::error!("[update_notification_devices] Request failed: {:?}", err);
                 Err(Error::FirebaseApiErr(err.to_string()))
             }
         }

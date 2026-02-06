@@ -7,6 +7,8 @@ use types::{DeviceRegistrationToken, NotificationKey, SendNotificationReq, Signa
 
 // --- FCM Service Trait ---
 pub trait FcmService: Send + Sync {
+    async fn get_notification_key(&self, notification_key_name: &str) -> Result<String, Error>;
+
     async fn update_notification_devices(
         &self,
         body: serde_json::Value,
@@ -17,11 +19,6 @@ pub trait FcmService: Send + Sync {
         notification_key: NotificationKey,
         data_payload: SendNotificationReq,
     ) -> Result<(), Error>;
-
-    // In tests, a more specific version is used. We can handle this with different
-    // implementations or a more generic approach if simple delegation isn't enough.
-    // For now, the mock will need to adapt its `update_notification_devices` or we
-    // create a separate trait/method if absolutely necessary.
 }
 
 // --- Redis Connection Trait ---
