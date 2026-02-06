@@ -93,14 +93,13 @@ impl Firebase {
         let response = client
             .get(&url)
             .header("Authorization", format!("Bearer {}", firebase_token))
-            .header("Content-Type", "application/json")
             .header(
                 "project_id",
                 env::var("GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID")
                     .map_err(|e| Error::Unknown(e.to_string()))?,
             )
             .header("access_token_auth", "true")
-            .json(&serde_json::json!({}))
+            .header("Content-Type", "application/json")
             .send()
             .await;
 
@@ -112,10 +111,14 @@ impl Firebase {
                         .text()
                         .await
                         .unwrap_or_else(|_| "Failed to read error body".to_string());
-                    log::error!(
-                        "[get_notification_key] Failed to retrieve key for '{}': Status: {}, Body: {}",
-                        notification_key_name, status, error_text
-                    );
+                    // Don't log "not found" — callers handle recovery
+                    let is_recoverable = error_text.contains("not found");
+                    if !is_recoverable {
+                        log::error!(
+                            "[get_notification_key] Failed to retrieve key for '{}': Status: {}, Body: {}",
+                            notification_key_name, status, error_text
+                        );
+                    }
                     return Err(Error::FirebaseApiErr(error_text));
                 }
 
@@ -181,8 +184,8 @@ impl Firebase {
                         .await
                         .unwrap_or_else(|_| "Failed to read error body".to_string());
                     // Don't log known recoverable errors — callers handle these
-                    let is_recoverable = error_text.contains("notification_key")
-                        || error_text.contains("not found");
+                    let is_recoverable =
+                        error_text.contains("notification_key") || error_text.contains("not found");
                     if !is_recoverable {
                         log::error!(
                             "[update_notification_devices] FCM device group operation failed: Status: {}, Body: {}",
