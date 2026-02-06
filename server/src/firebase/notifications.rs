@@ -93,12 +93,14 @@ impl Firebase {
         let response = client
             .get(&url)
             .header("Authorization", format!("Bearer {}", firebase_token))
+            .header("Content-Type", "application/json")
             .header(
                 "project_id",
                 env::var("GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID")
                     .map_err(|e| Error::Unknown(e.to_string()))?,
             )
             .header("access_token_auth", "true")
+            .json(&serde_json::json!({}))
             .send()
             .await;
 
@@ -178,11 +180,16 @@ impl Firebase {
                         .text()
                         .await
                         .unwrap_or_else(|_| "Failed to read error body".to_string());
-                    log::error!(
-                        "[update_notification_devices] FCM device group operation failed: Status: {}, Body: {}",
-                        status,
-                        error_text
-                    );
+                    // Don't log known recoverable errors — callers handle these
+                    let is_recoverable = error_text.contains("notification_key")
+                        || error_text.contains("not found");
+                    if !is_recoverable {
+                        log::error!(
+                            "[update_notification_devices] FCM device group operation failed: Status: {}, Body: {}",
+                            status,
+                            error_text
+                        );
+                    }
                     return Err(Error::FirebaseApiErr(error_text));
                 }
 
@@ -277,11 +284,14 @@ impl Firebase {
                         .text()
                         .await
                         .unwrap_or_else(|_| "Failed to read error body".to_string());
-                    log::error!(
-                        "[send_message_to_group] FCM send failed: Status: {}, Body: {}",
-                        status,
-                        error_text
-                    );
+                    // Don't log 404/UNREGISTERED — caller handles recovery
+                    if status != reqwest::StatusCode::NOT_FOUND {
+                        log::error!(
+                            "[send_message_to_group] FCM send failed: Status: {}, Body: {}",
+                            status,
+                            error_text
+                        );
+                    }
                     Err(Error::FirebaseApiErr(format!(
                         "FCM send failed: {} - {}",
                         status, error_text
