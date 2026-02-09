@@ -796,3 +796,95 @@ async fn test_get_canister_to_principal_bulk_impl_large_batch() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn test_delete_metadata_bulk_releases_usernames() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    
+    // Setup
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
+    let unique_key = generate_unique_test_key_prefix();
+    
+    // Create test users with usernames
+    let user_principal = generate_unique_test_principal();
+    let username = format!("testuser{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis());
+    
+    let metadata = create_test_metadata_req(700, &username);
+    
+    // Set metadata using core function (this also sets username)
+    let _result = set_user_metadata_core(
+        &dragonfly_pool,
+        user_principal,
+        &metadata,
+        &unique_key,
+        TEST_KEY_PREFIX,
+    )
+    .await
+    .unwrap();
+
+    // Verify username is stored
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
+    let username_key = username_info_key(&username);
+    let username_exists: Option<Vec<u8>> = dconn
+        .hget(
+            format_to_dragonfly_key(TEST_KEY_PREFIX, &username_key),
+            METADATA_FIELD,
+        )
+        .await
+        .unwrap();
+    assert!(username_exists.is_some(), "Username should be stored before deletion");
+
+    // Delete the user
+    let bulk_users = BulkUsers {
+        users: vec![user_principal],
+    };
+    let result = delete_metadata_bulk_impl(&dragonfly_pool, &bulk_users, &unique_key, TEST_KEY_PREFIX).await;
+    assert!(result.is_ok(), "Failed to delete: {:?}", result);
+
+    // Verify username is released (deleted)
+    let username_after_delete: Option<Vec<u8>> = dconn
+        .hget(
+            format_to_dragonfly_key(TEST_KEY_PREFIX, &username_key),
+            METADATA_FIELD,
+        )
+        .await
+        .unwrap();
+    assert!(username_after_delete.is_none(), "Username should be deleted and released for reuse");
+
+    // Verify we can reuse the username
+    let new_user_principal = generate_unique_test_principal();
+    let result = set_user_metadata_core(
+        &dragonfly_pool,
+        new_user_principal,
+        &metadata,
+        &unique_key,
+        TEST_KEY_PREFIX,
+    )
+    .await;
+    assert!(result.is_ok(), "Should be able to reuse the username after deletion: {:?}", result);
+
+    // Cleanup
+    let _: () = dconn
+        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()))
+        .await
+        .unwrap();
+    let _: () = dconn
+        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &new_user_principal.to_text()))
+        .await
+        .unwrap();
+    let _: () = dconn
+        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &username_key))
+        .await
+        .unwrap();
+    let _: () = dconn
+        .hdel(
+            format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
+            metadata.user_canister_id.to_text(),
+        )
+        .await
+        .unwrap();
+    let _: () = dconn
+        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
+        .await
+        .unwrap();
+}

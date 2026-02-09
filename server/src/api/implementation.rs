@@ -371,7 +371,9 @@ pub async fn delete_metadata_bulk_impl(
                 // Delete user metadata keys in chunks
                 for chunk in formatted_keys.chunks(BATCH_SIZE) {
                     let mut pipe = redis::pipe();
-                    pipe.del(chunk).ignore();
+                    for key in chunk {
+                        pipe.del(key).ignore();
+                    }
                     pipe.query_async::<()>(&mut conn).await?;
                 }
 
@@ -386,7 +388,9 @@ pub async fn delete_metadata_bulk_impl(
                 // Delete usernames in chunks
                 for chunk in formatted_usernames.chunks(BATCH_SIZE) {
                     let mut pipe = redis::pipe();
-                    pipe.del(chunk).ignore();
+                    for key in chunk {
+                        pipe.del(key).ignore();
+                    }
                     pipe.query_async::<()>(&mut conn).await?;
                 }
 
