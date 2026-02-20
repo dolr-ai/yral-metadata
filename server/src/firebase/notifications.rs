@@ -184,8 +184,9 @@ impl Firebase {
                         .await
                         .unwrap_or_else(|_| "Failed to read error body".to_string());
                     // Don't log known recoverable errors — callers handle these
-                    let is_recoverable =
-                        error_text.contains("notification_key") || error_text.contains("not found");
+                    let is_recoverable = error_text.contains("notification_key")
+                        || error_text.contains("not found")
+                        || error_text.contains("no valid registration ids");
                     if !is_recoverable {
                         log::error!(
                             "[update_notification_devices] FCM device group operation failed: Status: {}, Body: {}",
