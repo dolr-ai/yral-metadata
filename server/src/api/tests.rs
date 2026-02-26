@@ -344,7 +344,6 @@ async fn test_delete_metadata_bulk() {
 #[tokio::test]
 async fn test_delete_metadata_bulk_empty_list() {
     // Setup
-    let redis_pool = create_test_redis_pool().await.unwrap();
     let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
 
     let unique_key = generate_unique_test_key_prefix();
@@ -358,9 +357,7 @@ async fn test_delete_metadata_bulk_empty_list() {
     assert!(result.is_ok(), "Failed : {:?}", result);
 
     // Cleanup
-    let mut conn = redis_pool.get().await.unwrap();
     let mut dconn = dragonfly_pool.get_validated().await.unwrap();
-    let _: () = conn.del(unique_key.clone()).await.unwrap();
     let _: () = dconn
         .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
         .await
@@ -418,6 +415,122 @@ async fn test_delete_metadata_bulk_large_batch() {
     // Cleanup
     let _: () = dconn
         .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn test_delete_metadata_bulk_releases_username() {
+    // Regression test: deleting a user must free their username so another user can claim it.
+    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
+    let user_principal = generate_unique_test_principal();
+    let can2prin_key = generate_unique_test_key_prefix();
+
+    // Build a unique alphanumeric username (regex: ^([a-zA-Z0-9]){3,15}$).
+    let unique_key = generate_unique_test_key_prefix();
+    let username: String = unique_key
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .take(15)
+        .collect();
+
+    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
+
+    // Ensure no leftover username-info key from a previous run.
+    let _: () = dconn
+        .del(format_to_dragonfly_key(
+            TEST_KEY_PREFIX,
+            &username_info_key(&username),
+        ))
+        .await
+        .unwrap();
+
+    // Create user with username via the real set_user_metadata_core path,
+    // which also writes the username-info reverse-index key.
+    let metadata = create_test_metadata_req(42, &username);
+    let result = set_user_metadata_core(
+        &dragonfly_pool,
+        user_principal,
+        &metadata,
+        &can2prin_key,
+        TEST_KEY_PREFIX,
+    )
+    .await;
+    assert!(result.is_ok(), "Failed to create user: {:?}", result);
+
+    // Confirm the username-info key now exists.
+    let key_before: Option<Vec<u8>> = dconn
+        .hget(
+            format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key(&username)),
+            METADATA_FIELD,
+        )
+        .await
+        .unwrap();
+    assert!(
+        key_before.is_some(),
+        "username-info key must exist after user creation"
+    );
+
+    // Delete the user.
+    let bulk_users = BulkUsers {
+        users: vec![user_principal],
+    };
+    let delete_result =
+        delete_metadata_bulk_impl(&dragonfly_pool, &bulk_users, &can2prin_key, TEST_KEY_PREFIX)
+            .await;
+    assert!(
+        delete_result.is_ok(),
+        "Failed to delete user: {:?}",
+        delete_result
+    );
+
+    // The username-info key must be gone so the username is available again.
+    let key_after: Option<Vec<u8>> = dconn
+        .hget(
+            format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key(&username)),
+            METADATA_FIELD,
+        )
+        .await
+        .unwrap();
+    assert!(
+        key_after.is_none(),
+        "username-info key must be released after user deletion"
+    );
+
+    // A new user must be able to claim the same username now.
+    let new_principal = generate_unique_test_principal();
+    let new_metadata = create_test_metadata_req(43, &username);
+    let claim_result = set_user_metadata_core(
+        &dragonfly_pool,
+        new_principal,
+        &new_metadata,
+        &can2prin_key,
+        TEST_KEY_PREFIX,
+    )
+    .await;
+    assert!(
+        claim_result.is_ok(),
+        "New user must be able to claim the released username, got: {:?}",
+        claim_result
+    );
+
+    // Cleanup
+    let _: () = dconn
+        .del(format_to_dragonfly_key(
+            TEST_KEY_PREFIX,
+            &username_info_key(&username),
+        ))
+        .await
+        .unwrap();
+    let _: () = dconn
+        .del(format_to_dragonfly_key(
+            TEST_KEY_PREFIX,
+            &new_principal.to_text(),
+        ))
+        .await
+        .unwrap();
+    let _: () = dconn
+        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &can2prin_key))
         .await
         .unwrap();
 }

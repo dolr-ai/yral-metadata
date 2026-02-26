@@ -6,6 +6,7 @@ use crate::{
     },
     notifications::traits::{
         FcmService, RedisConnection, RegisterDeviceRequest, UnregisterDeviceRequest,
+        UserMetadataStore,
     },
     utils::error::{Error, Result},
 };
@@ -13,15 +14,15 @@ use redis::{FromRedisValue, RedisError, RedisResult, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Arc, Mutex, RwLock};
 use types::{
     DeviceRegistrationToken, NotificationKey, SendNotificationReq, Signature,
     UserMetadata as ActualUserMetadata,
 };
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct MockRedisConnection {
-    pub users_data: HashMap<String, ActualUserMetadata>,
+    pub users_data: Arc<Mutex<HashMap<String, ActualUserMetadata>>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
@@ -94,16 +95,19 @@ impl UnregisterDeviceRequest for MockUnregisterDeviceReq {
 impl MockRedisConnection {
     pub fn new() -> Self {
         Self {
-            users_data: HashMap::new(),
+            users_data: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     pub fn add_user(&mut self, user_metadata: ActualUserMetadata) {
         self.users_data
+            .lock()
+            .unwrap()
             .insert(user_metadata.user_canister_id.to_text(), user_metadata);
     }
+
     pub fn add_user_to_dragonfly(&mut self, user_metadata: ActualUserMetadata) {
-        self.users_data.insert(
+        self.users_data.lock().unwrap().insert(
             format_to_dragonfly_key(TEST_KEY_PREFIX, &user_metadata.user_canister_id.to_text()),
             user_metadata,
         );
@@ -121,12 +125,12 @@ impl RedisConnection for MockRedisConnection {
             String::from_utf8_lossy(field_bytes.get(0).map_or(&Vec::new(), |v| v)).into_owned();
 
         if field_str != METADATA_FIELD {
-            return Ok(RV::from_redis_value(redis::Value::Nil)?); // Field mismatch, return nil
+            return Ok(RV::from_redis_value(redis::Value::Nil)?);
         }
 
-        match self.users_data.get(key) {
+        let data = self.users_data.lock().unwrap();
+        match data.get(key) {
             Some(user_metadata) => {
-                // Serialize to JSON bytes, then wrap in redis::Value::Data
                 let serialized_data = serde_json::to_vec(user_metadata).map_err(|e| {
                     RedisError::from((
                         redis::ErrorKind::Parse,
@@ -137,7 +141,7 @@ impl RedisConnection for MockRedisConnection {
                 RV::from_redis_value(redis::Value::BulkString(serialized_data))
                     .map_err(|e| RedisError::from(e))
             }
-            None => Ok(RV::from_redis_value(redis::Value::Nil)?), // Key not found, return nil
+            None => Ok(RV::from_redis_value(redis::Value::Nil)?),
         }
     }
 
@@ -179,8 +183,35 @@ impl RedisConnection for MockRedisConnection {
                 ))
             })?;
 
-        self.users_data.insert(key_str, user_metadata);
-        Ok(true) // Return true for successful set
+        self.users_data.lock().unwrap().insert(key_str, user_metadata);
+        Ok(true)
+    }
+}
+
+impl UserMetadataStore for MockRedisConnection {
+    async fn fetch_user_metadata(
+        &self,
+        key_prefix: &str,
+        user_id: &str,
+    ) -> Result<ActualUserMetadata> {
+        let key = format_to_dragonfly_key(key_prefix, user_id);
+        self.users_data
+            .lock()
+            .unwrap()
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| Error::Unknown(format!("User '{}' not found in mock", user_id)))
+    }
+
+    async fn save_user_metadata(
+        &self,
+        key_prefix: &str,
+        user_id: &str,
+        metadata: &ActualUserMetadata,
+    ) -> Result<()> {
+        let key = format_to_dragonfly_key(key_prefix, user_id);
+        self.users_data.lock().unwrap().insert(key, metadata.clone());
+        Ok(())
     }
 }
 

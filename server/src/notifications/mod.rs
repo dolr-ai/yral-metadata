@@ -28,13 +28,14 @@ use crate::{
 
 use crate::firebase::notifications::utils as firebase_utils;
 use crate::notifications::traits::{
-    FcmService, RedisConnection, RegisterDeviceRequest, UnregisterDeviceRequest, UserPrincipal,
+    FcmService, RedisConnection, RegisterDeviceRequest, UnregisterDeviceRequest, UserMetadataStore,
+    UserPrincipal,
 };
 use serde::Serialize;
 use types::DeviceRegistrationToken;
 
 /// Fetches user metadata from Dragonfly/Redis with retry logic
-async fn fetch_user_metadata(
+pub(super) async fn fetch_user_metadata(
     dragonfly_pool: &Arc<DragonflyPool>,
     key_prefix: &str,
     user_id_text: &str,
@@ -65,7 +66,7 @@ async fn fetch_user_metadata(
 }
 
 /// Saves user metadata to Dragonfly/Redis with retry logic
-async fn save_user_metadata(
+pub(super) async fn save_user_metadata(
     dragonfly_pool: &Arc<DragonflyPool>,
     key_prefix: &str,
     user_id_text: &str,
@@ -183,9 +184,9 @@ async fn create_notification_group<F: FcmService>(
 }
 
 /// Retrieves the notification_key for a group from FCM and updates Redis metadata
-async fn recover_notification_key<F: FcmService>(
+async fn recover_notification_key<F: FcmService, M: UserMetadataStore>(
     fcm_service: &F,
-    dragonfly_pool: &Arc<DragonflyPool>,
+    store: &M,
     notification_key_name: &str,
     user_metadata: &mut UserMetadata,
     key_prefix: &str,
@@ -213,15 +214,15 @@ async fn recover_notification_key<F: FcmService>(
             });
         }
     }
-    save_user_metadata(dragonfly_pool, key_prefix, user_id_text, user_metadata).await?;
+    store.save_user_metadata(key_prefix, user_id_text, user_metadata).await?;
 
     Ok(fetched_key)
 }
 
 /// Handles the case when trying to create a group that already exists
-async fn handle_existing_group_error<F: FcmService>(
+async fn handle_existing_group_error<F: FcmService, M: UserMetadataStore>(
     fcm_service: &F,
-    dragonfly_pool: &Arc<DragonflyPool>,
+    store: &M,
     err_text: &str,
     notification_key_name: &str,
     token: &str,
@@ -244,7 +245,7 @@ async fn handle_existing_group_error<F: FcmService>(
             // Error response doesn't include the key, fetch from FCM and update Redis
             recover_notification_key(
                 fcm_service,
-                dragonfly_pool,
+                store,
                 notification_key_name,
                 user_metadata,
                 key_prefix,
@@ -314,9 +315,14 @@ pub async fn register_device(
     })
 }
 
-pub async fn register_device_impl<F: FcmService, P: UserPrincipal, Req: RegisterDeviceRequest>(
+pub async fn register_device_impl<
+    F: FcmService,
+    M: UserMetadataStore,
+    P: UserPrincipal,
+    Req: RegisterDeviceRequest,
+>(
     fcm_service: &F,
-    dragonfly_pool: &Arc<DragonflyPool>,
+    store: &M,
     user_principal: P,
     req: Json<Req>,
     key_prefix: &str,
@@ -329,7 +335,7 @@ pub async fn register_device_impl<F: FcmService, P: UserPrincipal, Req: Register
     let user_id_text = user_principal.to_text();
 
     let mut user_metadata =
-        match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
+        match store.fetch_user_metadata(key_prefix, &user_id_text).await {
             Ok(metadata) => metadata,
             Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
         };
@@ -375,7 +381,7 @@ pub async fn register_device_impl<F: FcmService, P: UserPrincipal, Req: Register
                     );
                     let recovered_key = recover_notification_key(
                         fcm_service,
-                        dragonfly_pool,
+                        store,
                         &notification_key_name,
                         &mut user_metadata,
                         key_prefix,
@@ -434,7 +440,7 @@ pub async fn register_device_impl<F: FcmService, P: UserPrincipal, Req: Register
                     (
                         handle_existing_group_error(
                             fcm_service,
-                            dragonfly_pool,
+                            store,
                             &err_text,
                             &notification_key_name,
                             &token,
@@ -461,7 +467,7 @@ pub async fn register_device_impl<F: FcmService, P: UserPrincipal, Req: Register
     );
 
     // Save to Redis
-    save_user_metadata(dragonfly_pool, key_prefix, &user_id_text, &user_metadata).await?;
+    store.save_user_metadata(key_prefix, &user_id_text, &user_metadata).await?;
 
     log::info!("Device registered successfully for user: {}", user_id_text);
 
@@ -500,11 +506,12 @@ pub async fn unregister_device(
 
 pub async fn unregister_device_impl<
     F: FcmService,
+    M: UserMetadataStore,
     P: UserPrincipal,
     Req: UnregisterDeviceRequest,
 >(
     fcm_service: &F,
-    dragonfly_pool: &Arc<DragonflyPool>,
+    store: &M,
     user_principal: P,
     req: Json<Req>,
     key_prefix: &str,
@@ -517,7 +524,7 @@ pub async fn unregister_device_impl<
     let user_id_text = user_principal.to_text();
 
     let mut user_metadata =
-        match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
+        match store.fetch_user_metadata(key_prefix, &user_id_text).await {
             Ok(metadata) => metadata,
             Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
         };
@@ -572,7 +579,7 @@ pub async fn unregister_device_impl<
             .registration_tokens
             .retain(|token| token.token != registration_token_obj.token);
 
-        save_user_metadata(dragonfly_pool, key_prefix, &user_id_text, &user_metadata).await?;
+        store.save_user_metadata(key_prefix, &user_id_text, &user_metadata).await?;
 
         log::info!(
             "Device unregistered successfully for user: {}",
@@ -640,10 +647,10 @@ pub async fn send_notification(
     })
 }
 
-pub async fn send_notification_impl<F: FcmService, P: UserPrincipal>(
+pub async fn send_notification_impl<F: FcmService, M: UserMetadataStore, P: UserPrincipal>(
     headers: Option<&HeaderMap>,
     fcm_service: &F,
-    dragonfly_pool: &Arc<DragonflyPool>,
+    store: &M,
     user_principal: P,
     req: Json<SendNotificationReq>,
     key_prefix: &str,
@@ -682,7 +689,7 @@ pub async fn send_notification_impl<F: FcmService, P: UserPrincipal>(
 
     // Fetch user metadata
     let mut user_metadata =
-        match fetch_user_metadata(dragonfly_pool, key_prefix, &user_id_text).await {
+        match store.fetch_user_metadata(key_prefix, &user_id_text).await {
             Ok(metadata) => metadata,
             Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
         };
@@ -712,7 +719,7 @@ pub async fn send_notification_impl<F: FcmService, P: UserPrincipal>(
             // Clear stale notification key so user can re-register
             user_metadata.notification_key = None;
             if let Err(save_err) =
-                save_user_metadata(dragonfly_pool, key_prefix, &user_id_text, &user_metadata).await
+                store.save_user_metadata(key_prefix, &user_id_text, &user_metadata).await
             {
                 log::error!(
                     "Failed to clear stale notification_key for user {}: {:?}",
