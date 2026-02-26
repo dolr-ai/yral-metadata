@@ -367,7 +367,18 @@ pub async fn delete_metadata_bulk_impl(
                     .map(|name| format_to_dragonfly_key(&key_prefix, name))
                     .collect();
 
-                // Step 2: Delete from Dragonfly in batches
+                // Step 2: Delete from Dragonfly in batches.
+                // IMPORTANT: Delete username-info keys BEFORE user metadata keys.
+                // On a connection error mid-delete, execute_with_retry retries the whole closure.
+                // If user metadata is deleted first and a retry occurs, HGET returns None so
+                // usernames cannot be re-collected and username-info keys are orphaned permanently.
+                // Deleting username-info first is safe: DEL on an already-missing key is a no-op.
+                for chunk in formatted_usernames.chunks(BATCH_SIZE) {
+                    let mut pipe = redis::pipe();
+                    pipe.del(chunk).ignore();
+                    pipe.query_async::<()>(&mut conn).await?;
+                }
+
                 // Delete user metadata keys in chunks
                 for chunk in formatted_keys.chunks(BATCH_SIZE) {
                     let mut pipe = redis::pipe();
@@ -380,13 +391,6 @@ pub async fn delete_metadata_bulk_impl(
                     let mut pipe = redis::pipe();
                     pipe.hdel(&format_to_dragonfly_key(&key_prefix, &can2prin_key), chunk)
                         .ignore();
-                    pipe.query_async::<()>(&mut conn).await?;
-                }
-
-                // Delete usernames in chunks
-                for chunk in formatted_usernames.chunks(BATCH_SIZE) {
-                    let mut pipe = redis::pipe();
-                    pipe.del(chunk).ignore();
                     pipe.query_async::<()>(&mut conn).await?;
                 }
 
