@@ -152,10 +152,12 @@ jobs:
           DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY}}
         run: |
           
+          flatten() { echo "$1" | tr -d '\n\r'; }
+
           ENV_JSON=$(jq -n \
             --arg yral_metadata_user_notification_api_key "$YRAL_METADATA_USER_NOTIFICATION_API_KEY" \
             --arg jwt_public_key "$JWT_PUBLIC_KEY" \
-            --arg client_notifications_google_service_account_key "$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY" \
+            --arg client_notifications_google_service_account_key "$(flatten "$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY")" \
             --arg backend_admin_identity "$BACKEND_ADMIN_IDENTITY" \
             --arg yral_auth_public_key "$YRAL_AUTH_PUBLIC_KEY" \
             --arg google_client_notifications_project_id "$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID" \
@@ -172,7 +174,7 @@ jobs:
                 {"key": "YRAL_METADATA_USER_NOTIFICATION_API_KEY", "value": $yral_metadata_user_notification_api_key, "is_literal": true},
                 {"key": "JWT_PUBLIC_KEY", "value": $jwt_public_key, "is_multiline": true},
                 {"key": "CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY", "value": $client_notifications_google_service_account_key, "is_literal": true},
-                {"key": "BACKEND_ADMIN_IDENTITY", "value": $backend_admin_identity, "is_literal": true},
+                {"key": "BACKEND_ADMIN_IDENTITY", "value": $backend_admin_identity, "is_multiline": true},
                 {"key": "YRAL_AUTH_PUBLIC_KEY", "value": $yral_auth_public_key, "is_multiline": true},
                 {"key": "GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID", "value": $google_client_notifications_project_id, "is_literal": true},
                 {"key": "GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID", "value": $google_client_notifications_sender_id, "is_literal": true},
