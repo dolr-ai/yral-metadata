@@ -162,9 +162,9 @@ jobs:
             --arg google_client_notifications_sender_id "$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID" \
             --arg qstash_current_signing_key "$QSTASH_CURRENT_SIGNING_KEY" \
             --arg qstash_next_signing_key "$QSTASH_NEXT_SIGNING_KEY" \
-            --arg dragonfly_password "${{ secrets.DRAGONFLY_PASSWORD }}" \
-            --arg dragonfly_hosts "${{ vars.DRAGONFLY_HOSTS }}" \
-            --arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT") \
+            --arg dragonfly_password "$DRAGONFLY_PASSWORD" \
+            --arg dragonfly_hosts "$DRAGONFLY_HOSTS" \
+            --arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT" \
             --arg dragonfly_client_cert "$DRAGONFLY_CLIENT_CERT" \
             --arg dragonfly_client_key "$DRAGONFLY_CLIENT_KEY" \
             '{
