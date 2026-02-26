@@ -1,14 +1,14 @@
 name: deploy preview
+
 on:
   pull_request:
     types: [opened, reopened, synchronize, closed]
 
 permissions:
+  pull-requests: write
+  contents: read
+  packages: write
   deployments: write
-
-env:
-  FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }}
-  FLY_ORG: gobazzinga-inc-584
 
 jobs:
   build_check:
@@ -18,55 +18,121 @@ jobs:
     secrets: inherit
 
   preview:
+    if: ${{ github.event.pull_request.state == 'open' }}
     needs: build_check
     runs-on: ubuntu-latest
-
-    # Only run one deployment at a time per PR.
+    permissions:
+      contents: read
+      packages: write
+    
     concurrency:
-      group: pr-${{ github.event.number }}
+      group: pr-${{ github.event.number }}-${{ github.event.repository.name }}
+      cancel-in-progress: true
 
-    # Create a GitHub deployment environment per staging app so it shows up
-    # in the pull request UI.
     environment:
       name: pr-${{ github.event.number }}
-      url: ${{ steps.deploy.outputs.url }}
+      url: ${{ steps.meta.outputs.preview_url }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
+      - name: Compute Preview Metadata
+        id: meta
+        run: |
+          PR_NUMBER=${{ github.event.number }}
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')
+          IMAGE="ghcr.io/${{ github.repository_owner }}/${REPO_NAME}"
+          IMAGE_TAG="pr-${PR_NUMBER}"
+          PREVIEW_DOMAIN="pr-${PR_NUMBER}-${REPO_NAME}.preview.yral.com"
+          PREVIEW_URL="https://${PREVIEW_DOMAIN}"
+          APP_NAME="pr-${PR_NUMBER}-${REPO_NAME}"
+          
+          echo "pr_number=${PR_NUMBER}"             >> $GITHUB_OUTPUT
+          echo "repo_name=${REPO_NAME}"             >> $GITHUB_OUTPUT
+          echo "image=${IMAGE}"                     >> $GITHUB_OUTPUT
+          echo "image_tag=${IMAGE_TAG}"             >> $GITHUB_OUTPUT
+          echo "preview_domain=${PREVIEW_DOMAIN}"   >> $GITHUB_OUTPUT
+          echo "preview_url=${PREVIEW_URL}"         >> $GITHUB_OUTPUT
+          echo "app_name=${APP_NAME}"               >> $GITHUB_OUTPUT
+
       - name: Download build
         uses: actions/download-artifact@v4
         with:
           name: build-musl
-      - run: chmod +x target/x86_64-unknown-linux-musl/release/yral-metadata-server
 
-      - name: Deploy
-        id: deploy
-        uses: superfly/fly-pr-review-apps@1.2.1
+      - name: Fix Binary Permissions
+        run: chmod +x target/x86_64-unknown-linux-musl/release/yral-metadata-server
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - name: Set secret tokens
-        if: ${{ github.event.pull_request.merged == false}}
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile # Ensure you have a Dockerfile that copies the binary
+          push: true
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.image_tag }}
+          cache-from: type=registry,ref=${{ steps.meta.outputs.image }}:cache-${{ steps.meta.outputs.image_tag }}
+          cache-to: type=registry,ref=${{ steps.meta.outputs.image }}:cache-${{ steps.meta.outputs.image_tag }},mode=max
+
+      - name: Create or Get Coolify Application
+        id: coolify_app
         run: |
-          APP_NAME="pr-${{github.event.number}}-${{github.repository_owner}}-yral-metadata"
-          flyctl secrets set YRAL_METADATA_USER_NOTIFICATION_API_KEY="$YRAL_METADATA_USER_NOTIFICATION_API_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY="$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID="$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID" --app "$APP_NAME" --stage
-          flyctl secrets set BACKEND_ADMIN_IDENTITY="$BACKEND_ADMIN_IDENTITY" --app "$APP_NAME" --stage
-          flyctl secrets set YRAL_AUTH_PUBLIC_KEY="$YRAL_AUTH_PUBLIC_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID="$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID" --app "$APP_NAME" --stage
-          flyctl secrets set QSTASH_CURRENT_SIGNING_KEY="$QSTASH_CURRENT_SIGNING_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set QSTASH_NEXT_SIGNING_KEY="$QSTASH_NEXT_SIGNING_KEY" --app "$APP_NAME" --stage
-          flyctl secrets set DRAGONFLY_PASSWORD="$DRAGONFLY_PASSWORD" --app "$APP_NAME" --stage
-          flyctl secrets set DRAGONFLY_HOSTS="$DRAGONFLY_HOSTS" --app "$APP_NAME" --stage
-          flyctl secrets set DRAGONFLY_CA_CERT="$DRAGONFLY_CA_CERT" --app "$APP_NAME" --stage
-          flyctl secrets set DRAGONFLY_CLIENT_CERT="$DRAGONFLY_CLIENT_CERT" --app "$APP_NAME" --stage
-          flyctl secrets set DRAGONFLY_CLIENT_KEY="$DRAGONFLY_CLIENT_KEY" --app "$APP_NAME" --stage
+          APP_NAME="${{ steps.meta.outputs.app_name }}"
+          IMAGE="${{ steps.meta.outputs.image }}"
+          IMAGE_TAG="${{ steps.meta.outputs.image_tag }}"
+          PREVIEW_DOMAIN="${{ steps.meta.outputs.preview_domain }}"
 
-          echo "Redeploying preview app to apply secrets..."
-          flyctl deploy --app "$APP_NAME" --remote-only --detach
+          # Check if app already exists for this PR (e.g. new commit pushed to same PR)
+          EXISTING=$(curl -s \
+            "${{ secrets.COOLIFY_URL }}/api/v1/applications" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            | jq -r --arg name "$APP_NAME" '.[] | select(.name == $name) | .uuid // empty')
+
+          if [ -n "$EXISTING" ]; then
+            echo "Reusing existing Coolify app: $EXISTING"
+            echo "app_uuid=${EXISTING}" >> $GITHUB_OUTPUT
+          else
+            echo "Creating new Coolify app: $APP_NAME"
+
+            RESPONSE=$(curl -s -X POST \
+              "${{ secrets.COOLIFY_URL }}/api/v1/applications/dockerimage" \
+              -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"name\": \"${APP_NAME}\",
+                \"project_uuid\": \"${{ secrets.COOLIFY_PROJECT_UUID }}\",
+                \"server_uuid\": \"${{ secrets.COOLIFY_SERVER_UUID }}\",
+                \"environment_name\": \"preview\",
+                \"environment_uuid\": \"${{ secrets.COOLIFY_ENV_UUID }}\",
+                \"docker_registry_image_name\": \"${IMAGE}\",
+                \"docker_registry_image_tag\": \"${IMAGE_TAG}\",
+                \"domains\": \"https://${PREVIEW_DOMAIN}\",
+                \"ports_exposes\": \"3000\",
+                \"is_static\": false
+              }")
+
+            echo "Create response: $RESPONSE"
+
+            APP_UUID=$(echo $RESPONSE | jq -r '.uuid // empty')
+
+            if [ -z "$APP_UUID" ]; then
+              echo "Failed to create Coolify application"
+              echo "$RESPONSE"
+              exit 1
+            fi
+
+            echo "app_uuid=${APP_UUID}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Push Environment Variables
         env:
-          FLY_API_TOKEN: ${{ secrets.AUTH_METADATA_MICROSERVICE_FLY_IO_GITHUB_ACTION }} # This token is for flyctl itself
+          # Secrets from GitHub
           YRAL_METADATA_USER_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_USER_NOTIFICATION_API_KEY }}
           JWT_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_PUBLIC_KEY }}
           CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
@@ -81,3 +147,162 @@ jobs:
           DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT}}
           DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT}}
           DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY}}
+        run: |
+          
+          ENV_JSON=$(jq -n \
+            --arg yral_metadata_user_notification_api_key "$YRAL_METADATA_USER_NOTIFICATION_API_KEY" \
+            --arg jwt_public_key "$JWT_PUBLIC_KEY" \
+            --arg client_notifications_google_service_account_key "$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY" \
+            --arg backend_admin_identity "$BACKEND_ADMIN_IDENTITY" \
+            --arg yral_auth_public_key "$YRAL_AUTH_PUBLIC_KEY" \
+            --arg google_client_notifications_project_id "$GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID" \
+            --arg google_client_notifications_sender_id "$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID" \
+            --arg qstash_current_signing_key "$QSTASH_CURRENT_SIGNING_KEY" \
+            --arg qstash_next_signing_key "$QSTASH_NEXT_SIGNING_KEY" \
+            --arg dragonfly_password "${{ secrets.DRAGONFLY_PASSWORD }}" \
+            --arg dragonfly_hosts "${{ vars.DRAGONFLY_HOSTS }}" \
+            --arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT") \
+            --arg dragonfly_client_cert "$DRAGONFLY_CLIENT_CERT" \
+            --arg dragonfly_client_key "$DRAGONFLY_CLIENT_KEY" \
+            '{
+              "data": [
+                {"key": "YRAL_METADATA_USER_NOTIFICATION_API_KEY", "value": $yral_metadata_user_notification_api_key, "is_literal": true},
+                {"key": "JWT_PUBLIC_KEY", "value": $jwt_public_key, "is_multiline": true},
+                {"key": "CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY", "value": $client_notifications_google_service_account_key, "is_literal": true},
+                {"key": "BACKEND_ADMIN_IDENTITY", "value": $backend_admin_identity, "is_literal": true},
+                {"key": "YRAL_AUTH_PUBLIC_KEY", "value": $yral_auth_public_key, "is_multiline": true},
+                {"key": "GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID", "value": $google_client_notifications_project_id, "is_literal": true},
+                {"key": "GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID", "value": $google_client_notifications_sender_id, "is_literal": true},
+                {"key": "QSTASH_CURRENT_SIGNING_KEY", "value": $qstash_current_signing_key, "is_multiline": true},
+                {"key": "QSTASH_NEXT_SIGNING_KEY", "value": $qstash_next_signing_key, "is_multiline": true},
+                {"key": "DRAGONFLY_PASSWORD", "value": $dragonfly_password, "is_literal": true},
+                {"key": "DRAGONFLY_HOSTS", "value": $dragonfly_hosts, "is_literal": true},
+                {"key": "DRAGONFLY_CA_CERT", "value": $dragonfly_ca_cert, "is_multiline": true},
+                {"key": "DRAGONFLY_CLIENT_CERT", "value": $dragonfly_client_cert, "is_multiline": true},
+                {"key": "DRAGONFLY_CLIENT_KEY", "value": $dragonfly_client_key, "is_multiline": true}
+              ]
+            }')
+
+          curl -s -X PATCH "${{ secrets.COOLIFY_URL }}/api/v1/applications/${{ steps.coolify_app.outputs.app_uuid }}/envs/bulk" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "$ENV_JSON"
+
+      - name: Update Image Tag and Deploy
+        id: deploy
+        run: |
+          APP_UUID="${{ steps.coolify_app.outputs.app_uuid }}"
+          IMAGE="${{ steps.meta.outputs.image }}"
+          IMAGE_TAG="${{ steps.meta.outputs.image_tag }}"
+
+          # Update image tag (important on subsequent pushes to same PR)
+          curl -s -X PATCH \
+            "${{ secrets.COOLIFY_URL }}/api/v1/applications/${APP_UUID}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"docker_registry_image_tag\": \"${IMAGE_TAG}\"}"
+
+          # Trigger deploy
+          RESPONSE=$(curl -s -X POST \
+            "${{ secrets.COOLIFY_URL }}/api/v1/applications/${APP_UUID}/start" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"uuid\": \"${APP_UUID}\",
+              \"force\": true
+            }")
+
+          echo "Deploy response: $RESPONSE"
+
+          DEPLOY_UUID=$(echo $RESPONSE | jq -r '.deployment_uuid // empty')
+          if [ -z "$DEPLOY_UUID" ]; then
+            echo "Failed to trigger deployment"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          echo "deploy_uuid=${DEPLOY_UUID}" >> $GITHUB_OUTPUT
+
+      - name: Wait for Deployment
+        run: |
+          DEPLOY_UUID="${{ steps.deploy.outputs.deploy_uuid }}"
+          MAX_WAIT=120
+          WAITED=0
+
+          while [ $WAITED -lt $MAX_WAIT ]; do
+            STATUS=$(curl -s \
+              "${{ secrets.COOLIFY_URL }}/api/v1/deployments/${DEPLOY_UUID}" \
+              -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+              | jq -r '.status // empty')
+
+            echo "Status: ${STATUS} (${WAITED}s elapsed)"
+
+            if [ "$STATUS" = "finished" ]; then exit 0
+            elif [ "$STATUS" = "failed" ] || [ "$STATUS" = "error" ]; then exit 1
+            fi
+
+            sleep 10
+            WAITED=$((WAITED + 10))
+          done
+
+          echo "Timed out"
+          exit 1
+
+  destroy-preview:
+    if: ${{ github.event.pull_request.state == 'closed' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Compute Metadata
+        id: meta
+        run: |
+          PR_NUMBER=${{ github.event.number }}
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g')
+          APP_NAME="pr-${PR_NUMBER}-${REPO_NAME}"
+          echo "app_name=${APP_NAME}"   >> $GITHUB_OUTPUT
+          echo "repo_name=${REPO_NAME}" >> $GITHUB_OUTPUT
+          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+
+      - name: Find and Delete Coolify Application
+        run: |
+          APP_NAME="${{ steps.meta.outputs.app_name }}"
+
+          APP_UUID=$(curl -s \
+            "${{ secrets.COOLIFY_URL }}/api/v1/applications" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            | jq -r --arg name "$APP_NAME" '.[] | select(.name == $name) | .uuid // empty')
+
+          if [ -z "$APP_UUID" ]; then
+            echo "No app found for $APP_NAME — skipping"
+            exit 0
+          fi
+
+          echo "Deleting Coolify app $APP_NAME ($APP_UUID)"
+
+          curl -s -X DELETE \
+            "${{ secrets.COOLIFY_URL }}/api/v1/applications/${APP_UUID}" \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
+
+      - name: Delete GHCR Image Tag
+        run: |
+          PR_NUMBER="${{ steps.meta.outputs.pr_number }}"
+          REPO_NAME="${{ steps.meta.outputs.repo_name }}"
+          IMAGE_TAG="pr-${PR_NUMBER}"
+
+          VERSIONS=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/${REPO_NAME}/versions")
+
+          VERSION_ID=$(echo $VERSIONS | jq -r --arg tag "$IMAGE_TAG" \
+            '.[] | select(.metadata.container.tags[] == $tag) | .id // empty')
+
+          if [ -n "$VERSION_ID" ]; then
+            curl -s -X DELETE \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/${REPO_NAME}/versions/${VERSION_ID}"
+            echo "Deleted GHCR image tag ${IMAGE_TAG}"
+          else
+            echo "Image tag not found, skipping"
+          fi
