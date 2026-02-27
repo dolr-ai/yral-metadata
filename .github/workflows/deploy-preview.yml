@@ -151,7 +151,7 @@ jobs:
           DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT}}
           DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY}}
         run: |
-          
+          APP_UUID="${{ steps.coolify_app.outputs.app_uuid }}"
           flatten() { echo "$1" | tr -d '\n\r'; }
 
           ENV_JSON=$(jq -n \
