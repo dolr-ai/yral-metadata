@@ -1,9 +1,12 @@
 use redis::{FromRedisValue, RedisResult, ToRedisArgs, ToSingleRedisArg};
+use std::sync::Arc;
 
 use crate::{
+    dragonfly::DragonflyPool,
     firebase::Firebase,
     notifications::traits::{
         FcmService, RedisConnection, RegisterDeviceRequest, UnregisterDeviceRequest,
+        UserMetadataStore,
     },
     utils::error::{Error, Result},
 };
@@ -11,7 +14,7 @@ use crate::{
 // Corrected import for types crate
 use types::{
     DeviceRegistrationToken, NotificationKey, RegisterDeviceReq, SendNotificationReq, Signature,
-    UnregisterDeviceReq,
+    UnregisterDeviceReq, UserMetadata,
 };
 
 // --- Implement FcmService for Firebase ---
@@ -102,5 +105,21 @@ impl UnregisterDeviceRequest for UnregisterDeviceReq {
 
 // Note: UserPrincipal is already implemented for ntex::web::types::Path<Principal> and String
 // in traits.rs itself.
+
+// --- Implement UserMetadataStore for Arc<DragonflyPool> ---
+impl UserMetadataStore for Arc<DragonflyPool> {
+    async fn fetch_user_metadata(&self, key_prefix: &str, user_id: &str) -> Result<UserMetadata> {
+        super::fetch_user_metadata(self, key_prefix, user_id).await
+    }
+
+    async fn save_user_metadata(
+        &self,
+        key_prefix: &str,
+        user_id: &str,
+        metadata: &UserMetadata,
+    ) -> Result<()> {
+        super::save_user_metadata(self, key_prefix, user_id, metadata).await
+    }
+}
 
 // Mock implementations will go into mocks.rs or a new mocks_impl.rs

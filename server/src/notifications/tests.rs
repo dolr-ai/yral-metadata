@@ -58,7 +58,7 @@ mod tests {
         let result = register_device_impl(
             &mock_fcm, // FCM service first
             // Then Redis service
-            &mut dragonfly_mock_redis,   // Then Dragonfly Redis service
+            &dragonfly_mock_redis,   // Dragonfly Redis service
             user_principal_text.clone(), // Then user principal
             req,                         // Then request data
             TEST_KEY_PREFIX,
@@ -148,7 +148,7 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -185,12 +185,17 @@ mod tests {
 
         let redis_notification_key = updated_metadata.notification_key.as_ref().unwrap();
         assert_eq!(redis_notification_key.key, initial_fcm_key);
-        assert_eq!(redis_notification_key.registration_tokens.len(), 1);
-        assert_eq!(
-            redis_notification_key.registration_tokens[0].token,
-            new_device_token_str
-        );
-        assert!(updated_metadata.is_migrated);
+        // The new token is appended to the existing tokens (no replacement for unmigrated users)
+        assert_eq!(redis_notification_key.registration_tokens.len(), 2);
+        assert!(redis_notification_key
+            .registration_tokens
+            .iter()
+            .any(|t| t.token == existing_token));
+        assert!(redis_notification_key
+            .registration_tokens
+            .iter()
+            .any(|t| t.token == new_device_token_str));
+        assert!(!updated_metadata.is_migrated);
     }
 
     #[tokio::test]
@@ -235,7 +240,7 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -324,7 +329,7 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -371,7 +376,6 @@ mod tests {
     #[tokio::test]
     async fn test_register_device_metadata_not_found() {
         let mock_fcm = MockFCM::new();
-        let mut mock_redis = MockRedisConnection::new();
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "zboat-zyaaa-aaaaj-qml7q-caii".to_string();
 
@@ -383,7 +387,7 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -441,7 +445,7 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -528,7 +532,7 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -609,7 +613,7 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -663,7 +667,7 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -690,7 +694,7 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -751,7 +755,7 @@ mod tests {
         let result = send_notification_impl(
             None, // HttpRequest is None for tests
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -794,7 +798,7 @@ mod tests {
         let result = send_notification_impl(
             None,
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -833,7 +837,7 @@ mod tests {
         let result = send_notification_impl(
             None,
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -881,29 +885,18 @@ mod tests {
         let result = send_notification_impl(
             None,
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
         )
         .await;
 
-        assert!(
-            result.is_err(),
-            "send_notification_impl should have failed due to FCM error"
-        );
-        match result.err().unwrap() {
-            Error::Unknown(msg) => {
-                assert!(msg.contains(&format!(
-                    "Notification key not found in mock: {:?}", // Updated error message from MockFCM
-                    fcm_key_in_redis
-                )));
-            }
-            other_err => panic!(
-                "Expected Error::Unknown from send_notification_impl, got {:?}",
-                other_err
-            ),
-        }
+        // When the FCM key is not found (UNREGISTERED error), the impl clears the stale
+        // notification_key and returns Ok(Json(Err(ApiError::NotificationKeyNotFound))).
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
+        let api_result = result.unwrap().0;
+        assert_eq!(api_result, Err(types::error::ApiError::NotificationKeyNotFound));
     }
 
     #[tokio::test]
@@ -937,7 +930,7 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -1018,7 +1011,7 @@ mod tests {
 
         let result = register_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -1110,7 +1103,7 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,
@@ -1176,7 +1169,7 @@ mod tests {
 
         let result = unregister_device_impl(
             &mock_fcm,
-            &mut dragonfly_mock_redis,
+            &dragonfly_mock_redis,
             user_principal_text.clone(),
             req,
             TEST_KEY_PREFIX,

@@ -3,7 +3,7 @@ use candid::Principal;
 use redis::RedisResult;
 
 use crate::utils::error::{Error, Result};
-use types::{DeviceRegistrationToken, NotificationKey, SendNotificationReq, Signature};
+use types::{DeviceRegistrationToken, NotificationKey, SendNotificationReq, Signature, UserMetadata};
 
 // --- FCM Service Trait ---
 pub trait FcmService: Send + Sync {
@@ -47,6 +47,18 @@ pub trait RedisConnection: Send + Sync {
 
 // Wrapper for Redis connection to adapt the hget signature for tests if needed
 // Or, the mock implementation directly implements the desired test signature.
+
+// --- User Metadata Store Trait ---
+// Abstracts fetch/save of user metadata so real DragonflyPool and mocks can both be used.
+pub trait UserMetadataStore: Send + Sync {
+    async fn fetch_user_metadata(&self, key_prefix: &str, user_id: &str) -> Result<UserMetadata>;
+    async fn save_user_metadata(
+        &self,
+        key_prefix: &str,
+        user_id: &str,
+        metadata: &UserMetadata,
+    ) -> Result<()>;
+}
 
 // --- User Principal Trait ---
 

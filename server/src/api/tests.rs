@@ -1,798 +1,411 @@
-#![cfg(feature = "dragonfly-integration-tests")]
-
 use super::implementation::*;
 use crate::{
-    dragonfly::{format_to_dragonfly_key, init_dragonfly_redis_for_test, TEST_KEY_PREFIX},
+    api::store::MockMetadataKvStore,
+    dragonfly::{format_to_dragonfly_key, TEST_KEY_PREFIX},
     test_utils::test_helpers::*,
 };
 use candid::Principal;
-use redis::AsyncCommands;
-use types::{BulkGetUserMetadataReq, BulkUsers, CanisterToPrincipalReq};
+use types::{BulkGetUserMetadataReq, BulkUsers, CanisterToPrincipalReq, UserMetadata};
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+/// Insert pre-serialised UserMetadata into the mock store at the user's hash key.
+async fn seed_user(mock: &MockMetadataKvStore, user: Principal, metadata: &UserMetadata) {
+    let key = format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text());
+    let bytes = serde_json::to_vec(metadata).unwrap();
+    mock.insert(&key, METADATA_FIELD, bytes).await;
+}
+
+// ── set_user_metadata_core ────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn test_set_user_metadata_valid_request() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
+    let mock = MockMetadataKvStore::new();
     let user_principal = generate_unique_test_principal();
-    let user_name = "testuser";
-    let metadata = create_test_metadata_req(100, user_name);
     let unique_key = generate_unique_test_key_prefix();
+    let metadata = create_test_metadata_req(100, "testuser");
 
-    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
-    let _: () = dconn
-        .del(format_to_dragonfly_key(
-            TEST_KEY_PREFIX,
-            &username_info_key(user_name),
-        ))
-        .await
-        .unwrap();
-
-    // Execute - using core implementation that skips signature verification
-    let result = set_user_metadata_core(
-        &dragonfly_pool,
-        user_principal,
-        &metadata,
-        &unique_key,
-        TEST_KEY_PREFIX,
-    )
-    .await;
-
-    // Verify
+    let result =
+        set_user_metadata_core(&mock, user_principal, &metadata, &unique_key, TEST_KEY_PREFIX)
+            .await;
     assert!(result.is_ok(), "Failed: {:?}", result);
 
-    // Check data was stored
-    let stored: Option<Vec<u8>> = dconn
-        .hget(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()),
-            METADATA_FIELD,
-        )
-        .await
-        .unwrap();
-    assert!(stored.is_some());
+    // User metadata was stored.
+    let user_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text());
+    assert!(mock.get_raw(&user_key, METADATA_FIELD).await.is_some());
 
-    // Check reverse index was updated
-    let reverse_lookup: Option<String> = dconn
-        .hget(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
-            metadata.user_canister_id.to_text(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(reverse_lookup, Some(user_principal.to_text()));
-
-    // Cleanup
-    cleanup_dragonfly_test_data(
-        &dragonfly_pool,
-        &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()),
-    )
-    .await
-    .unwrap();
-
-    let _: () = dconn
-        .hdel(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
-            metadata.user_canister_id.to_text(),
-        )
-        .await
-        .unwrap();
-    let _: () = dconn
-        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
-        .await
-        .unwrap();
-    let _: () = dconn
-        .del(format_to_dragonfly_key(
-            TEST_KEY_PREFIX,
-            &username_info_key(user_name),
-        ))
-        .await
-        .unwrap();
+    // Reverse index (canister → principal) was stored.
+    let can2prin_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key);
+    let raw = mock
+        .get_raw(&can2prin_key, &metadata.user_canister_id.to_text())
+        .await;
+    let stored_principal = raw.map(|b| String::from_utf8(b).unwrap());
+    assert_eq!(stored_principal, Some(user_principal.to_text()));
 }
 
 #[tokio::test]
 async fn test_set_user_metadata_updates_existing() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
-    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
+    let mock = MockMetadataKvStore::new();
     let user_principal = generate_unique_test_principal();
     let unique_key = generate_unique_test_key_prefix();
 
-    let _: () = dconn
-        .del(format_to_dragonfly_key(
-            TEST_KEY_PREFIX,
-            &username_info_key("originalname"),
-        ))
-        .await
-        .unwrap();
-    let _: () = dconn
-        .del(format_to_dragonfly_key(
-            TEST_KEY_PREFIX,
-            &username_info_key("updatedname"),
-        ))
-        .await
-        .unwrap();
-
-    // First request
+    // First request: set username "originalname".
     let metadata1 = create_test_metadata_req(200, "originalname");
-    set_user_metadata_core(
-        &dragonfly_pool,
-        user_principal,
-        &metadata1,
-        &unique_key,
-        TEST_KEY_PREFIX,
-    )
-    .await
-    .unwrap();
+    set_user_metadata_core(&mock, user_principal, &metadata1, &unique_key, TEST_KEY_PREFIX)
+        .await
+        .unwrap();
 
-    // Second request with updated name
+    // Second request: change username to "updatedname".
     let metadata2 = create_test_metadata_req(200, "updatedname");
-    let result = set_user_metadata_core(
-        &dragonfly_pool,
-        user_principal,
-        &metadata2,
-        &unique_key,
-        TEST_KEY_PREFIX,
-    )
-    .await;
+    let result =
+        set_user_metadata_core(&mock, user_principal, &metadata2, &unique_key, TEST_KEY_PREFIX)
+            .await;
+    assert!(result.is_ok(), "Failed: {:?}", result);
 
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
+    let user_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text());
+    let raw = mock.get_raw(&user_key, METADATA_FIELD).await.unwrap();
+    let meta: UserMetadata = serde_json::from_slice(&raw).unwrap();
+    assert_eq!(meta.user_name, "updatedname");
 
-    // Check updated data
-    let stored: Option<Vec<u8>> = dconn
-        .hget(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()),
-            METADATA_FIELD,
-        )
-        .await
-        .unwrap();
-    let metadata: types::UserMetadata = serde_json::from_slice(&stored.unwrap()).unwrap();
-    assert_eq!(metadata.user_name, "updatedname");
+    // Old username-info key must be gone.
+    let old_username_key =
+        format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key("originalname"));
+    assert!(
+        mock.get_raw(&old_username_key, METADATA_FIELD).await.is_none(),
+        "old username-info key must be released"
+    );
 
-    // verify just updating caniste id works
-
+    // Third request: update only canister_id (empty username).
     let metadata3 = create_test_metadata_req(300, "");
-    let result = set_user_metadata_core(
-        &dragonfly_pool,
-        user_principal,
-        &metadata3,
-        &unique_key,
-        TEST_KEY_PREFIX,
-    )
-    .await;
-    assert!(result.is_ok(), "Failed : {:?}", result);
+    let result =
+        set_user_metadata_core(&mock, user_principal, &metadata3, &unique_key, TEST_KEY_PREFIX)
+            .await;
+    assert!(result.is_ok(), "Failed: {:?}", result);
 
-    // Check updated data
-    let stored: Option<Vec<u8>> = dconn
-        .hget(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()),
-            METADATA_FIELD,
-        )
-        .await
-        .unwrap();
-    let metadata: types::UserMetadata = serde_json::from_slice(&stored.unwrap()).unwrap();
-    assert_eq!(metadata.user_name, "updatedname");
-    assert_eq!(metadata.user_canister_id, metadata3.user_canister_id);
-
-    // Cleanup
-    cleanup_dragonfly_test_data(
-        &dragonfly_pool,
-        &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()),
-    )
-    .await
-    .unwrap();
-    let _: () = dconn
-        .hdel(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
-            metadata2.user_canister_id.to_text(),
-        )
-        .await
-        .unwrap();
-    let _: () = dconn
-        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
-        .await
-        .unwrap();
-    let _: () = dconn
-        .del(format_to_dragonfly_key(
-            TEST_KEY_PREFIX,
-            &username_info_key("originalname"),
-        ))
-        .await
-        .unwrap();
-    let _: () = dconn
-        .del(format_to_dragonfly_key(
-            TEST_KEY_PREFIX,
-            &username_info_key("updatedname"),
-        ))
-        .await
-        .unwrap();
+    let raw = mock.get_raw(&user_key, METADATA_FIELD).await.unwrap();
+    let meta: UserMetadata = serde_json::from_slice(&raw).unwrap();
+    assert_eq!(meta.user_name, "updatedname"); // name unchanged
+    assert_eq!(meta.user_canister_id, metadata3.user_canister_id); // canister updated
 }
+
+// ── get_user_metadata_impl ────────────────────────────────────────────────────
 
 #[tokio::test]
 async fn test_get_user_metadata_existing() {
-    // Setup
+    let mock = MockMetadataKvStore::new();
     let user_principal = generate_unique_test_principal();
     let test_metadata = create_test_user_metadata(3, 300);
+    seed_user(&mock, user_principal, &test_metadata).await;
 
-    // Store test data
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
-    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
-    let meta_bytes = serde_json::to_vec(&test_metadata).unwrap();
-
-    let _: () = dconn
-        .hset(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()),
-            METADATA_FIELD,
-            &meta_bytes,
-        )
-        .await
-        .unwrap();
-
-    // Execute
     let result =
-        get_user_metadata_impl(&dragonfly_pool, user_principal.to_text(), TEST_KEY_PREFIX).await;
+        get_user_metadata_impl(&mock, user_principal.to_text(), TEST_KEY_PREFIX).await;
 
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
-    let metadata = result.unwrap();
-    assert!(metadata.is_some());
-    let metadata = metadata.unwrap();
+    assert!(result.is_ok(), "Failed: {:?}", result);
+    let metadata = result.unwrap().unwrap();
     assert_eq!(metadata.user_name, "testuser3");
     assert_eq!(metadata.user_canister_id, test_metadata.user_canister_id);
-
-    // Cleanup
-    cleanup_dragonfly_test_data(
-        &dragonfly_pool,
-        &format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text()),
-    )
-    .await
-    .unwrap();
 }
 
 #[tokio::test]
 async fn test_get_user_metadata_not_found() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
+    let mock = MockMetadataKvStore::new();
     let user_principal = generate_unique_test_principal();
 
-    // Execute
     let result =
-        get_user_metadata_impl(&dragonfly_pool, user_principal.to_text(), TEST_KEY_PREFIX).await;
-
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
+        get_user_metadata_impl(&mock, user_principal.to_text(), TEST_KEY_PREFIX).await;
+    assert!(result.is_ok(), "Failed: {:?}", result);
     assert!(result.unwrap().is_none());
 }
 
+// ── delete_metadata_bulk_impl ─────────────────────────────────────────────────
+
 #[tokio::test]
 async fn test_delete_metadata_bulk() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
+    let mock = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
-    // Create test users
-    let users = vec![
-        generate_unique_test_principal(),
-        generate_unique_test_principal(),
-        generate_unique_test_principal(),
-    ];
+    let users: Vec<Principal> = (0..3).map(|_| generate_unique_test_principal()).collect();
 
-    // Store test data for each user
-    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
     for (i, user) in users.iter().enumerate() {
-        let metadata = create_test_user_metadata(5 + i as u64, 500 + i as u64);
-        let meta_bytes = serde_json::to_vec(&metadata).unwrap();
-
-        let _: () = dconn
-            .hset(
-                format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()),
-                METADATA_FIELD,
-                &meta_bytes,
-            )
-            .await
-            .unwrap();
-        let _: () = dconn
-            .hset(
-                format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key.clone()),
-                metadata.user_canister_id.to_text(),
-                user.to_text(),
-            )
-            .await
-            .unwrap();
+        let meta = create_test_user_metadata(5 + i as u64, 500 + i as u64);
+        // Write user metadata.
+        seed_user(&mock, *user, &meta).await;
+        // Write reverse index entry.
+        let can2prin_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key);
+        mock.insert(
+            &can2prin_key,
+            &meta.user_canister_id.to_text(),
+            user.to_text().into_bytes(),
+        )
+        .await;
     }
 
-    // Execute
-    let bulk_users = BulkUsers {
-        users: users.clone(),
-    };
+    let bulk_users = BulkUsers { users: users.clone() };
     let result =
-        delete_metadata_bulk_impl(&dragonfly_pool, &bulk_users, &unique_key, TEST_KEY_PREFIX).await;
+        delete_metadata_bulk_impl(&mock, &bulk_users, &unique_key, TEST_KEY_PREFIX).await;
+    assert!(result.is_ok(), "Failed: {:?}", result);
 
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
-
-    // Check all user data was deleted
     for user in &users {
-        let exists: Option<Vec<u8>> = dconn
-            .hget(
-                format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()),
-                METADATA_FIELD,
-            )
-            .await
-            .unwrap();
-        assert!(exists.is_none());
+        let key = format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text());
+        assert!(
+            mock.get_raw(&key, METADATA_FIELD).await.is_none(),
+            "user data should be deleted"
+        );
     }
-
-    // Check reverse index was cleaned up
-    for _i in 0..3 {
-        let canister_id = generate_unique_test_principal();
-        let exists: Option<String> = dconn
-            .hget(
-                format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
-                canister_id.to_text(),
-            )
-            .await
-            .unwrap();
-        assert!(exists.is_none());
-    }
-
-    // Cleanup
-    let _: () = dconn
-        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
-        .await
-        .unwrap();
 }
 
 #[tokio::test]
 async fn test_delete_metadata_bulk_empty_list() {
-    // Setup
-    let redis_pool = create_test_redis_pool().await.unwrap();
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
-
+    let mock = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
     let bulk_users = BulkUsers { users: vec![] };
 
-    // Execute
     let result =
-        delete_metadata_bulk_impl(&dragonfly_pool, &bulk_users, &unique_key, TEST_KEY_PREFIX).await;
-
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
-
-    // Cleanup
-    let mut conn = redis_pool.get().await.unwrap();
-    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
-    let _: () = conn.del(unique_key.clone()).await.unwrap();
-    let _: () = dconn
-        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
-        .await
-        .unwrap();
+        delete_metadata_bulk_impl(&mock, &bulk_users, &unique_key, TEST_KEY_PREFIX).await;
+    assert!(result.is_ok(), "Failed: {:?}", result);
 }
 
 #[tokio::test]
 async fn test_delete_metadata_bulk_large_batch() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
+    let mock = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
-
-    // Create 300 test users for batch testing
     let users: Vec<Principal> = (0..300).map(|_| generate_unique_test_principal()).collect();
 
-    // Store test data using batched pipeline (chunks of 200 to avoid Upstash timeout)
-    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
-
-    // Batch writes in chunks to avoid timeout on remote Redis
-    for chunk in users.chunks(200) {
-        let mut pipe = redis::pipe();
-        for (i, user) in chunk.iter().enumerate() {
-            let metadata = create_test_user_metadata(i as u64, i as u64);
-            let meta_bytes = serde_json::to_vec(&metadata).unwrap();
-            pipe.hset(
-                format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()),
-                METADATA_FIELD,
-                meta_bytes,
-            );
-        }
-        let _: () = pipe.query_async(&mut dconn).await.unwrap();
+    for (i, user) in users.iter().enumerate() {
+        let meta = create_test_user_metadata(i as u64, i as u64);
+        seed_user(&mock, *user, &meta).await;
     }
 
-    // Execute
-    let bulk_users = BulkUsers {
-        users: users.clone(),
-    };
+    let bulk_users = BulkUsers { users: users.clone() };
     let result =
-        delete_metadata_bulk_impl(&dragonfly_pool, &bulk_users, &unique_key, TEST_KEY_PREFIX)
+        delete_metadata_bulk_impl(&mock, &bulk_users, &unique_key, TEST_KEY_PREFIX)
             .await
-            .expect("delete_metadata_bulk_impl shoud not fail");
+            .expect("delete_metadata_bulk_impl should not fail");
+    let _ = result;
 
-    // Spot check some users were deleted
+    // Spot-check a few deletions.
     for user in users.iter().step_by(100) {
-        let exists: Option<Vec<u8>> = dconn
-            .hget(
-                format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()),
-                METADATA_FIELD,
-            )
-            .await
-            .unwrap();
-        assert!(exists.is_none());
+        let key = format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text());
+        assert!(mock.get_raw(&key, METADATA_FIELD).await.is_none());
     }
-
-    // Cleanup
-    let _: () = dconn
-        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
-        .await
-        .unwrap();
 }
 
 #[tokio::test]
+async fn test_delete_metadata_bulk_releases_username() {
+    let mock = MockMetadataKvStore::new();
+    let user_principal = generate_unique_test_principal();
+    let can2prin_key = generate_unique_test_key_prefix();
+
+    // Build a valid alphanumeric username.
+    let unique_key = generate_unique_test_key_prefix();
+    let username: String = unique_key.chars().filter(|c| c.is_alphanumeric()).take(15).collect();
+
+    // Register user with username.
+    let metadata = create_test_metadata_req(42, &username);
+    set_user_metadata_core(&mock, user_principal, &metadata, &can2prin_key, TEST_KEY_PREFIX)
+        .await
+        .expect("Failed to create user");
+
+    // Confirm username-info key exists.
+    let username_key =
+        format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key(&username));
+    assert!(
+        mock.get_raw(&username_key, METADATA_FIELD).await.is_some(),
+        "username-info key must exist after user creation"
+    );
+
+    // Delete the user.
+    let bulk_users = BulkUsers { users: vec![user_principal] };
+    delete_metadata_bulk_impl(&mock, &bulk_users, &can2prin_key, TEST_KEY_PREFIX)
+        .await
+        .expect("Failed to delete user");
+
+    // Username-info key must be gone.
+    assert!(
+        mock.get_raw(&username_key, METADATA_FIELD).await.is_none(),
+        "username-info key must be released after user deletion"
+    );
+
+    // A new user must be able to claim the same username.
+    let new_principal = generate_unique_test_principal();
+    let new_metadata = create_test_metadata_req(43, &username);
+    set_user_metadata_core(&mock, new_principal, &new_metadata, &can2prin_key, TEST_KEY_PREFIX)
+        .await
+        .expect("New user must be able to claim the released username");
+}
+
+// ── get_user_metadata_bulk_impl ───────────────────────────────────────────────
+
+#[tokio::test]
 async fn test_get_user_metadata_bulk_multiple_users() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
-    // Create test users
-    let users = vec![
-        generate_unique_test_principal(),
-        generate_unique_test_principal(),
-        generate_unique_test_principal(),
-    ];
+    let mock = MockMetadataKvStore::new();
+    let users: Vec<Principal> = (0..3).map(|_| generate_unique_test_principal()).collect();
 
-    {
-        // Store test data for some users (not all)
-        let mut dconn = dragonfly_pool.get_validated().await.unwrap();
-        let metadata1 = create_test_user_metadata(20, 2000);
-        let meta_bytes1 = serde_json::to_vec(&metadata1).unwrap();
+    // Seed only users[0] and users[2]; users[1] is absent.
+    let meta0 = create_test_user_metadata(20, 2000);
+    seed_user(&mock, users[0], &meta0).await;
+    let meta2 = create_test_user_metadata(22, 2002);
+    seed_user(&mock, users[2], &meta2).await;
 
-        let _: () = dconn
-            .hset(
-                format_to_dragonfly_key(TEST_KEY_PREFIX, &users[0].to_text()),
-                METADATA_FIELD,
-                &meta_bytes1,
-            )
-            .await
-            .unwrap();
+    let req = BulkGetUserMetadataReq { users: users.clone() };
+    let result = get_user_metadata_bulk_impl(&mock, req, TEST_KEY_PREFIX).await;
 
-        let metadata2 = create_test_user_metadata(22, 2002);
-        let meta_bytes2 = serde_json::to_vec(&metadata2).unwrap();
-        let _: () = dconn
-            .hset(
-                format_to_dragonfly_key(TEST_KEY_PREFIX, &users[2].to_text()),
-                METADATA_FIELD,
-                &meta_bytes2,
-            )
-            .await
-            .unwrap();
-    }
-    // Execute
-    let req = BulkGetUserMetadataReq {
-        users: users.clone(),
-    };
-    let result = get_user_metadata_bulk_impl(&dragonfly_pool, req, TEST_KEY_PREFIX).await;
-
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
+    assert!(result.is_ok(), "Failed: {:?}", result);
     let results = result.unwrap();
     assert_eq!(results.len(), 3);
-
-    // Check specific results
-    assert!(results.get(&users[0]).unwrap().is_some());
-
-    assert!(results.get(&users[1]).unwrap().is_none());
-
-    assert!(results.get(&users[2]).unwrap().is_some());
-
-    // Cleanup
-    for user in &users {
-        cleanup_dragonfly_test_data(
-            &dragonfly_pool,
-            &format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()),
-        )
-        .await
-        .unwrap();
-    }
+    assert!(results[&users[0]].is_some());
+    assert!(results[&users[1]].is_none());
+    assert!(results[&users[2]].is_some());
 }
 
 #[tokio::test]
 async fn test_get_user_metadata_bulk_empty_request() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
-
-    // Execute
+    let mock = MockMetadataKvStore::new();
     let req = BulkGetUserMetadataReq { users: vec![] };
-    let result = get_user_metadata_bulk_impl(&dragonfly_pool, req, TEST_KEY_PREFIX).await;
-
-    // Verify
+    let result = get_user_metadata_bulk_impl(&mock, req, TEST_KEY_PREFIX).await;
     assert!(result.is_ok());
-    let results = result.unwrap();
-    assert!(results.is_empty());
+    assert!(result.unwrap().is_empty());
 }
 
 #[tokio::test]
 async fn test_get_user_metadata_bulk_concurrent_processing() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
-
-    // Create 20 test users to test concurrent processing
+    let mock = MockMetadataKvStore::new();
     let users: Vec<Principal> = (0..20).map(|_| generate_unique_test_principal()).collect();
 
-    {
-        // Store test data
-        let mut dconn = dragonfly_pool.get_validated().await.unwrap();
-
-        for (i, user) in users.iter().enumerate() {
-            let metadata = create_test_user_metadata(i as u64, i as u64);
-            let meta_bytes = serde_json::to_vec(&metadata).unwrap();
-            let _: () = dconn
-                .hset(
-                    format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()),
-                    METADATA_FIELD,
-                    &meta_bytes,
-                )
-                .await
-                .unwrap();
-        }
+    for (i, user) in users.iter().enumerate() {
+        seed_user(&mock, *user, &create_test_user_metadata(i as u64, i as u64)).await;
     }
 
-    // Execute
-    let req = BulkGetUserMetadataReq {
-        users: users.clone(),
-    };
-    let result = get_user_metadata_bulk_impl(&dragonfly_pool, req, TEST_KEY_PREFIX).await;
+    let req = BulkGetUserMetadataReq { users: users.clone() };
+    let result = get_user_metadata_bulk_impl(&mock, req, TEST_KEY_PREFIX).await;
 
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
+    assert!(result.is_ok(), "Failed: {:?}", result);
     let results = result.unwrap();
     assert_eq!(results.len(), 20);
-
-    // All users should have metadata
     for user in &users {
-        assert!(results.get(user).unwrap().is_some());
-    }
-
-    // Cleanup
-    for user in &users {
-        cleanup_dragonfly_test_data(
-            &dragonfly_pool,
-            &format_to_dragonfly_key(TEST_KEY_PREFIX, &user.to_text()),
-        )
-        .await
-        .unwrap();
+        assert!(results[user].is_some());
     }
 }
 
+// ── get_canister_to_principal_bulk_impl ───────────────────────────────────────
+
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
-    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
-
+    let mock = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
 
-    // Create test mappings with unique principals
-    let canister_principals = vec![
-        (
-            generate_unique_test_principal(),
-            generate_unique_test_principal(),
-        ),
-        (
-            generate_unique_test_principal(),
-            generate_unique_test_principal(),
-        ),
-        (
-            generate_unique_test_principal(),
-            generate_unique_test_principal(),
-        ),
-    ];
-
-    let canister_principals_text: Vec<(String, String)> = canister_principals
-        .iter()
-        .map(|(c, p)| (c.to_text(), p.to_text()))
+    let pairs: Vec<(Principal, Principal)> = (0..3)
+        .map(|_| (generate_unique_test_principal(), generate_unique_test_principal()))
         .collect();
 
-    // Store test data in Redis
-    let _: () = dconn
-        .hset_multiple(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
-            &canister_principals_text,
-        )
-        .await
-        .unwrap();
-    // Execute - request all canisters
-    let canisters = canister_principals.iter().map(|(c, _)| *c).collect();
-    let req = CanisterToPrincipalReq { canisters };
-    let result =
-        get_canister_to_principal_bulk_impl(&dragonfly_pool, req, &unique_key, TEST_KEY_PREFIX)
+    let can2prin_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key);
+    for (canister, user) in &pairs {
+        mock.insert(&can2prin_key, &canister.to_text(), user.to_text().into_bytes())
             .await;
-
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
-    let res = result.unwrap();
-    assert_eq!(res.mappings.len(), 3);
-
-    // Check specific mappings
-    for (canister_id, expected_principal) in &canister_principals {
-        assert_eq!(res.mappings.get(canister_id), Some(expected_principal));
     }
 
-    // Cleanup
-    let _: () = dconn
-        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
-        .await
-        .unwrap();
+    let canisters = pairs.iter().map(|(c, _)| *c).collect();
+    let req = CanisterToPrincipalReq { canisters };
+    let result =
+        get_canister_to_principal_bulk_impl(&mock, req, &unique_key, TEST_KEY_PREFIX).await;
+
+    assert!(result.is_ok(), "Failed: {:?}", result);
+    let res = result.unwrap();
+    assert_eq!(res.mappings.len(), 3);
+    for (canister, user) in &pairs {
+        assert_eq!(res.mappings.get(canister), Some(user));
+    }
 }
 
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_partial_results() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
-    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
+    let mock = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
 
-    // Create unique test principals for this test
     let canister1 = generate_unique_test_principal();
     let canister2 = generate_unique_test_principal();
-    let canister3 = generate_unique_test_principal(); // This one won't exist
+    let canister3 = generate_unique_test_principal(); // not seeded
     let user1 = generate_unique_test_principal();
     let user2 = generate_unique_test_principal();
 
-    // Store only some mappings
-    let _: () = dconn
-        .hset(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
-            canister1.to_text(),
-            user1.to_text(),
-        )
-        .await
-        .unwrap();
+    let can2prin_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key);
+    mock.insert(&can2prin_key, &canister1.to_text(), user1.to_text().into_bytes())
+        .await;
+    mock.insert(&can2prin_key, &canister2.to_text(), user2.to_text().into_bytes())
+        .await;
 
-    let _: () = dconn
-        .hset(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
-            canister2.to_text(),
-            user2.to_text(),
-        )
-        .await
-        .unwrap();
-
-    // Execute - request includes non-existent canister
-    let canisters = vec![
-        canister1, canister3, // This one doesn't exist
-        canister2,
-    ];
-    let req = CanisterToPrincipalReq { canisters };
+    let req = CanisterToPrincipalReq {
+        canisters: vec![canister1, canister3, canister2],
+    };
     let result =
-        get_canister_to_principal_bulk_impl(&dragonfly_pool, req, &unique_key, TEST_KEY_PREFIX)
-            .await;
+        get_canister_to_principal_bulk_impl(&mock, req, &unique_key, TEST_KEY_PREFIX).await;
 
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
+    assert!(result.is_ok(), "Failed: {:?}", result);
     let res = result.unwrap();
-    assert_eq!(res.mappings.len(), 2); // Only 2 mappings should be returned
-
+    assert_eq!(res.mappings.len(), 2);
     assert_eq!(res.mappings.get(&canister1), Some(&user1));
     assert_eq!(res.mappings.get(&canister3), None);
     assert_eq!(res.mappings.get(&canister2), Some(&user2));
-
-    // Cleanup
-    let _: () = dconn
-        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
-        .await
-        .unwrap();
 }
 
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_empty_request() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
+    let mock = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
-
-    // Execute with empty request
     let req = CanisterToPrincipalReq { canisters: vec![] };
     let result =
-        get_canister_to_principal_bulk_impl(&dragonfly_pool, req, &unique_key, TEST_KEY_PREFIX)
-            .await;
-
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
-    let res = result.unwrap();
-    assert!(res.mappings.is_empty());
-
-    // Cleanup not needed - unique_key was never used in Redis
+        get_canister_to_principal_bulk_impl(&mock, req, &unique_key, TEST_KEY_PREFIX).await;
+    assert!(result.is_ok(), "Failed: {:?}", result);
+    assert!(result.unwrap().mappings.is_empty());
 }
 
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
-    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
+    let mock = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
-
     let canister_id = generate_unique_test_principal();
 
-    // Store invalid principal string
-    let _: () = dconn
-        .hset(
-            format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key),
-            canister_id.to_text(),
-            "invalid-principal-format",
-        )
-        .await
-        .unwrap();
+    let can2prin_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key);
+    mock.insert(
+        &can2prin_key,
+        &canister_id.to_text(),
+        b"invalid-principal-format".to_vec(),
+    )
+    .await;
 
-    // Execute
-    let req = CanisterToPrincipalReq {
-        canisters: vec![canister_id],
-    };
+    let req = CanisterToPrincipalReq { canisters: vec![canister_id] };
     let result =
-        get_canister_to_principal_bulk_impl(&dragonfly_pool, req, &unique_key, TEST_KEY_PREFIX)
-            .await;
+        get_canister_to_principal_bulk_impl(&mock, req, &unique_key, TEST_KEY_PREFIX).await;
 
-    // Verify - should succeed but return empty mappings since the principal is invalid
-    assert!(result.is_ok(), "Failed : {:?}", result);
-    let res = result.unwrap();
-    assert!(res.mappings.is_empty());
-
-    // Cleanup
-    let _: () = dconn
-        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
-        .await
-        .unwrap();
+    assert!(result.is_ok(), "Failed: {:?}", result);
+    assert!(result.unwrap().mappings.is_empty()); // invalid principal skipped
 }
 
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_large_batch() {
-    // Setup
-    let dragonfly_pool = init_dragonfly_redis_for_test().await.unwrap();
-    let mut dconn = dragonfly_pool.get_validated().await.unwrap();
+    let mock = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
-    // clean
-    let _: () = dconn
-        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
-        .await
-        .unwrap();
 
-    // Create 500 test mappings for batch testing
-    let canister_principals: Vec<(Principal, Principal)> = (0..500)
-        .map(|_| {
-            (
-                generate_unique_test_principal(),
-                generate_unique_test_principal(),
-            )
-        })
+    let pairs: Vec<(Principal, Principal)> = (0..500)
+        .map(|_| (generate_unique_test_principal(), generate_unique_test_principal()))
         .collect();
 
-    let canister_principals_txt: Vec<(String, String)> = canister_principals
-        .iter()
-        .map(|(c, p)| (c.to_text(), p.to_text()))
-        .collect();
-
-    // Store in dragonfly
-    for chunk in canister_principals_txt.chunks(500) {
-        let _: () = dconn
-            .hset_multiple(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key), chunk)
-            .await
-            .unwrap();
+    let can2prin_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key);
+    for (canister, user) in &pairs {
+        mock.insert(&can2prin_key, &canister.to_text(), user.to_text().into_bytes())
+            .await;
     }
 
-    // Execute - request all canisters
-    let canisters = canister_principals.iter().map(|(c, _)| *c).collect();
+    let canisters = pairs.iter().map(|(c, _)| *c).collect();
     let req = CanisterToPrincipalReq { canisters };
     let result =
-        get_canister_to_principal_bulk_impl(&dragonfly_pool, req, &unique_key, TEST_KEY_PREFIX)
-            .await;
+        get_canister_to_principal_bulk_impl(&mock, req, &unique_key, TEST_KEY_PREFIX).await;
 
-    // Verify
-    assert!(result.is_ok(), "Failed : {:?}", result);
+    assert!(result.is_ok(), "Failed: {:?}", result);
     let res = result.unwrap();
     assert_eq!(res.mappings.len(), 500);
 
-    // Spot check some mappings across different batches
-    let sample_indices = [0, 100, 200, 300, 499];
-    for &idx in sample_indices.iter() {
-        if let Some((canister_id, user_principal)) = canister_principals.get(idx) {
-            assert_eq!(res.mappings.get(canister_id), Some(user_principal));
-        }
+    for &idx in &[0usize, 100, 200, 300, 499] {
+        let (canister, user) = &pairs[idx];
+        assert_eq!(res.mappings.get(canister), Some(user));
     }
-
-    // Cleanup
-    let _: () = dconn
-        .del(format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key))
-        .await
-        .unwrap();
 }
