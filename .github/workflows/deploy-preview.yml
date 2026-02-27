@@ -104,7 +104,7 @@ jobs:
             echo "Creating new Coolify app: $APP_NAME"
 
             RESPONSE=$(curl -s -X POST \
-              "${{ secrets.COOLIFY_URL }}/api/v1/applications/private-github-app" \
+              "${{ secrets.COOLIFY_URL }}/api/v1/applications/dockerimage" \
               -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d "{
@@ -115,7 +115,6 @@ jobs:
                 \"environment_uuid\": \"${{ secrets.COOLIFY_ENV_UUID }}\",
                 \"docker_registry_image_name\": \"${IMAGE}\",
                 \"docker_registry_image_tag\": \"${IMAGE_TAG}\",
-                \"github_app_uuid\": \"${{ secrets.COOLIFY_GITHUB_APP_UUID }}\",
                 \"domains\": \"https://${PREVIEW_DOMAIN}\",
                 \"ports_exposes\": \"3000\",
                 \"is_static\": false
