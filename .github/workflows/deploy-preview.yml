@@ -192,7 +192,7 @@ jobs:
             "${{ secrets.COOLIFY_URL }}/api/v1/applications/${APP_UUID}/envs/bulk" \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "{\"data\": ${ENV_JSON}}")
+            -d "${ENV_JSON}")
 
           if [ "$RESPONSE" -lt 200 ] || [ "$RESPONSE" -ge 300 ]; then
             echo "Failed to push environment variables (HTTP $RESPONSE)"
