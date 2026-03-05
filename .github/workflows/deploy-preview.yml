@@ -133,6 +133,29 @@ jobs:
             echo "app_uuid=${APP_UUID}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: https://vault.yral.com
+          method: jwt
+          role: yral-metadata-role
+          jwtGithubAudience: "https://github.com/dolr-ai"
+          secrets: |
+            secret/data/yral-metadata/YRAL_METADATA_USER_NOTIFICATION_API_KEY value | YRAL_METADATA_USER_NOTIFICATION_API_KEY
+            secret/data/yral-metadata/JWT_PUBLIC_KEY value | JWT_PUBLIC_KEY
+            secret/data/yral-metadata/CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY value | CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY
+            secret/data/yral-metadata/BACKEND_ADMIN_IDENTITY value | BACKEND_ADMIN_IDENTITY
+            secret/data/yral-metadata/YRAL_AUTH_PUBLIC_KEY value | YRAL_AUTH_PUBLIC_KEY
+            secret/data/yral-metadata/GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID value | GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID
+            secret/data/yral-metadata/GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID value | GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID
+            secret/data/yral-metadata/QSTASH_CURRENT_SIGNING_KEY value | QSTASH_CURRENT_SIGNING_KEY
+            secret/data/yral-metadata/QSTASH_NEXT_SIGNING_KEY value | QSTASH_NEXT_SIGNING_KEY
+            secret/data/DRAGONFLY_CLUSTER_2_PASSWORD value | DRAGONFLY_PASSWORD
+            secret/data/DRAGONFLY_CLUSTER_2_HOSTS value | DRAGONFLY_HOSTS
+            secret/data/DRAGONFLY_CLUSTER_2_CA_CERT value | DRAGONFLY_CA_CERT
+            secret/data/DRAGONFLY_CLUSTER_2_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT
+            secret/data/DRAGONFLY_CLUSTER_2_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY
+
       - name: Push Environment Variables
         env:
           # Secrets from GitHub
