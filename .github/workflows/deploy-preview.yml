@@ -1,8 +1,9 @@
 name: deploy preview
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, closed]
+  workflow_dispatch:
+  # pull_request:
+  #   types: [opened, reopened, synchronize, closed]
 
 permissions:
   id-token: write
@@ -140,10 +141,10 @@ jobs:
           jwtGithubAudience: "https://github.com/dolr-ai"
           secrets: |
             secret/data/yral-metadata/YRAL_METADATA_USER_NOTIFICATION_API_KEY value | YRAL_METADATA_USER_NOTIFICATION_API_KEY ;
-            secret/data/yral-metadata/JWT_PUBLIC_KEY value | JWT_PUBLIC_KEY ;
+            secret/data/yral-metadata/YRAL_AUTH_METADATA_SERVICE_ACCESS_PUBLIC_KEY value | JWT_PUBLIC_KEY ;
             secret/data/yral-metadata/CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY value | CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY ;
-            secret/data/yral-metadata/BACKEND_ADMIN_IDENTITY value | BACKEND_ADMIN_IDENTITY ;
-            secret/data/yral-metadata/YRAL_AUTH_PUBLIC_KEY value | YRAL_AUTH_PUBLIC_KEY ;
+            secret/data/yral-metadata/YRAL_APP_ADMIN_AND_PROPOSAL_SUBMITTER_DFX_IDENTITY_SECP_PRIVATE_KEY value | BACKEND_ADMIN_IDENTITY ;
+            secret/data/yral-metadata/YRAL_AUTH_JWT_VERIFY_PUBLIC_KEY value | YRAL_AUTH_PUBLIC_KEY ;
             secret/data/yral-metadata/GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID value | GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID ;
             secret/data/yral-metadata/GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID value | GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID ;
             secret/data/yral-metadata/QSTASH_CURRENT_SIGNING_KEY value | QSTASH_CURRENT_SIGNING_KEY ;
