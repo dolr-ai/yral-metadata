@@ -1,8 +1,9 @@
 name: deploy preview
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, closed]
+  workflow_dispatch:
+  # pull_request:
+  #   types: [opened, reopened, synchronize, closed]
 
 permissions:
   pull-requests: write
@@ -159,20 +160,20 @@ jobs:
       - name: Push Environment Variables
         env:
           # Secrets from GitHub
-          YRAL_METADATA_USER_NOTIFICATION_API_KEY: ${{ secrets.YRAL_METADATA_USER_NOTIFICATION_API_KEY }}
-          JWT_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_METADATA_SERVICE_ACCESS_PUBLIC_KEY }}
-          CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
-          BACKEND_ADMIN_IDENTITY: ${{ secrets.YRAL_APP_ADMIN_AND_PROPOSAL_SUBMITTER_DFX_IDENTITY_SECP_PRIVATE_KEY }}
-          YRAL_AUTH_PUBLIC_KEY: ${{ secrets.YRAL_AUTH_JWT_VERIFY_PUBLIC_KEY }}
-          GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID }}
-          GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ vars.GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
-          QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
-          QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
-          DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
-          DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
-          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT}}
-          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT}}
-          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY}}
+          YRAL_METADATA_USER_NOTIFICATION_API_KEY: ${{ env.YRAL_METADATA_USER_NOTIFICATION_API_KEY }}
+          JWT_PUBLIC_KEY: ${{ env.JWT_PUBLIC_KEY }}
+          CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ env.CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
+          BACKEND_ADMIN_IDENTITY: ${{ env.BACKEND_ADMIN_IDENTITY }}
+          YRAL_AUTH_PUBLIC_KEY: ${{ env.YRAL_AUTH_PUBLIC_KEY }}
+          GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: ${{ env.GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID }}
+          GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ env.GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
+          QSTASH_CURRENT_SIGNING_KEY: ${{ env.QSTASH_CURRENT_SIGNING_KEY }}
+          QSTASH_NEXT_SIGNING_KEY: ${{ env.QSTASH_NEXT_SIGNING_KEY }}
+          DRAGONFLY_PASSWORD: ${{ env.DRAGONFLY_PASSWORD }}
+          DRAGONFLY_HOSTS: ${{ env.DRAGONFLY_HOSTS }}
+          DRAGONFLY_CA_CERT: ${{ env.DRAGONFLY_CA_CERT}}
+          DRAGONFLY_CLIENT_CERT: ${{ env.DRAGONFLY_CLIENT_CERT}}
+          DRAGONFLY_CLIENT_KEY: ${{ env.DRAGONFLY_CLIENT_KEY}}
         run: |
           APP_UUID="${{ steps.coolify_app.outputs.app_uuid }}"
           flatten() { echo "$1" | tr -d '\n\r'; }
