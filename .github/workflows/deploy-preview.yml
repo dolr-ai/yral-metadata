@@ -1,9 +1,8 @@
 name: deploy preview
 
 on:
-  workflow_dispatch:
-  # pull_request:
-  #   types: [opened, reopened, synchronize, closed]
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
 
 permissions:
   pull-requests: write
@@ -142,20 +141,20 @@ jobs:
           role: yral-metadata-role
           jwtGithubAudience: "https://github.com/dolr-ai"
           secrets: |
-            secret/data/yral-metadata/YRAL_METADATA_USER_NOTIFICATION_API_KEY value | YRAL_METADATA_USER_NOTIFICATION_API_KEY
-            secret/data/yral-metadata/JWT_PUBLIC_KEY value | JWT_PUBLIC_KEY
-            secret/data/yral-metadata/CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY value | CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY
-            secret/data/yral-metadata/BACKEND_ADMIN_IDENTITY value | BACKEND_ADMIN_IDENTITY
-            secret/data/yral-metadata/YRAL_AUTH_PUBLIC_KEY value | YRAL_AUTH_PUBLIC_KEY
-            secret/data/yral-metadata/GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID value | GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID
-            secret/data/yral-metadata/GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID value | GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID
-            secret/data/yral-metadata/QSTASH_CURRENT_SIGNING_KEY value | QSTASH_CURRENT_SIGNING_KEY
-            secret/data/yral-metadata/QSTASH_NEXT_SIGNING_KEY value | QSTASH_NEXT_SIGNING_KEY
-            secret/data/DRAGONFLY_CLUSTER_2_PASSWORD value | DRAGONFLY_PASSWORD
-            secret/data/DRAGONFLY_CLUSTER_2_HOSTS value | DRAGONFLY_HOSTS
-            secret/data/DRAGONFLY_CLUSTER_2_CA_CERT value | DRAGONFLY_CA_CERT
-            secret/data/DRAGONFLY_CLUSTER_2_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT
-            secret/data/DRAGONFLY_CLUSTER_2_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY
+            secret/data/yral-metadata/YRAL_METADATA_USER_NOTIFICATION_API_KEY value | YRAL_METADATA_USER_NOTIFICATION_API_KEY ;
+            secret/data/yral-metadata/JWT_PUBLIC_KEY value | JWT_PUBLIC_KEY ;
+            secret/data/yral-metadata/CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY value | CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY ;
+            secret/data/yral-metadata/BACKEND_ADMIN_IDENTITY value | BACKEND_ADMIN_IDENTITY ;
+            secret/data/yral-metadata/YRAL_AUTH_PUBLIC_KEY value | YRAL_AUTH_PUBLIC_KEY ;
+            secret/data/yral-metadata/GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID value | GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID ;
+            secret/data/yral-metadata/GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID value | GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID ;
+            secret/data/yral-metadata/QSTASH_CURRENT_SIGNING_KEY value | QSTASH_CURRENT_SIGNING_KEY ;
+            secret/data/yral-metadata/QSTASH_NEXT_SIGNING_KEY value | QSTASH_NEXT_SIGNING_KEY ;
+            secret/data/DRAGONFLY_CLUSTER_2_PASSWORD value | DRAGONFLY_PASSWORD ;
+            secret/data/DRAGONFLY_CLUSTER_2_HOSTS value | DRAGONFLY_HOSTS ;
+            secret/data/DRAGONFLY_CLUSTER_2_CA_CERT value | DRAGONFLY_CA_CERT ;
+            secret/data/DRAGONFLY_CLUSTER_2_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT ;
+            secret/data/DRAGONFLY_CLUSTER_2_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY ;
 
       - name: Push Environment Variables
         env:
@@ -202,8 +201,8 @@ jobs:
                 {"key": "YRAL_AUTH_PUBLIC_KEY", "value": $yral_auth_public_key, "is_multiline": true},
                 {"key": "GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID", "value": $google_client_notifications_project_id, "is_literal": true},
                 {"key": "GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID", "value": $google_client_notifications_sender_id, "is_literal": true},
-                {"key": "QSTASH_CURRENT_SIGNING_KEY", "value": $qstash_current_signing_key, "is_multiline": true},
-                {"key": "QSTASH_NEXT_SIGNING_KEY", "value": $qstash_next_signing_key, "is_multiline": true},
+                {"key": "QSTASH_CURRENT_SIGNING_KEY", "value": $qstash_current_signing_key, "is_literal": true},
+                {"key": "QSTASH_NEXT_SIGNING_KEY", "value": $qstash_next_signing_key, "is_literal": true},
                 {"key": "DRAGONFLY_PASSWORD", "value": $dragonfly_password, "is_literal": true},
                 {"key": "DRAGONFLY_HOSTS", "value": $dragonfly_hosts, "is_literal": true},
                 {"key": "DRAGONFLY_CA_CERT", "value": $dragonfly_ca_cert, "is_multiline": true},
