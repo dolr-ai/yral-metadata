@@ -187,9 +187,9 @@ jobs:
             --arg qstash_next_signing_key "$QSTASH_NEXT_SIGNING_KEY" \
             --arg dragonfly_password "$DRAGONFLY_PASSWORD" \
             --arg dragonfly_hosts "$DRAGONFLY_HOSTS" \
-            --arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT" \
-            --arg dragonfly_client_cert "$DRAGONFLY_CLIENT_CERT" \
-            --arg dragonfly_client_key "$DRAGONFLY_CLIENT_KEY" \
+            --arg dragonfly_ca_cert "$(printf '%b' "$DRAGONFLY_CA_CERT")" \
+            --arg dragonfly_client_cert "$(printf '%b' "$DRAGONFLY_CLIENT_CERT")" \
+            --arg dragonfly_client_key "$(printf '%b' "$DRAGONFLY_CLIENT_KEY")" \
             '{
               "data": [
                 {"key": "YRAL_METADATA_USER_NOTIFICATION_API_KEY", "value": $yral_metadata_user_notification_api_key, "is_literal": true},
