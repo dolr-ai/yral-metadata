@@ -81,56 +81,6 @@ jobs:
           cache-from: type=registry,ref=${{ steps.meta.outputs.image }}:cache-${{ steps.meta.outputs.image_tag }}
           cache-to: type=registry,ref=${{ steps.meta.outputs.image }}:cache-${{ steps.meta.outputs.image_tag }},mode=max
 
-      - name: Create or Get Coolify Application
-        id: coolify_app
-        run: |
-          APP_NAME="${{ steps.meta.outputs.app_name }}"
-          IMAGE="${{ steps.meta.outputs.image }}"
-          IMAGE_TAG="${{ steps.meta.outputs.image_tag }}"
-          PREVIEW_DOMAIN="${{ steps.meta.outputs.preview_domain }}"
-
-          # Check if app already exists for this PR (e.g. new commit pushed to same PR)
-          EXISTING=$(curl -s \
-            "${{ secrets.COOLIFY_URL }}/api/v1/applications" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
-            | jq -r --arg name "$APP_NAME" '.[] | select(.name == $name) | .uuid // empty')
-
-          if [ -n "$EXISTING" ]; then
-            echo "Reusing existing Coolify app: $EXISTING"
-            echo "app_uuid=${EXISTING}" >> $GITHUB_OUTPUT
-          else
-            echo "Creating new Coolify app: $APP_NAME"
-
-            RESPONSE=$(curl -s -X POST \
-              "${{ secrets.COOLIFY_URL }}/api/v1/applications/dockerimage" \
-              -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              -d "{
-                \"name\": \"${APP_NAME}\",
-                \"project_uuid\": \"${{ secrets.COOLIFY_PROJECT_UUID }}\",
-                \"server_uuid\": \"${{ secrets.COOLIFY_SERVER_UUID }}\",
-                \"environment_name\": \"preview\",
-                \"environment_uuid\": \"${{ secrets.COOLIFY_ENV_UUID }}\",
-                \"docker_registry_image_name\": \"${IMAGE}\",
-                \"docker_registry_image_tag\": \"${IMAGE_TAG}\",
-                \"domains\": \"https://${PREVIEW_DOMAIN}\",
-                \"ports_exposes\": \"3000\",
-                \"is_static\": false
-              }")
-
-            echo "Create response: $RESPONSE"
-
-            APP_UUID=$(echo $RESPONSE | jq -r '.uuid // empty')
-
-            if [ -z "$APP_UUID" ]; then
-              echo "Failed to create Coolify application"
-              echo "$RESPONSE"
-              exit 1
-            fi
-
-            echo "app_uuid=${APP_UUID}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Import Secrets from Vault
         uses: hashicorp/vault-action@v3
         with:
@@ -153,6 +103,60 @@ jobs:
             secret/data/DRAGONFLY_CLUSTER_2_CA_CERT value | DRAGONFLY_CA_CERT ;
             secret/data/DRAGONFLY_CLUSTER_2_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT ;
             secret/data/DRAGONFLY_CLUSTER_2_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY ;
+            secret/data/COOLFY_TOKEN value | COOLIFY_TOKEN ;
+            secret/data/COOLFY_PROJECT_UUID value | COOLIFY_PROJECT_UUID ;
+            secret/data/COOLFY_SERVER_UUID value | COOLIFY_SERVER_UUID ;
+            secret/data/COOLFY_ENV_UUID value | COOLIFY_ENV_UUID ;
+
+      - name: Create or Get Coolify Application
+        id: coolify_app
+        run: |
+          APP_NAME="${{ steps.meta.outputs.app_name }}"
+          IMAGE="${{ steps.meta.outputs.image }}"
+          IMAGE_TAG="${{ steps.meta.outputs.image_tag }}"
+          PREVIEW_DOMAIN="${{ steps.meta.outputs.preview_domain }}"
+
+          # Check if app already exists for this PR (e.g. new commit pushed to same PR)
+          EXISTING=$(curl -s \
+            "https://coolify.yral.com/api/v1/applications" \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
+            | jq -r --arg name "$APP_NAME" '.[] | select(.name == $name) | .uuid // empty')
+
+          if [ -n "$EXISTING" ]; then
+            echo "Reusing existing Coolify app: $EXISTING"
+            echo "app_uuid=${EXISTING}" >> $GITHUB_OUTPUT
+          else
+            echo "Creating new Coolify app: $APP_NAME"
+
+            RESPONSE=$(curl -s -X POST \
+              "https://coolify.yral.com/api/v1/applications/dockerimage" \
+              -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"name\": \"${APP_NAME}\",
+                \"project_uuid\": \"${COOLIFY_PROJECT_UUID}\",
+                \"server_uuid\": \"${COOLIFY_SERVER_UUID}\",
+                \"environment_name\": \"preview\",
+                \"environment_uuid\": \"${COOLIFY_ENV_UUID}\",
+                \"docker_registry_image_name\": \"${IMAGE}\",
+                \"docker_registry_image_tag\": \"${IMAGE_TAG}\",
+                \"domains\": \"https://${PREVIEW_DOMAIN}\",
+                \"ports_exposes\": \"3000\",
+                \"is_static\": false
+              }")
+
+            echo "Create response: $RESPONSE"
+
+            APP_UUID=$(echo $RESPONSE | jq -r '.uuid // empty')
+
+            if [ -z "$APP_UUID" ]; then
+              echo "Failed to create Coolify application"
+              echo "$RESPONSE"
+              exit 1
+            fi
+
+            echo "app_uuid=${APP_UUID}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Push Environment Variables
         env:
@@ -210,8 +214,8 @@ jobs:
             }')
 
           RESPONSE=$(curl -s -o /tmp/curl_response.txt -w "%{http_code}" -X PATCH \
-            "${{ secrets.COOLIFY_URL }}/api/v1/applications/${APP_UUID}/envs/bulk" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            "https://coolify.yral.com/api/v1/applications/${APP_UUID}/envs/bulk" \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "${ENV_JSON}")
 
@@ -229,15 +233,15 @@ jobs:
 
           # Update image tag (important on subsequent pushes to same PR)
           curl -s -X PATCH \
-            "${{ secrets.COOLIFY_URL }}/api/v1/applications/${APP_UUID}" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            "https://coolify.yral.com/api/v1/applications/${APP_UUID}" \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"docker_registry_image_tag\": \"${IMAGE_TAG}\"}"
 
           # Trigger deploy
           RESPONSE=$(curl -s -X POST \
-            "${{ secrets.COOLIFY_URL }}/api/v1/applications/${APP_UUID}/start" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            "https://coolify.yral.com/api/v1/applications/${APP_UUID}/start" \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{
               \"uuid\": \"${APP_UUID}\",
@@ -263,8 +267,8 @@ jobs:
 
           while [ $WAITED -lt $MAX_WAIT ]; do
             STATUS=$(curl -s \
-              "${{ secrets.COOLIFY_URL }}/api/v1/deployments/${DEPLOY_UUID}" \
-              -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+              "https://coolify.yral.com/api/v1/deployments/${DEPLOY_UUID}" \
+              -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
               | jq -r '.status // empty')
 
             echo "Status: ${STATUS} (${WAITED}s elapsed)"
@@ -285,6 +289,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: import secrets from vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: https://vault.yral.com
+          method: jwt
+          role: yral-metadata-role
+          jwtGithubAudience: "https://github.com/dolr-ai"
+          secrets: |
+            secret/data/COOLFY_TOKEN value | COOLIFY_TOKEN ;
+            
       - name: Compute Metadata
         id: meta
         run: |
@@ -300,8 +314,8 @@ jobs:
           APP_NAME="${{ steps.meta.outputs.app_name }}"
 
           APP_UUID=$(curl -s \
-            "${{ secrets.COOLIFY_URL }}/api/v1/applications" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            "https://coolify.yral.com/api/v1/applications" \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
             | jq -r --arg name "$APP_NAME" '.[] | select(.name == $name) | .uuid // empty')
 
           if [ -z "$APP_UUID" ]; then
@@ -312,5 +326,5 @@ jobs:
           echo "Deleting Coolify app $APP_NAME ($APP_UUID)"
 
           curl -s -X DELETE \
-            "${{ secrets.COOLIFY_URL }}/api/v1/applications/${APP_UUID}" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
+            "https://coolify.yral.com/api/v1/applications/${APP_UUID}" \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}"
