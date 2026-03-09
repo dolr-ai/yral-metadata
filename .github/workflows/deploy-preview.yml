@@ -103,10 +103,10 @@ jobs:
             secret/data/DRAGONFLY_CLUSTER_2_CA_CERT value | DRAGONFLY_CA_CERT ;
             secret/data/DRAGONFLY_CLUSTER_2_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT ;
             secret/data/DRAGONFLY_CLUSTER_2_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY ;
-            secret/data/COOLFY_TOKEN value | COOLIFY_TOKEN ;
-            secret/data/COOLFY_PROJECT_UUID value | COOLIFY_PROJECT_UUID ;
-            secret/data/COOLFY_SERVER_UUID value | COOLIFY_SERVER_UUID ;
-            secret/data/COOLFY_ENV_UUID value | COOLIFY_ENV_UUID ;
+            secret/data/COOLIFY_TOKEN value | COOLIFY_TOKEN ;
+            secret/data/COOLIFY_PROJECT_UUID value | COOLIFY_PROJECT_UUID ;
+            secret/data/COOLIFY_SERVER_UUID value | COOLIFY_SERVER_UUID ;
+            secret/data/COOLIFY_ENV_UUID value | COOLIFY_ENV_UUID ;
 
       - name: Create or Get Coolify Application
         id: coolify_app
@@ -297,7 +297,7 @@ jobs:
           role: yral-metadata-role
           jwtGithubAudience: "https://github.com/dolr-ai"
           secrets: |
-            secret/data/COOLFY_TOKEN value | COOLIFY_TOKEN ;
+            secret/data/COOLIFY_TOKEN value | COOLIFY_TOKEN ;
             
       - name: Compute Metadata
         id: meta
