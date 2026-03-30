@@ -92,22 +92,6 @@ jobs:
       max-parallel: 1
     
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add server to known hosts
-        run: |
-          ssh-keyscan -H ${{matrix.server.host}} >> ~/.ssh/known_hosts
-
-      - name: Check server connectivity
-        run: |
-          ssh -o ConnectTimeout=10 yral-metadata@${{matrix.server.host}} "echo 'Server connection successful'"
-
       - name: Import Secrets from Vault
         uses: hashicorp/vault-action@v3
         with:
@@ -131,6 +115,23 @@ jobs:
             secret/data/DRAGONFLY_CLUSTER_2_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT ;
             secret/data/DRAGONFLY_CLUSTER_2_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY ;
             secret/data/yral-metadata/SSH_PRIVATE_KEY value | SSH_PRIVATE_KEY ;
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{matrix.server.host}} >> ~/.ssh/known_hosts
+
+      - name: Check server connectivity
+        run: |
+          ssh -o ConnectTimeout=10 yral-metadata@${{matrix.server.host}} "echo 'Server connection successful'"
+
 
       - name: Sync deployment files to server
         run: |
