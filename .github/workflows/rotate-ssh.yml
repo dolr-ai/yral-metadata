@@ -69,7 +69,9 @@ jobs:
       - name: Write new private key to Vault
         run: |
           NEW_PRIVATE_KEY=$(cat /tmp/new_deploy_key)
-          echo "::add-mask::$NEW_PRIVATE_KEY"
+          while IFS= read -r line; do
+            echo "::add-mask::$line"
+          done <<< "$NEW_PRIVATE_KEY"
           vault kv put secret/yral-metadata/SSH_PRIVATE_KEY value="$NEW_PRIVATE_KEY"
           echo "Vault updated with new private key"
         env:
