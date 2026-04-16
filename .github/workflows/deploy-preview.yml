@@ -98,6 +98,9 @@ jobs:
             secret/data/yral-metadata/GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID value | GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID ;
             secret/data/yral-metadata/QSTASH_CURRENT_SIGNING_KEY value | QSTASH_CURRENT_SIGNING_KEY ;
             secret/data/yral-metadata/QSTASH_NEXT_SIGNING_KEY value | QSTASH_NEXT_SIGNING_KEY ;
+            secret/data/yral-metadata/STAGING_CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY value | STAGING_CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY ;
+            secret/data/yral-metadata/STAGING_GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID value | STAGING_GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID ;
+            secret/data/yral-metadata/STAGING_GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID value | STAGING_GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID ;
             secret/data/DRAGONFLY_CLUSTER_2_PASSWORD value | DRAGONFLY_PASSWORD ;
             secret/data/DRAGONFLY_CLUSTER_2_HOSTS value | DRAGONFLY_HOSTS ;
             secret/data/DRAGONFLY_CLUSTER_2_CA_CERT value | DRAGONFLY_CA_CERT ;
@@ -170,6 +173,9 @@ jobs:
           GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ env.GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
           QSTASH_CURRENT_SIGNING_KEY: ${{ env.QSTASH_CURRENT_SIGNING_KEY }}
           QSTASH_NEXT_SIGNING_KEY: ${{ env.QSTASH_NEXT_SIGNING_KEY }}
+          STAGING_CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY: ${{ env.STAGING_CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY }}
+          STAGING_GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID: ${{ env.STAGING_GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID }}
+          STAGING_GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID: ${{ env.STAGING_GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID }}
           DRAGONFLY_PASSWORD: ${{ env.DRAGONFLY_PASSWORD }}
           DRAGONFLY_HOSTS: ${{ env.DRAGONFLY_HOSTS }}
           DRAGONFLY_CA_CERT: ${{ env.DRAGONFLY_CA_CERT}}
@@ -189,6 +195,9 @@ jobs:
             --arg google_client_notifications_sender_id "$GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID" \
             --arg qstash_current_signing_key "$QSTASH_CURRENT_SIGNING_KEY" \
             --arg qstash_next_signing_key "$QSTASH_NEXT_SIGNING_KEY" \
+            --arg staging_client_notifications_google_service_account_key "$(flatten "$STAGING_CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY")" \
+            --arg staging_google_client_notifications_project_id "$STAGING_GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID" \
+            --arg staging_google_client_notifications_sender_id "$STAGING_GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID" \
             --arg dragonfly_password "$DRAGONFLY_PASSWORD" \
             --arg dragonfly_hosts "$DRAGONFLY_HOSTS" \
             --arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT" \
@@ -205,6 +214,9 @@ jobs:
                 {"key": "GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID", "value": $google_client_notifications_sender_id, "is_literal": true},
                 {"key": "QSTASH_CURRENT_SIGNING_KEY", "value": $qstash_current_signing_key, "is_literal": true},
                 {"key": "QSTASH_NEXT_SIGNING_KEY", "value": $qstash_next_signing_key, "is_literal": true},
+                {"key": "STAGING_CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY", "value": $staging_client_notifications_google_service_account_key, "is_literal": true},
+                {"key": "STAGING_GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID", "value": $staging_google_client_notifications_project_id, "is_literal": true},
+                {"key": "STAGING_GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID", "value": $staging_google_client_notifications_sender_id, "is_literal": true},
                 {"key": "DRAGONFLY_PASSWORD", "value": $dragonfly_password, "is_literal": true},
                 {"key": "DRAGONFLY_HOSTS", "value": $dragonfly_hosts, "is_literal": true},
                 {"key": "DRAGONFLY_CA_CERT", "value": $dragonfly_ca_cert, "is_multiline": true},
