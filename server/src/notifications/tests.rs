@@ -28,11 +28,13 @@ mod tests {
     fn create_actual_user_metadata(
         user_id: &str,
         notification_key: Option<NotificationKey>,
+        staging_notification_key: Option<NotificationKey>,
     ) -> ActualUserMetadata {
         ActualUserMetadata {
             user_canister_id: user_id.parse().expect("Test user_id not a valid principal"),
             user_name: format!("user_{}", user_id),
             notification_key,
+            staging_notification_key,
             is_migrated: false,
             signup_at: None,
             email: None,
@@ -45,7 +47,7 @@ mod tests {
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "aaaaa-aa".to_string();
 
-        let initial_metadata = create_actual_user_metadata(&user_principal_text, None);
+        let initial_metadata = create_actual_user_metadata(&user_principal_text, None, None);
 
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata); // Use add_user helper
 
@@ -124,6 +126,7 @@ mod tests {
                     token: existing_token.clone(),
                 }],
             }),
+            None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata);
 
@@ -215,6 +218,7 @@ mod tests {
                     token: existing_token.clone(),
                 }],
             }),
+            None,
         );
         initial_metadata.is_migrated = true;
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
@@ -306,6 +310,7 @@ mod tests {
                     token: existing_token_str.clone(),
                 }],
             }),
+            None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 
@@ -422,6 +427,7 @@ mod tests {
                     },
                 ],
             }),
+            None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 
@@ -501,6 +507,7 @@ mod tests {
                     token: last_token.clone(),
                 }],
             }),
+                None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 
@@ -590,6 +597,7 @@ mod tests {
                     token: existing_token.clone(),
                 }],
             }),
+            None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 
@@ -656,7 +664,7 @@ mod tests {
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "iwf4p-syaaa-aaaag-qicra-cai".to_string();
 
-        let initial_metadata = create_actual_user_metadata(&user_principal_text, None);
+        let initial_metadata = create_actual_user_metadata(&user_principal_text, None, None);
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 
         let req = Json(MockUnregisterDeviceReq {
@@ -723,6 +731,7 @@ mod tests {
                     token: device_token.clone(),
                 }],
             }),
+            None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 
@@ -817,7 +826,7 @@ mod tests {
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "mpvf6-4aaaa-aaaal-qhokq-cai".to_string();
 
-        let initial_metadata = create_actual_user_metadata(&user_principal_text, None);
+        let initial_metadata = create_actual_user_metadata(&user_principal_text, None, None);
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 
         let notification_payload = types::NotificationPayload {
@@ -865,6 +874,7 @@ mod tests {
                     token: "some_device".to_string(),
                 }],
             }),
+            None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 
@@ -905,7 +915,7 @@ mod tests {
         let mut dragonfly_mock_redis = MockRedisConnection::new();
         let user_principal_text = "mbwvf-5iaaa-aaaal-affma-cai".to_string();
 
-        let initial_metadata_no_key = create_actual_user_metadata(&user_principal_text, None);
+        let initial_metadata_no_key = create_actual_user_metadata(&user_principal_text, None, None);
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata_no_key.clone());
 
         let notification_key_name =
@@ -999,6 +1009,7 @@ mod tests {
                     token: "old_token_in_redis".to_string(),
                 }],
             }),
+            None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata_stale_key.clone());
 
@@ -1080,6 +1091,7 @@ mod tests {
                     },
                 ],
             }),
+            None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 
@@ -1158,6 +1170,7 @@ mod tests {
                     token: token_to_unregister.clone(),
                 }],
             }),
+            None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 

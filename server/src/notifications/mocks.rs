@@ -32,6 +32,9 @@ pub struct MockUserMetadata {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification_key: Option<NotificationKey>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staging_notification_key: Option<NotificationKey>,
 }
 
 impl From<MockUserMetadata> for ActualUserMetadata {
@@ -45,6 +48,7 @@ impl From<MockUserMetadata> for ActualUserMetadata {
             }),
             user_name: mock.user_name,
             notification_key: mock.notification_key,
+            staging_notification_key: mock.staging_notification_key,
             is_migrated: false,
             email: None,
             signup_at: None,
@@ -58,6 +62,7 @@ impl From<ActualUserMetadata> for MockUserMetadata {
             user_canister_id: actual.user_canister_id.to_text(),
             user_name: actual.user_name,
             notification_key: actual.notification_key,
+            staging_notification_key: actual.staging_notification_key,
         }
     }
 }
