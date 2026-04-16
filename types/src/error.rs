@@ -25,6 +25,8 @@ pub enum ApiError {
     DeviceNotFound,
     #[error("notification key not found")]
     NotificationKeyNotFound,
+    #[error("staging notification key not found")]
+    StagingNotificationKeyNotFound,
     #[error("firebase api error: {0}")]
     FirebaseApiError(String),
     #[error("unknown: {0}")]
