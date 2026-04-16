@@ -40,6 +40,9 @@ pub struct UserMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification_key: Option<NotificationKey>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staging_notification_key: Option<NotificationKey>,
+
     #[serde(default)]
     pub email: Option<String>,
 
@@ -69,6 +72,8 @@ pub struct UserMetadataV2 {
     pub user_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notification_key: Option<NotificationKey>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staging_notification_key: Option<NotificationKey>,
     #[serde(default)]
     pub email: Option<String>,
     #[serde(default)]
@@ -84,6 +89,7 @@ impl UserMetadataV2 {
             user_name: metadata.user_name,
             user_canister_id: metadata.user_canister_id,
             notification_key: metadata.notification_key,
+            staging_notification_key: metadata.staging_notification_key,
             is_migrated: metadata.is_migrated,
             signup_at: metadata.signup_at,
             email: metadata.email,

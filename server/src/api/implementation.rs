@@ -71,6 +71,7 @@ pub async fn set_user_metadata_core<S: MetadataKvStore>(
             user_canister_id: set_metadata.user_canister_id,
             user_name: set_metadata.user_name.clone(),
             notification_key: None,
+            staging_notification_key: None,
             is_migrated: false,
             email: None,
             signup_at: None,

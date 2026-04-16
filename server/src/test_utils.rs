@@ -84,6 +84,7 @@ pub mod test_helpers {
             user_canister_id: generate_test_principal(canister_id),
             user_name: format!("testuser{}", user_id),
             notification_key: None,
+            staging_notification_key: None,
             is_migrated: false,
             email: None,
             signup_at: None,
