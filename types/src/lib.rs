@@ -194,6 +194,8 @@ pub struct RegisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,
     #[schema(value_type = String)]
     pub signature: Signature,
+    #[schema(value_type = String)]
+    pub environment: String, // Optional field to specify environment (e.g., "production", "staging")
 }
 
 pub type RegisterDeviceRes = ();
@@ -203,6 +205,7 @@ pub struct UnregisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,
     #[schema(value_type = String)]
     pub signature: Signature,
+    pub environment: String,
 }
 
 pub type UnregisterDeviceRes = ();
