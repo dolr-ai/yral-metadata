@@ -32,6 +32,7 @@ fn contains_sensitive_field(text: &str) -> bool {
         "signature",
         "registration_token",
         "notification_key",
+        "staging_notification_key",
         "authorization",
         "bearer",
         "token",

@@ -20,7 +20,9 @@ mod tests {
             MockRegisterDeviceReq,
             MockUnregisterDeviceReq,
         },
-        notifications::{register_device_impl, send_notification_impl, unregister_device_impl},
+        notifications::{
+            register_device_prod_impl, send_notification_prod_impl, unregister_device_prod_impl,
+        },
         utils::error::Error, // For matching specific error types
     };
 
@@ -57,10 +59,10 @@ mod tests {
             },
         });
 
-        let result = register_device_impl(
+        let result = register_device_prod_impl(
             &mock_fcm, // FCM service first
             // Then Redis service
-            &dragonfly_mock_redis,   // Dragonfly Redis service
+            &dragonfly_mock_redis,       // Dragonfly Redis service
             user_principal_text.clone(), // Then user principal
             req,                         // Then request data
             TEST_KEY_PREFIX,
@@ -149,7 +151,7 @@ mod tests {
             },
         });
 
-        let result = register_device_impl(
+        let result = register_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -242,7 +244,7 @@ mod tests {
             },
         });
 
-        let result = register_device_impl(
+        let result = register_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -332,7 +334,7 @@ mod tests {
             },
         });
 
-        let result = register_device_impl(
+        let result = register_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -390,7 +392,7 @@ mod tests {
             },
         });
 
-        let result = register_device_impl(
+        let result = register_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -449,7 +451,7 @@ mod tests {
             },
         });
 
-        let result = unregister_device_impl(
+        let result = unregister_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -507,7 +509,7 @@ mod tests {
                     token: last_token.clone(),
                 }],
             }),
-                None,
+            None,
         );
         dragonfly_mock_redis.add_user_to_dragonfly(initial_metadata.clone());
 
@@ -537,7 +539,7 @@ mod tests {
             },
         });
 
-        let result = unregister_device_impl(
+        let result = unregister_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -619,7 +621,7 @@ mod tests {
             },
         });
 
-        let result = unregister_device_impl(
+        let result = unregister_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -673,7 +675,7 @@ mod tests {
             },
         });
 
-        let result = unregister_device_impl(
+        let result = unregister_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -700,7 +702,7 @@ mod tests {
             },
         });
 
-        let result = unregister_device_impl(
+        let result = unregister_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -759,9 +761,10 @@ mod tests {
             webpush: None,
             apns: None,
             fcm_options: None,
+            environment: "production".to_string(),
         });
 
-        let result = send_notification_impl(
+        let result = send_notification_prod_impl(
             None, // HttpRequest is None for tests
             &mock_fcm,
             &dragonfly_mock_redis,
@@ -802,9 +805,10 @@ mod tests {
             webpush: None,
             apns: None,
             fcm_options: None,
+            environment: "production".to_string(),
         });
 
-        let result = send_notification_impl(
+        let result = send_notification_prod_impl(
             None,
             &mock_fcm,
             &dragonfly_mock_redis,
@@ -841,9 +845,10 @@ mod tests {
             webpush: None,
             apns: None,
             fcm_options: None,
+            environment: "production".to_string(),
         });
 
-        let result = send_notification_impl(
+        let result = send_notification_prod_impl(
             None,
             &mock_fcm,
             &dragonfly_mock_redis,
@@ -890,9 +895,10 @@ mod tests {
             webpush: None,
             apns: None,
             fcm_options: None,
+            environment: "production".to_string(),
         });
 
-        let result = send_notification_impl(
+        let result = send_notification_prod_impl(
             None,
             &mock_fcm,
             &dragonfly_mock_redis,
@@ -906,7 +912,10 @@ mod tests {
         // notification_key and returns Ok(Json(Err(ApiError::NotificationKeyNotFound))).
         assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
         let api_result = result.unwrap().0;
-        assert_eq!(api_result, Err(types::error::ApiError::NotificationKeyNotFound));
+        assert_eq!(
+            api_result,
+            Err(types::error::ApiError::NotificationKeyNotFound)
+        );
     }
 
     #[tokio::test]
@@ -938,7 +947,7 @@ mod tests {
             },
         });
 
-        let result = register_device_impl(
+        let result = register_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -1020,7 +1029,7 @@ mod tests {
             },
         });
 
-        let result = register_device_impl(
+        let result = register_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -1113,7 +1122,7 @@ mod tests {
             },
         });
 
-        let result = unregister_device_impl(
+        let result = unregister_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),
@@ -1180,7 +1189,7 @@ mod tests {
             },
         });
 
-        let result = unregister_device_impl(
+        let result = unregister_device_prod_impl(
             &mock_fcm,
             &dragonfly_mock_redis,
             user_principal_text.clone(),

@@ -188,7 +188,10 @@ impl RedisConnection for MockRedisConnection {
                 ))
             })?;
 
-        self.users_data.lock().unwrap().insert(key_str, user_metadata);
+        self.users_data
+            .lock()
+            .unwrap()
+            .insert(key_str, user_metadata);
         Ok(true)
     }
 }
@@ -215,7 +218,10 @@ impl UserMetadataStore for MockRedisConnection {
         metadata: &ActualUserMetadata,
     ) -> Result<()> {
         let key = format_to_dragonfly_key(key_prefix, user_id);
-        self.users_data.lock().unwrap().insert(key, metadata.clone());
+        self.users_data
+            .lock()
+            .unwrap()
+            .insert(key, metadata.clone());
         Ok(())
     }
 }

@@ -1,8 +1,8 @@
 use std::env;
 
 use hyper_rustls::{self, HttpsConnector};
-use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
+use hyper_util::{client::legacy::connect::HttpConnector, service};
 use yral_identity::Result;
 use yup_oauth2::{
     authenticator::Authenticator, CustomHyperClientBuilder, ServiceAccountAuthenticator,
@@ -15,14 +15,15 @@ pub mod notifications;
 #[derive(Clone)]
 pub struct Firebase {
     auth: Authenticator<HttpsConnector<HttpConnector>>,
+    project_id: String,
+    sender_id: String,
 }
 
-pub async fn init_auth() -> Result<Authenticator<HttpsConnector<HttpConnector>>, Error> {
-    let sa_key_file = env::var("CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY")
-        .map_err(|e| Error::Unknown(e.to_string()))?;
-
+pub async fn init_auth(
+    service_account_key: &str,
+) -> Result<Authenticator<HttpsConnector<HttpConnector>>, Error> {
     // Load your service account key
-    let sa_key = yup_oauth2::parse_service_account_key(sa_key_file)
+    let sa_key = yup_oauth2::parse_service_account_key(service_account_key)
         .map_err(|e| Error::Unknown(e.to_string()))?;
 
     // Make sure the crypto provider is installed (see https://github.com/rustls/rustls/issues/1938)
@@ -46,9 +47,33 @@ pub async fn init_auth() -> Result<Authenticator<HttpsConnector<HttpConnector>>,
 }
 
 impl Firebase {
-    pub async fn new() -> Result<Self, Error> {
-        let auth = init_auth().await?;
-        Ok(Self { auth })
+    pub async fn new(service_account_key: &str, environment: &str) -> Result<Self, Error> {
+        let auth = init_auth(service_account_key).await?;
+        let mut project_id = String::new();
+        let mut sender_id = String::new();
+
+        if environment == "production" {
+            project_id = env::var("GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID")
+                .map_err(|e| Error::Unknown(e.to_string()))?;
+            sender_id = env::var("GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID")
+                .map_err(|e| Error::Unknown(e.to_string()))?;
+        } else if environment == "staging" {
+            project_id = env::var("STAGING_GOOGLE_CLIENT_NOTIFICATIONS_PROJECT_ID")
+                .map_err(|e| Error::Unknown(e.to_string()))?;
+            sender_id = env::var("STAGING_GOOGLE_CLIENT_NOTIFICATIONS_SENDER_ID")
+                .map_err(|e| Error::Unknown(e.to_string()))?;
+        } else {
+            return Err(Error::Unknown(format!(
+                "Invalid environment: {}",
+                environment
+            )));
+        }
+
+        Ok(Self {
+            auth,
+            project_id,
+            sender_id,
+        })
     }
 
     async fn get_access_token(&self, scopes: &[&str]) -> Result<String, Error> {

@@ -205,6 +205,7 @@ pub struct UnregisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,
     #[schema(value_type = String)]
     pub signature: Signature,
+    #[schema(value_type = String)]
     pub environment: String,
 }
 
@@ -234,6 +235,8 @@ pub struct SendNotificationReq {
     pub apns: Option<ApnsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fcm_options: Option<FcmOptions>,
+    #[schema(value_type = String)]
+    pub environment: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]

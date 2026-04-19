@@ -3,7 +3,9 @@ use candid::Principal;
 use redis::RedisResult;
 
 use crate::utils::error::{Error, Result};
-use types::{DeviceRegistrationToken, NotificationKey, SendNotificationReq, Signature, UserMetadata};
+use types::{
+    DeviceRegistrationToken, NotificationKey, SendNotificationReq, Signature, UserMetadata,
+};
 
 // --- FCM Service Trait ---
 pub trait FcmService: Send + Sync {

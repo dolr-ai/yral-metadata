@@ -10,6 +10,7 @@ use crate::utils::error::{Error, Result};
 use crate::utils::yral_auth_jwt::YralAuthJwt;
 use ic_agent::identity::Secp256k1Identity;
 use ic_agent::Agent;
+use std::env;
 use std::sync::Arc;
 
 pub static IC_AGENT_URL: &str = "https://ic0.app";
@@ -19,7 +20,8 @@ pub struct AppState {
     pub dragonfly_redis: Arc<DragonflyPool>,
     pub jwt_details: JwtDetails,
     pub yral_auth_jwt: YralAuthJwt,
-    pub firebase: Firebase,
+    pub firebase_prod: Firebase,
+    pub firebase_staging: Firebase,
     pub backend_admin_ic_agent: ic_agent::Agent,
     pub qstash: QStashState,
 }
@@ -29,6 +31,14 @@ impl AppState {
         let ca_cert_bytes = get_ca_cert_pem()?;
         let client_cert_bytes = get_client_cert_pem()?;
         let client_key_bytes = get_client_key_pem()?;
+
+        let prod_sa_key_file = env::var("CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY")
+            .map_err(|e| Error::Unknown(e.to_string()))?;
+
+        let staging_sa_key_file =
+            env::var("STAGING_CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY")
+                .map_err(|e| Error::Unknown(e.to_string()))?;
+
         Ok(AppState {
             dragonfly_redis: init_dragonfly_redis(
                 ca_cert_bytes,
@@ -38,7 +48,10 @@ impl AppState {
             .await?,
             jwt_details: init_jwt(app_config)?,
             yral_auth_jwt: YralAuthJwt::init(app_config.yral_auth_public_key.clone())?,
-            firebase: Firebase::new()
+            firebase_prod: Firebase::new(&prod_sa_key_file, "production")
+                .await
+                .map_err(|e| Error::FirebaseApiErr(e.to_string()))?,
+            firebase_staging: Firebase::new(&staging_sa_key_file, "staging")
                 .await
                 .map_err(|e| Error::FirebaseApiErr(e.to_string()))?,
             backend_admin_ic_agent: init_backend_admin_key(app_config).await?,

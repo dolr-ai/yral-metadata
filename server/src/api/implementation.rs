@@ -1,11 +1,11 @@
 use candid::Principal;
+use regex::Regex;
 use std::{collections::HashMap, sync::LazyLock};
 use types::{
     BulkGetUserMetadataReq, BulkGetUserMetadataRes, BulkUsers, CanisterToPrincipalReq,
     CanisterToPrincipalRes, GetUserMetadataV2Res, SetUserMetadataReq, SetUserMetadataReqMetadata,
     SetUserMetadataRes, UserMetadata, UserMetadataByUsername, UserMetadataV2,
 };
-use regex::Regex;
 
 use crate::{
     api::store::MetadataKvStore,
@@ -42,9 +42,11 @@ pub async fn set_user_metadata_core<S: MetadataKvStore>(
 
         let username_key =
             format_to_dragonfly_key(key_prefix, &username_info_key(&set_metadata.user_name));
-        let meta_raw = serde_json::to_vec(&UserMetadataByUsername { user_principal })
-            .map_err(Error::Deser)?;
-        let inserted = store.hset_nx(&username_key, METADATA_FIELD, &meta_raw).await?;
+        let meta_raw =
+            serde_json::to_vec(&UserMetadataByUsername { user_principal }).map_err(Error::Deser)?;
+        let inserted = store
+            .hset_nx(&username_key, METADATA_FIELD, &meta_raw)
+            .await?;
         if !inserted {
             return Err(Error::DuplicateUsername);
         }
@@ -57,10 +59,8 @@ pub async fn set_user_metadata_core<S: MetadataKvStore>(
 
         if !set_metadata.user_name.is_empty() {
             if !existing.user_name.is_empty() {
-                let old_key = format_to_dragonfly_key(
-                    key_prefix,
-                    &username_info_key(&existing.user_name),
-                );
+                let old_key =
+                    format_to_dragonfly_key(key_prefix, &username_info_key(&existing.user_name));
                 store.hdel(&old_key, METADATA_FIELD).await?;
             }
             existing.user_name = set_metadata.user_name.clone();
@@ -106,7 +106,14 @@ pub async fn set_user_metadata_impl<S: MetadataKvStore>(
             .try_into()
             .map_err(|_| Error::AuthTokenMissing)?,
     )?;
-    set_user_metadata_core(store, user_principal, &req.metadata, can2prin_key, key_prefix).await
+    set_user_metadata_core(
+        store,
+        user_principal,
+        &req.metadata,
+        can2prin_key,
+        key_prefix,
+    )
+    .await
 }
 
 pub async fn set_user_metadata_using_admin_identity_impl<S: MetadataKvStore>(
@@ -124,7 +131,14 @@ pub async fn set_user_metadata_using_admin_identity_impl<S: MetadataKvStore>(
             .try_into()
             .map_err(|_| Error::AuthTokenMissing)?,
     )?;
-    set_user_metadata_core(store, user_principal, &req.metadata, can2prin_key, key_prefix).await
+    set_user_metadata_core(
+        store,
+        user_principal,
+        &req.metadata,
+        can2prin_key,
+        key_prefix,
+    )
+    .await
 }
 
 /// Core implementation for getting user metadata.
@@ -141,13 +155,11 @@ pub async fn get_user_metadata_impl<S: MetadataKvStore>(
         let Some(raw) = raw else {
             return Ok(None);
         };
-        let meta: UserMetadataByUsername =
-            serde_json::from_slice(&raw).map_err(Error::Deser)?;
+        let meta: UserMetadataByUsername = serde_json::from_slice(&raw).map_err(Error::Deser)?;
         meta.user_principal
     };
 
-    let user_key =
-        format_to_dragonfly_key(key_prefix, &user_principal.to_text());
+    let user_key = format_to_dragonfly_key(key_prefix, &user_principal.to_text());
     let raw = store.hget(&user_key, METADATA_FIELD).await?;
 
     match raw {

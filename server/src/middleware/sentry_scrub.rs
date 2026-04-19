@@ -18,10 +18,11 @@ const SENSITIVE_FIELDS: &[&str] = &[
     "password",
     "private_key",
     // yral-metadata specific sensitive fields
-    "signature",          // User identity signatures from SetUserMetadataReq
-    "registration_token", // FCM device registration tokens
-    "notification_key",   // Firebase notification group keys
-    "key",                // NotificationKey.key field
+    "signature",                // User identity signatures from SetUserMetadataReq
+    "registration_token",       // FCM device registration tokens
+    "notification_key",         // Firebase notification group keys
+    "staging_notification_key", // Firebase notification group keys
+    "key",                      // NotificationKey.key field
     // Environment secrets
     "yral_metadata_user_notification_api_key",
 ];
@@ -221,6 +222,7 @@ mod tests {
         assert!(contains_sensitive_field("{\"signature\":\"abc123\"}"));
         assert!(contains_sensitive_field("registration_token"));
         assert!(contains_sensitive_field("notification_key"));
+        assert!(contains_sensitive_field("staging_notification_key"));
         assert!(!contains_sensitive_field("{\"user_name\":\"alice\"}"));
         assert!(!contains_sensitive_field("user_principal"));
     }
