@@ -7,6 +7,7 @@ COPY ./config.toml .
 
 ENV RUST_LOG="debug"
 ENV BIND_ADDRESS="0.0.0.0:3000"
+ENV ENVIRONMENT="preview"
 EXPOSE 3000
 
 CMD ["./yral-metadata-server"]
