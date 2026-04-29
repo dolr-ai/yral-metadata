@@ -232,6 +232,12 @@ impl Firebase {
     ) -> Result<()> {
         let client = Client::new();
 
+        log::info!(
+            "[send_message_to_group] Using project_id: {}, sender_id: {}",
+            self.project_id,
+            self.sender_id
+        );
+
         let url = format!(
             "https://fcm.googleapis.com/v1/projects/{}/messages:send",
             self.project_id.clone()

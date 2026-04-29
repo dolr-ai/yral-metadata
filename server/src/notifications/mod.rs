@@ -571,8 +571,11 @@ pub async fn register_device_staging_impl<
         .staging_notification_key
         .as_ref()
         .map(|nk| nk.key.clone());
-    let notification_key_name =
-        firebase_utils::get_notification_key_name_from_principal(&user_id_text);
+
+    let notification_key_name = format!(
+        "staging_{}",
+        firebase_utils::get_notification_key_name_from_principal(&user_id_text)
+    );
     let token = registration_token_obj.token.clone();
 
     // Register device with FCM
@@ -869,8 +872,10 @@ pub async fn unregister_device_staging_impl<
         Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
     };
 
-    let notification_key_name =
-        firebase_utils::get_notification_key_name_from_principal(&user_id_text);
+    let notification_key_name = format!(
+        "staging_{}",
+        firebase_utils::get_notification_key_name_from_principal(&user_id_text)
+    );
 
     let Some(user_notification_key_info) = &user_metadata.staging_notification_key else {
         return Ok(Json(Err(ApiError::NotificationKeyNotFound)));
@@ -971,6 +976,10 @@ pub async fn send_notification(
     );
 
     if req.environment == "production" {
+        log::info!(
+            "Processing send notification request for user {} in production environment",
+            principal
+        );
         send_notification_prod_impl(
             Some(&headers),
             &state.firebase_prod,
@@ -989,6 +998,10 @@ pub async fn send_notification(
             e
         })
     } else if req.environment == "staging" {
+        log::info!(
+            "Processing send notification request for user {} in staging environment",
+            principal
+        );
         send_notification_staging_impl(
             Some(&headers),
             &state.firebase_staging,
