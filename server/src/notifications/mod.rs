@@ -555,6 +555,11 @@ pub async fn register_device_staging_impl<
     req: Json<Req>,
     key_prefix: &str,
 ) -> Result<Json<ApiResult<RegisterDeviceRes>>> {
+    log::info!(
+        "Processing register device request for user {} in staging environment",
+        user_principal.to_text()
+    );
+
     let request_data = req.0;
     let registration_token_obj = request_data.registration_token();
 
@@ -860,6 +865,10 @@ pub async fn unregister_device_staging_impl<
     req: Json<Req>,
     key_prefix: &str,
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
+    log::info!(
+        "Processing unregister device request for user {} in staging environment",
+        user_principal.to_text()
+    );
     let request_data = req.0;
     let registration_token_obj = request_data.registration_token();
 
