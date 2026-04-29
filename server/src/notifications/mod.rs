@@ -986,7 +986,7 @@ pub async fn send_notification(
 
     if req.environment == "production" {
         log::info!(
-            "Processing send notification request for user {} in production environment",
+            "sending notification for user {} in production environment",
             principal
         );
         send_notification_prod_impl(
@@ -1008,7 +1008,7 @@ pub async fn send_notification(
         })
     } else if req.environment == "staging" {
         log::info!(
-            "Processing send notification request for user {} in staging environment",
+            "sending notification for user {} in staging environment",
             principal
         );
         send_notification_staging_impl(
