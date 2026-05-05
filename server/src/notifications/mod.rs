@@ -1178,13 +1178,15 @@ pub async fn send_notification_staging_impl<
         return Ok(Json(Err(ApiError::NotificationKeyNotFound)));
     };
 
+    log::info!("Attempting to send staging push to group key '{}' with payload: {:?}", notification_key.key, req.0);
+
     // Send notification
     match fcm_service
-        .send_message_to_group(notification_key, req.0)
+        .send_message_to_group(notification_key.clone(), req.0)
         .await
     {
         Ok(()) => {
-            log::info!("Successfully sent notification for user: {}", user_id_text);
+            log::info!("Successfully dispatched staging notification for user {} to group {}", user_id_text, notification_key.key);
             Ok(Json(Ok(())))
         }
         Err(Error::FirebaseApiErr(ref err_text))
