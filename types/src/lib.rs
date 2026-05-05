@@ -189,12 +189,17 @@ pub struct CanisterToPrincipalRes {
     pub mappings: HashMap<Principal, Principal>,
 }
 
+pub fn default_environment() -> String {
+    "production".to_string()
+}
+
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
 pub struct RegisterDeviceReq {
     pub registration_token: DeviceRegistrationToken,
     #[schema(value_type = String)]
     pub signature: Signature,
     #[schema(value_type = String)]
+    #[serde(default = "default_environment")]
     pub environment: String, // Optional field to specify environment (e.g., "production", "staging")
 }
 
@@ -206,6 +211,7 @@ pub struct UnregisterDeviceReq {
     #[schema(value_type = String)]
     pub signature: Signature,
     #[schema(value_type = String)]
+    #[serde(default = "default_environment")]
     pub environment: String,
 }
 
@@ -236,6 +242,7 @@ pub struct SendNotificationReq {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fcm_options: Option<FcmOptions>,
     #[schema(value_type = String)]
+    #[serde(default = "default_environment", skip_serializing)]
     pub environment: String,
 }
 
