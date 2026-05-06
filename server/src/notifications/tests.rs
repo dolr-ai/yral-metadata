@@ -761,7 +761,6 @@ mod tests {
             webpush: None,
             apns: None,
             fcm_options: None,
-            environment: "production".to_string(),
         });
 
         let result = send_notification_prod_impl(
@@ -805,7 +804,6 @@ mod tests {
             webpush: None,
             apns: None,
             fcm_options: None,
-            environment: "production".to_string(),
         });
 
         let result = send_notification_prod_impl(
@@ -845,7 +843,6 @@ mod tests {
             webpush: None,
             apns: None,
             fcm_options: None,
-            environment: "production".to_string(),
         });
 
         let result = send_notification_prod_impl(
@@ -895,7 +892,6 @@ mod tests {
             webpush: None,
             apns: None,
             fcm_options: None,
-            environment: "production".to_string(),
         });
 
         let result = send_notification_prod_impl(

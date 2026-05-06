@@ -227,7 +227,6 @@ impl Firebase {
             webpush,
             apns,
             fcm_options,
-            environment,
         }: SendNotificationReq,
     ) -> Result<()> {
         let client = Client::new();

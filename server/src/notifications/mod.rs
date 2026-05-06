@@ -984,67 +984,89 @@ pub async fn send_notification(
         sentry::Level::Info,
     );
 
-    if req.environment == "production" {
-        log::info!(
-            "sending notification for user {} in production environment",
-            principal
+    send_notification_to_all_environments(
+        Some(&headers),
+        &state.firebase_prod,
+        &state.firebase_staging,
+        &state.dragonfly_redis,
+        user_principal,
+        Json(req.clone()),
+        YRAL_METADATA_KEY_PREFIX,
+    )
+    .await
+    .map_err(|e| {
+        crate::sentry_utils::capture_api_error(
+            &e,
+            "/notifications/{user_principal}/send",
+            Some(&principal.to_text()),
         );
-        send_notification_prod_impl(
-            Some(&headers),
-            &state.firebase_prod,
-            &state.dragonfly_redis,
-            user_principal,
-            Json(req),
-            YRAL_METADATA_KEY_PREFIX,
-        )
-        .await
-        .map_err(|e| {
-            crate::sentry_utils::capture_api_error(
-                &e,
-                "/notifications/{user_principal}/send",
-                Some(&principal.to_text()),
-            );
-            e
-        })
-    } else if req.environment == "staging" {
-        log::info!(
-            "sending notification for user {} in staging environment",
-            principal
-        );
-        send_notification_staging_impl(
-            Some(&headers),
-            &state.firebase_staging,
-            &state.dragonfly_redis,
-            user_principal,
-            Json(req),
-            YRAL_METADATA_KEY_PREFIX,
-        )
-        .await
-        .map_err(|e| {
-            crate::sentry_utils::capture_api_error(
-                &e,
-                "/notifications/{user_principal}/send",
-                Some(&principal.to_text()),
-            );
-            e
-        })
-    } else {
-        return Ok(Json(Err(ApiError::Unknown(format!(
-            "Invalid environment: {}",
-            req.environment
-        )))));
-    }
+        e
+    })
 }
 
-pub async fn send_notification_prod_impl<F: FcmService, M: UserMetadataStore, P: UserPrincipal>(
+pub async fn send_notification_to_all_environments<
+    F: FcmService,
+    M: UserMetadataStore,
+    P: UserPrincipal,
+>(
     headers: Option<&HeaderMap>,
-    fcm_service: &F,
+    fcm_prod: &F,
+    fcm_staging: &F,
     store: &M,
     user_principal: P,
     req: Json<SendNotificationReq>,
     key_prefix: &str,
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
-    let user_id_text = user_principal.to_text();
+    let user_principal_text = user_principal.to_text();
+    let prod_result = send_notification_prod_impl(
+        headers.clone(),
+        fcm_prod,
+        store,
+        user_principal_text.clone(),
+        req.clone(),
+        key_prefix,
+    )
+    .await;
+
+    let staging_result = send_notification_staging_impl(
+        headers,
+        fcm_staging,
+        store,
+        user_principal_text,
+        req,
+        key_prefix,
+    )
+    .await;
+
+    // Log results for both environments
+    match prod_result {
+        Ok(_) => log::info!("Successfully sent notification in production environment"),
+        Err(e) => log::error!(
+            "Failed to send notification in production environment: {:?}",
+            e
+        ),
+    }
+
+    match staging_result {
+        Ok(_) => log::info!("Successfully sent notification in staging environment"),
+        Err(e) => log::error!(
+            "Failed to send notification in staging environment: {:?}",
+            e
+        ),
+    }
+
+    Ok(Json(Ok(())))
+}
+
+pub async fn send_notification_prod_impl<F: FcmService, M: UserMetadataStore>(
+    headers: Option<&HeaderMap>,
+    fcm_service: &F,
+    store: &M,
+    user_principal: String,
+    req: Json<SendNotificationReq>,
+    key_prefix: &str,
+) -> Result<Json<ApiResult<SendNotificationRes>>> {
+    let user_id_text = user_principal.clone();
 
     // Verify API key authorization if headers provided
     if let Some(actual_headers) = headers {
@@ -1122,19 +1144,15 @@ pub async fn send_notification_prod_impl<F: FcmService, M: UserMetadataStore, P:
     }
 }
 
-pub async fn send_notification_staging_impl<
-    F: FcmService,
-    M: UserMetadataStore,
-    P: UserPrincipal,
->(
+pub async fn send_notification_staging_impl<F: FcmService, M: UserMetadataStore>(
     headers: Option<&HeaderMap>,
     fcm_service: &F,
     store: &M,
-    user_principal: P,
+    user_principal: String,
     req: Json<SendNotificationReq>,
     key_prefix: &str,
 ) -> Result<Json<ApiResult<SendNotificationRes>>> {
-    let user_id_text = user_principal.to_text();
+    let user_id_text = user_principal.clone();
 
     // Verify API key authorization if headers provided
     if let Some(actual_headers) = headers {
@@ -1178,7 +1196,11 @@ pub async fn send_notification_staging_impl<
         return Ok(Json(Err(ApiError::NotificationKeyNotFound)));
     };
 
-    log::info!("Attempting to send staging push to group key '{}' with payload: {:?}", notification_key.key, req.0);
+    log::info!(
+        "Attempting to send staging push to group key '{}' with payload: {:?}",
+        notification_key.key,
+        req.0
+    );
 
     // Send notification
     match fcm_service
@@ -1186,7 +1208,11 @@ pub async fn send_notification_staging_impl<
         .await
     {
         Ok(()) => {
-            log::info!("Successfully dispatched staging notification for user {} to group {}", user_id_text, notification_key.key);
+            log::info!(
+                "Successfully dispatched staging notification for user {} to group {}",
+                user_id_text,
+                notification_key.key
+            );
             Ok(Json(Ok(())))
         }
         Err(Error::FirebaseApiErr(ref err_text))

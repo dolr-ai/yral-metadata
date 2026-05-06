@@ -241,9 +241,6 @@ pub struct SendNotificationReq {
     pub apns: Option<ApnsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fcm_options: Option<FcmOptions>,
-    #[schema(value_type = String)]
-    #[serde(default = "default_environment", skip_serializing)]
-    pub environment: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
