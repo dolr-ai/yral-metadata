@@ -1,6 +1,6 @@
 use crate::{
     api::METADATA_FIELD,
-    dragonfly::{format_to_dragonfly_key, DragonflyPool, YRAL_METADATA_KEY_PREFIX},
+    dragonfly::{self, DragonflyPool, YRAL_METADATA_KEY_PREFIX, format_to_dragonfly_key},
     notifications::traits::RedisConnection,
     services::error_wrappers::{ErrorWrapper, OkWrapper},
     state::AppState,
@@ -53,6 +53,7 @@ pub async fn set_user_email(
     )?;
     let result = set_user_email_impl(
         &state.dragonfly_redis,
+        &state.dragonfly_redis_store,
         principal,
         req.payload.email,
         req.payload.already_signed_in,
@@ -100,6 +101,7 @@ pub async fn set_signup_datetime(
 
     let res = set_signup_datetime_impl(
         &state.dragonfly_redis,
+        &state.dragonfly_redis_store,
         principal,
         req.already_signed_in,
         YRAL_METADATA_KEY_PREFIX,
@@ -119,6 +121,7 @@ pub async fn set_signup_datetime(
 /// Optimized with pipelines for batch writes
 pub async fn set_user_email_impl(
     dragonfly_redis: &DragonflyPool,
+    dragonfly_redis_store: &DragonflyPool,
     user_principal: Principal,
     email: String,
     already_signed_in: bool,
@@ -199,12 +202,80 @@ pub async fn set_user_email_impl(
             } else {
                 Error::from(e)
             }
+        })?;
+
+        dragonfly_redis_store
+        .execute_with_retry(|mut conn| {
+            let user_key = user_key.clone();
+            let key_prefix = key_prefix.clone();
+            let email = email_clone.clone();
+
+            async move {
+                let formatted_user_key = format_to_dragonfly_key(&key_prefix, &user_key);
+
+                // Fetch user metadata
+                let meta_raw: Option<Box<[u8]>> =
+                    conn.hget(&formatted_user_key, METADATA_FIELD).await?;
+
+                let Some(raw) = meta_raw else {
+                    return Err(redis::RedisError::from((
+                        redis::ErrorKind::Parse,
+                        "User not found in redis store",
+                    )));
+                };
+
+                let mut meta: UserMetadata = serde_json::from_slice(&raw).map_err(|e| {
+                    redis::RedisError::from((
+                        redis::ErrorKind::Parse,
+                        "Deserialization failed",
+                        e.to_string(),
+                    ))
+                })?;
+                let mut needs_update = false;
+
+                // Update email only if needed
+                if meta.email.is_none() {
+                    meta.email = Some(email);
+                    needs_update = true;
+                }
+
+                if !already_signed_in && meta.signup_at.is_none() {
+                    meta.signup_at = Some(chrono::Utc::now().timestamp());
+                    needs_update = true;
+                }
+
+                // Write updates directly
+                if needs_update {
+                    let updated_meta = serde_json::to_vec(&meta).map_err(|e| {
+                        redis::RedisError::from((
+                            redis::ErrorKind::Parse,
+                            "Serialization failed",
+                            e.to_string(),
+                        ))
+                    })?;
+
+                    conn.hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
+                        .await?;
+                }
+
+                Ok(meta)
+            }
+        })
+        .await
+        .map_err(|e| {
+            let err_str = e.to_string();
+            if err_str.contains("User not found in redis store") {
+                Error::Unknown(format!("User `{}` not found in redis store", user_key))
+            } else {
+                Error::from(e)
+            }
         })
 }
 
 /// Optimized with pipelines for batch writes
 pub async fn set_signup_datetime_impl(
     dragonfly_redis: &DragonflyPool,
+    dragonfly_redis_store: &DragonflyPool,
     user_principal: Principal,
     already_signed_id: bool,
     key_prefix: &str,
@@ -270,7 +341,68 @@ pub async fn set_signup_datetime_impl(
             } else {
                 Error::from(e)
             }
+        })?;
+
+        dragonfly_redis_store
+        .execute_with_retry(|mut conn| {
+            let user_key = user_key.clone();
+            let key_prefix = key_prefix.clone();
+
+            async move {
+                let formatted_user_key = format_to_dragonfly_key(&key_prefix, &user_key);
+
+                // Fetch user metadata
+                let meta_raw: Option<Box<[u8]>> =
+                    conn.hget(&formatted_user_key, METADATA_FIELD).await?;
+
+                let Some(raw) = meta_raw else {
+                    return Err(redis::RedisError::from((
+                        redis::ErrorKind::Parse,
+                        "User not found in redis store",
+                    )));
+                };
+
+                let mut meta: UserMetadata = serde_json::from_slice(&raw).map_err(|e| {
+                    redis::RedisError::from((
+                        redis::ErrorKind::Parse,
+                        "Deserialization failed",
+                        e.to_string(),
+                    ))
+                })?;
+
+                // Update signup_at only if needed
+                if meta.signup_at.is_none() {
+                    if already_signed_id {
+                        meta.signup_at =
+                            Some((chrono::Utc::now() - chrono::Duration::hours(48)).timestamp());
+                    } else {
+                        meta.signup_at = Some(chrono::Utc::now().timestamp());
+                    }
+                    let updated_meta = serde_json::to_vec(&meta).map_err(|e| {
+                        redis::RedisError::from((
+                            redis::ErrorKind::Parse,
+                            "Serialization failed",
+                            e.to_string(),
+                        ))
+                    })?;
+
+                    conn.hset(&formatted_user_key, METADATA_FIELD, &updated_meta)
+                        .await?;
+                }
+
+                Ok(meta)
+            }
         })
+        .await
+        .map_err(|e| {
+            let err_str = e.to_string();
+            if err_str.contains("User not found in redis store") {
+                Error::Unknown(format!("User `{}` not found in redis store", user_key))
+            } else {
+                Error::from(e)
+            }
+        })
+        
 }
 
 fn is_valid_email(email: &str) -> bool {
