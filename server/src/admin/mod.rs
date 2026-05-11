@@ -24,7 +24,7 @@ pub async fn populate_canister_index(
 
     // Call the populate function
     let (total, processed) =
-        populate_canister_to_principal_index(&state.backend_admin_ic_agent, &state.dragonfly_redis)
+        populate_canister_to_principal_index(&state.backend_admin_ic_agent, &state.dragonfly_redis, &state.dragonfly_redis_store)
             .await?;
 
     let response = PopulateIndexResponse {

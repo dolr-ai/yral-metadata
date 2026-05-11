@@ -65,6 +65,7 @@ pub async fn get_user_principal_canister_list_v2(
 pub async fn populate_canister_to_principal_index(
     agent: &Agent,
     dragonfly_pool: &DragonflyPool,
+    dragonfly_redis_store: &DragonflyPool,
 ) -> Result<(usize, usize)> {
     let user_principal_canister_list = get_user_principal_canister_list_v2(agent).await?;
 
@@ -101,6 +102,21 @@ pub async fn populate_canister_to_principal_index(
             })
             .await;
 
+        let batch_result_store = dragonfly_redis_store
+            .execute_with_retry(|mut conn| {
+                let items = items.clone();
+                let formatted_key = formatted_key.clone();
+
+                async move {
+                    let mut dragonfly_pipe = redis::pipe();
+                    for (canister_id, user_principal) in &items {
+                        dragonfly_pipe.hset(&formatted_key, canister_id, user_principal);
+                    }
+                    dragonfly_pipe.query_async::<()>(&mut conn).await
+                }
+            })
+            .await;
+
         match batch_result {
             Ok(_) => {
                 processed += batch.len();
@@ -109,6 +125,10 @@ pub async fn populate_canister_to_principal_index(
                 log::error!("Failed to insert batch to Redis: {}", e);
                 failed += batch.len();
             }
+        }
+
+        if let Err(e) = batch_result_store {
+            log::error!("Failed to insert batch to Redis store: {}", e);
         }
     }
 

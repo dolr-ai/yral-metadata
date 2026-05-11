@@ -58,6 +58,7 @@ pub async fn set_user_metadata(
 
     let result = set_user_metadata_impl(
         &state.dragonfly_redis,
+        &state.dragonfly_redis_store,
         principal,
         req,
         CANISTER_TO_PRINCIPAL_KEY,
@@ -102,6 +103,7 @@ pub async fn admin_set_user_metadata(
 
     let result = set_user_metadata_using_admin_identity_impl(
         &state.dragonfly_redis,
+        &state.dragonfly_redis_store,
         admin_principal,
         user_principal,
         req,
@@ -136,6 +138,7 @@ pub async fn get_user_metadata(
 
     let result = get_user_metadata_impl(
         &state.dragonfly_redis,
+        &state.dragonfly_redis_store,
         identifier.clone(),
         YRAL_METADATA_KEY_PREFIX,
     )
@@ -183,6 +186,7 @@ pub async fn delete_metadata_bulk(
 
     delete_metadata_bulk_impl(
         &state.dragonfly_redis,
+        &state.dragonfly_redis_store,
         &req,
         CANISTER_TO_PRINCIPAL_KEY,
         YRAL_METADATA_KEY_PREFIX,
@@ -212,7 +216,7 @@ pub async fn get_user_metadata_bulk(
         sentry::Level::Info,
     );
 
-    let result = get_user_metadata_bulk_impl(&state.dragonfly_redis, req, YRAL_METADATA_KEY_PREFIX)
+    let result = get_user_metadata_bulk_impl(&state.dragonfly_redis, &state.dragonfly_redis_store, req, YRAL_METADATA_KEY_PREFIX)
         .await
         .map_err(|e| {
             log::error!("Error fetching bulk user metadata: {}", e);
@@ -237,6 +241,7 @@ pub async fn get_canister_to_principal_bulk(
 ) -> Result<Json<ApiResult<CanisterToPrincipalRes>>> {
     let result = get_canister_to_principal_bulk_impl(
         &state.dragonfly_redis,
+        &state.dragonfly_redis_store,
         req,
         CANISTER_TO_PRINCIPAL_KEY,
         YRAL_METADATA_KEY_PREFIX,

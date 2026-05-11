@@ -1,6 +1,10 @@
 use crate::auth::init_jwt;
 use crate::auth::JwtDetails;
 use crate::config::AppConfig;
+use crate::dragonfly::get_redis_store_ca_cert_pem;
+use crate::dragonfly::get_redis_store_client_cert_pem;
+use crate::dragonfly::get_redis_store_client_key_pem;
+use crate::dragonfly::init_dragonfly_redis_store;
 use crate::dragonfly::{
     get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis, DragonflyPool,
 };
@@ -17,6 +21,7 @@ pub static IC_AGENT_URL: &str = "https://ic0.app";
 #[derive(Clone)]
 pub struct AppState {
     pub dragonfly_redis: Arc<DragonflyPool>,
+    pub dragonfly_redis_store: Arc<DragonflyPool>,
     pub jwt_details: JwtDetails,
     pub yral_auth_jwt: YralAuthJwt,
     pub firebase: Firebase,
@@ -29,11 +34,21 @@ impl AppState {
         let ca_cert_bytes = get_ca_cert_pem()?;
         let client_cert_bytes = get_client_cert_pem()?;
         let client_key_bytes = get_client_key_pem()?;
+        let redis_store_ca_cert_bytes = get_redis_store_ca_cert_pem()?;
+        let redis_store_client_cert_bytes = get_redis_store_client_cert_pem()?;
+        let redis_store_client_key_bytes = get_redis_store_client_key_pem()?;
+        
         Ok(AppState {
             dragonfly_redis: init_dragonfly_redis(
                 ca_cert_bytes,
                 client_cert_bytes,
                 client_key_bytes,
+            )
+            .await?,
+            dragonfly_redis_store: init_dragonfly_redis_store(
+                redis_store_ca_cert_bytes,
+                redis_store_client_cert_bytes,
+                redis_store_client_key_bytes,
             )
             .await?,
             jwt_details: init_jwt(app_config)?,
