@@ -1,6 +1,6 @@
 use crate::{
     api::METADATA_FIELD,
-    dragonfly::{self, DragonflyPool, YRAL_METADATA_KEY_PREFIX, format_to_dragonfly_key},
+    dragonfly::{DragonflyPool, YRAL_METADATA_KEY_PREFIX, format_to_dragonfly_key},
     notifications::traits::RedisConnection,
     services::error_wrappers::{ErrorWrapper, OkWrapper},
     state::AppState,

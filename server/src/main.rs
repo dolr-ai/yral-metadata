@@ -150,7 +150,7 @@ async fn main_impl() -> Result<()> {
 fn main() {
     // Initialize Sentry with enhanced configuration
     let _guard = sentry::init((
-        "https://ca9ac4e37832428f5804817e010068dd@apm.yral.com/6",
+        "https://dd2469f5c5e92b09e7dac35b9bfd949b@sentry.naitik.yral.com/4",
         sentry::ClientOptions {
             release: sentry::release_name!(),
             environment: Some(
