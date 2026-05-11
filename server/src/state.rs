@@ -4,6 +4,7 @@ use crate::config::AppConfig;
 use crate::dragonfly::get_redis_store_ca_cert_pem;
 use crate::dragonfly::get_redis_store_client_cert_pem;
 use crate::dragonfly::get_redis_store_client_key_pem;
+use crate::dragonfly::init_dragonfly_redis_store;
 use crate::dragonfly::{
     get_ca_cert_pem, get_client_cert_pem, get_client_key_pem, init_dragonfly_redis, DragonflyPool,
 };
@@ -44,7 +45,7 @@ impl AppState {
                 client_key_bytes,
             )
             .await?,
-            dragonfly_redis_store: init_dragonfly_redis(
+            dragonfly_redis_store: init_dragonfly_redis_store(
                 redis_store_ca_cert_bytes,
                 redis_store_client_cert_bytes,
                 redis_store_client_key_bytes,
