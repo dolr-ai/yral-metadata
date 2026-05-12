@@ -9,6 +9,11 @@ on:
         type: boolean
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -21,15 +26,29 @@ jobs:
         with:
           toolchain: "stable"
 
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: https://vault.yral.com
+          method: jwt
+          role: yral-auth-v2-role
+          jwtGithubAudience: "https://github.com/dolr-ai"
+          secrets: |
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CA_CERT value | DRAGONFLY_REDIS_STORE_CA_CERT ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CLIENT_CERT value | DRAGONFLY_REDIS_STORE_CLIENT_CERT ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CLIENT_KEY value | DRAGONFLY_REDIS_STORE_CLIENT_KEY ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_HOSTS value | DRAGONFLY_REDIS_STORE_HOSTS ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_PASSWORD value | DRAGONFLY_REDIS_STORE_PASSWORD ;
+
       - name: Run tests
         # Need to do sequential tests as upstash has really bad timeouts under load most of the bulk methods wont have more than 5 queries at a time, so it should be fine.
         run: cargo test -- --test-threads=1 --no-capture
         env:
-          DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
-          DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
-          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT }}
-          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT }}
-          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY }}
+          DRAGONFLY_REDIS_STORE_PASSWORD: ${{ env.DRAGONFLY_REDIS_STORE_PASSWORD }}
+          DRAGONFLY_REDIS_STORE_HOSTS: ${{ env.DRAGONFLY_REDIS_STORE_HOSTS }}
+          DRAGONFLY_REDIS_STORE_CA_CERT: ${{ env.DRAGONFLY_REDIS_STORE_CA_CERT }}
+          DRAGONFLY_REDIS_STORE_CLIENT_CERT: ${{ env.DRAGONFLY_REDIS_STORE_CLIENT_CERT }}
+          DRAGONFLY_REDIS_STORE_CLIENT_KEY: ${{ env.DRAGONFLY_REDIS_STORE_CLIENT_KEY }}
 
   # Build on GitHub-hosted runner
   build:

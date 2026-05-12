@@ -58,7 +58,7 @@ mod tests {
         let result = register_device_impl(
             &mock_fcm, // FCM service first
             // Then Redis service
-            &dragonfly_mock_redis,   // Dragonfly Redis service
+            &dragonfly_mock_redis,       // Dragonfly Redis service
             user_principal_text.clone(), // Then user principal
             req,                         // Then request data
             TEST_KEY_PREFIX,
@@ -896,7 +896,10 @@ mod tests {
         // notification_key and returns Ok(Json(Err(ApiError::NotificationKeyNotFound))).
         assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
         let api_result = result.unwrap().0;
-        assert_eq!(api_result, Err(types::error::ApiError::NotificationKeyNotFound));
+        assert_eq!(
+            api_result,
+            Err(types::error::ApiError::NotificationKeyNotFound)
+        );
     }
 
     #[tokio::test]
