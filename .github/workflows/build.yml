@@ -34,11 +34,11 @@ jobs:
           role: yral-metadata-role
           jwtGithubAudience: "https://github.com/dolr-ai"
           secrets: |
-            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CA_CERT value | DRAGONFLY_REDIS_STORE_CA_CERT ;
-            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CLIENT_CERT value | DRAGONFLY_REDIS_STORE_CLIENT_CERT ;
-            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CLIENT_KEY value | DRAGONFLY_REDIS_STORE_CLIENT_KEY ;
-            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_HOSTS value | DRAGONFLY_REDIS_STORE_HOSTS ;
-            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_PASSWORD value | DRAGONFLY_REDIS_STORE_PASSWORD ;
+            secret/data/yral-metadata/DRAGONFLY_REDIS_STORE_CA_CERT value | DRAGONFLY_REDIS_STORE_CA_CERT ;
+            secret/data/yral-metadata/DRAGONFLY_REDIS_STORE_CLIENT_CERT value | DRAGONFLY_REDIS_STORE_CLIENT_CERT ;
+            secret/data/yral-metadata/DRAGONFLY_REDIS_STORE_CLIENT_KEY value | DRAGONFLY_REDIS_STORE_CLIENT_KEY ;
+            secret/data/yral-metadata/DRAGONFLY_REDIS_STORE_HOSTS value | DRAGONFLY_REDIS_STORE_HOSTS ;
+            secret/data/yral-metadata/DRAGONFLY_REDIS_STORE_PASSWORD value | DRAGONFLY_REDIS_STORE_PASSWORD ;
 
       - name: Run tests
         # Need to do sequential tests as upstash has really bad timeouts under load most of the bulk methods wont have more than 5 queries at a time, so it should be fine.
