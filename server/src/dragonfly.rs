@@ -489,8 +489,8 @@ pub async fn init_dragonfly_redis_for_test() -> Result<Arc<DragonflyPool>> {
         })
         .collect();
 
-    let dragonfly_pass = std::env::var("DRAGONFLY_PASSWORD")
-        .expect("DRAGONFLY_PASSWORD environment variable not set");
+    let dragonfly_pass = std::env::var("DRAGONFLY_REDIS_STORE_PASSWORD")
+        .expect("DRAGONFLY_REDIS_STORE_PASSWORD environment variable not set");
 
     let mut builder =
         SentinelClientBuilder::new(conn_addr, SENTINEL_SERVICE_NAME, SentinelServerType::Master)?;
