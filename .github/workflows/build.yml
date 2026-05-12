@@ -31,7 +31,7 @@ jobs:
         with:
           url: https://vault.yral.com
           method: jwt
-          role: yral-auth-v2-role
+          role: yral-metadata-role
           jwtGithubAudience: "https://github.com/dolr-ai"
           secrets: |
             secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CA_CERT value | DRAGONFLY_REDIS_STORE_CA_CERT ;
