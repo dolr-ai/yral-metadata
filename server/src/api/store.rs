@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::{dragonfly::DragonflyPool, utils::error::{Error, Result}};
+use crate::{
+    dragonfly::DragonflyPool,
+    utils::error::{Error, Result},
+};
 use redis::AsyncCommands;
 
 const BATCH_SIZE: usize = 200;

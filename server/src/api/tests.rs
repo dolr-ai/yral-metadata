@@ -21,14 +21,18 @@ async fn seed_user(mock: &MockMetadataKvStore, user: Principal, metadata: &UserM
 #[tokio::test]
 async fn test_set_user_metadata_valid_request() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let user_principal = generate_unique_test_principal();
     let unique_key = generate_unique_test_key_prefix();
     let metadata = create_test_metadata_req(100, "testuser");
 
-    let result =
-        set_user_metadata_core(&mock, &mock_2, user_principal, &metadata, &unique_key, TEST_KEY_PREFIX)
-            .await;
+    let result = set_user_metadata_core(
+        &mock,
+        user_principal,
+        &metadata,
+        &unique_key,
+        TEST_KEY_PREFIX,
+    )
+    .await;
     assert!(result.is_ok(), "Failed: {:?}", result);
 
     // User metadata was stored.
@@ -47,21 +51,31 @@ async fn test_set_user_metadata_valid_request() {
 #[tokio::test]
 async fn test_set_user_metadata_updates_existing() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let user_principal = generate_unique_test_principal();
     let unique_key = generate_unique_test_key_prefix();
 
     // First request: set username "originalname".
     let metadata1 = create_test_metadata_req(200, "originalname");
-    set_user_metadata_core(&mock, &mock_2, user_principal, &metadata1, &unique_key, TEST_KEY_PREFIX)
-        .await
-        .unwrap();
+    set_user_metadata_core(
+        &mock,
+        user_principal,
+        &metadata1,
+        &unique_key,
+        TEST_KEY_PREFIX,
+    )
+    .await
+    .unwrap();
 
     // Second request: change username to "updatedname".
     let metadata2 = create_test_metadata_req(200, "updatedname");
-    let result =
-        set_user_metadata_core(&mock, &mock_2, user_principal, &metadata2, &unique_key, TEST_KEY_PREFIX)
-            .await;
+    let result = set_user_metadata_core(
+        &mock,
+        user_principal,
+        &metadata2,
+        &unique_key,
+        TEST_KEY_PREFIX,
+    )
+    .await;
     assert!(result.is_ok(), "Failed: {:?}", result);
 
     let user_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &user_principal.to_text());
@@ -73,15 +87,22 @@ async fn test_set_user_metadata_updates_existing() {
     let old_username_key =
         format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key("originalname"));
     assert!(
-        mock.get_raw(&old_username_key, METADATA_FIELD).await.is_none(),
+        mock.get_raw(&old_username_key, METADATA_FIELD)
+            .await
+            .is_none(),
         "old username-info key must be released"
     );
 
     // Third request: update only canister_id (empty username).
     let metadata3 = create_test_metadata_req(300, "");
-    let result =
-        set_user_metadata_core(&mock, &mock_2, user_principal, &metadata3, &unique_key, TEST_KEY_PREFIX)
-            .await;
+    let result = set_user_metadata_core(
+        &mock,
+        user_principal,
+        &metadata3,
+        &unique_key,
+        TEST_KEY_PREFIX,
+    )
+    .await;
     assert!(result.is_ok(), "Failed: {:?}", result);
 
     let raw = mock.get_raw(&user_key, METADATA_FIELD).await.unwrap();
@@ -95,13 +116,11 @@ async fn test_set_user_metadata_updates_existing() {
 #[tokio::test]
 async fn test_get_user_metadata_existing() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let user_principal = generate_unique_test_principal();
     let test_metadata = create_test_user_metadata(3, 300);
     seed_user(&mock, user_principal, &test_metadata).await;
 
-    let result =
-        get_user_metadata_impl(&mock, &mock_2, user_principal.to_text(), TEST_KEY_PREFIX).await;
+    let result = get_user_metadata_impl(&mock, user_principal.to_text(), TEST_KEY_PREFIX).await;
 
     assert!(result.is_ok(), "Failed: {:?}", result);
     let metadata = result.unwrap().unwrap();
@@ -112,11 +131,9 @@ async fn test_get_user_metadata_existing() {
 #[tokio::test]
 async fn test_get_user_metadata_not_found() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let user_principal = generate_unique_test_principal();
 
-    let result =
-        get_user_metadata_impl(&mock, &mock_2, user_principal.to_text(), TEST_KEY_PREFIX).await;
+    let result = get_user_metadata_impl(&mock, user_principal.to_text(), TEST_KEY_PREFIX).await;
     assert!(result.is_ok(), "Failed: {:?}", result);
     assert!(result.unwrap().is_none());
 }
@@ -126,7 +143,6 @@ async fn test_get_user_metadata_not_found() {
 #[tokio::test]
 async fn test_delete_metadata_bulk() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
     let users: Vec<Principal> = (0..3).map(|_| generate_unique_test_principal()).collect();
 
@@ -144,9 +160,10 @@ async fn test_delete_metadata_bulk() {
         .await;
     }
 
-    let bulk_users = BulkUsers { users: users.clone() };
-    let result =
-        delete_metadata_bulk_impl(&mock, &mock_2, &bulk_users, &unique_key, TEST_KEY_PREFIX).await;
+    let bulk_users = BulkUsers {
+        users: users.clone(),
+    };
+    let result = delete_metadata_bulk_impl(&mock, &bulk_users, &unique_key, TEST_KEY_PREFIX).await;
     assert!(result.is_ok(), "Failed: {:?}", result);
 
     for user in &users {
@@ -161,19 +178,16 @@ async fn test_delete_metadata_bulk() {
 #[tokio::test]
 async fn test_delete_metadata_bulk_empty_list() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
     let bulk_users = BulkUsers { users: vec![] };
 
-    let result =
-        delete_metadata_bulk_impl(&mock, &mock_2, &bulk_users, &unique_key, TEST_KEY_PREFIX).await;
+    let result = delete_metadata_bulk_impl(&mock, &bulk_users, &unique_key, TEST_KEY_PREFIX).await;
     assert!(result.is_ok(), "Failed: {:?}", result);
 }
 
 #[tokio::test]
 async fn test_delete_metadata_bulk_large_batch() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
     let users: Vec<Principal> = (0..300).map(|_| generate_unique_test_principal()).collect();
 
@@ -182,11 +196,12 @@ async fn test_delete_metadata_bulk_large_batch() {
         seed_user(&mock, *user, &meta).await;
     }
 
-    let bulk_users = BulkUsers { users: users.clone() };
-    let result =
-        delete_metadata_bulk_impl(&mock, &mock_2, &bulk_users, &unique_key, TEST_KEY_PREFIX)
-            .await
-            .expect("delete_metadata_bulk_impl should not fail");
+    let bulk_users = BulkUsers {
+        users: users.clone(),
+    };
+    let result = delete_metadata_bulk_impl(&mock, &bulk_users, &unique_key, TEST_KEY_PREFIX)
+        .await
+        .expect("delete_metadata_bulk_impl should not fail");
     let _ = result;
 
     // Spot-check a few deletions.
@@ -199,31 +214,41 @@ async fn test_delete_metadata_bulk_large_batch() {
 #[tokio::test]
 async fn test_delete_metadata_bulk_releases_username() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let user_principal = generate_unique_test_principal();
     let can2prin_key = generate_unique_test_key_prefix();
 
     // Build a valid alphanumeric username.
     let unique_key = generate_unique_test_key_prefix();
-    let username: String = unique_key.chars().filter(|c| c.is_alphanumeric()).take(15).collect();
+    let username: String = unique_key
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .take(15)
+        .collect();
 
     // Register user with username.
     let metadata = create_test_metadata_req(42, &username);
-    set_user_metadata_core(&mock, &mock_2, user_principal, &metadata, &can2prin_key, TEST_KEY_PREFIX)
-        .await
-        .expect("Failed to create user");
+    set_user_metadata_core(
+        &mock,
+        user_principal,
+        &metadata,
+        &can2prin_key,
+        TEST_KEY_PREFIX,
+    )
+    .await
+    .expect("Failed to create user");
 
     // Confirm username-info key exists.
-    let username_key =
-        format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key(&username));
+    let username_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &username_info_key(&username));
     assert!(
         mock.get_raw(&username_key, METADATA_FIELD).await.is_some(),
         "username-info key must exist after user creation"
     );
 
     // Delete the user.
-    let bulk_users = BulkUsers { users: vec![user_principal] };
-    delete_metadata_bulk_impl(&mock, &mock_2, &bulk_users, &can2prin_key, TEST_KEY_PREFIX)
+    let bulk_users = BulkUsers {
+        users: vec![user_principal],
+    };
+    delete_metadata_bulk_impl(&mock, &bulk_users, &can2prin_key, TEST_KEY_PREFIX)
         .await
         .expect("Failed to delete user");
 
@@ -236,9 +261,15 @@ async fn test_delete_metadata_bulk_releases_username() {
     // A new user must be able to claim the same username.
     let new_principal = generate_unique_test_principal();
     let new_metadata = create_test_metadata_req(43, &username);
-    set_user_metadata_core(&mock, &mock_2, new_principal, &new_metadata, &can2prin_key, TEST_KEY_PREFIX)
-        .await
-        .expect("New user must be able to claim the released username");
+    set_user_metadata_core(
+        &mock,
+        new_principal,
+        &new_metadata,
+        &can2prin_key,
+        TEST_KEY_PREFIX,
+    )
+    .await
+    .expect("New user must be able to claim the released username");
 }
 
 // ── get_user_metadata_bulk_impl ───────────────────────────────────────────────
@@ -246,7 +277,6 @@ async fn test_delete_metadata_bulk_releases_username() {
 #[tokio::test]
 async fn test_get_user_metadata_bulk_multiple_users() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let users: Vec<Principal> = (0..3).map(|_| generate_unique_test_principal()).collect();
 
     // Seed only users[0] and users[2]; users[1] is absent.
@@ -255,8 +285,10 @@ async fn test_get_user_metadata_bulk_multiple_users() {
     let meta2 = create_test_user_metadata(22, 2002);
     seed_user(&mock, users[2], &meta2).await;
 
-    let req = BulkGetUserMetadataReq { users: users.clone() };
-    let result = get_user_metadata_bulk_impl(&mock, &mock_2, req, TEST_KEY_PREFIX).await;
+    let req = BulkGetUserMetadataReq {
+        users: users.clone(),
+    };
+    let result = get_user_metadata_bulk_impl(&mock, req, TEST_KEY_PREFIX).await;
 
     assert!(result.is_ok(), "Failed: {:?}", result);
     let results = result.unwrap();
@@ -269,9 +301,8 @@ async fn test_get_user_metadata_bulk_multiple_users() {
 #[tokio::test]
 async fn test_get_user_metadata_bulk_empty_request() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let req = BulkGetUserMetadataReq { users: vec![] };
-    let result = get_user_metadata_bulk_impl(&mock, &mock_2, req, TEST_KEY_PREFIX).await;
+    let result = get_user_metadata_bulk_impl(&mock, req, TEST_KEY_PREFIX).await;
     assert!(result.is_ok());
     assert!(result.unwrap().is_empty());
 }
@@ -279,15 +310,16 @@ async fn test_get_user_metadata_bulk_empty_request() {
 #[tokio::test]
 async fn test_get_user_metadata_bulk_concurrent_processing() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let users: Vec<Principal> = (0..20).map(|_| generate_unique_test_principal()).collect();
 
     for (i, user) in users.iter().enumerate() {
         seed_user(&mock, *user, &create_test_user_metadata(i as u64, i as u64)).await;
     }
 
-    let req = BulkGetUserMetadataReq { users: users.clone() };
-    let result = get_user_metadata_bulk_impl(&mock, &mock_2, req, TEST_KEY_PREFIX).await;
+    let req = BulkGetUserMetadataReq {
+        users: users.clone(),
+    };
+    let result = get_user_metadata_bulk_impl(&mock, req, TEST_KEY_PREFIX).await;
 
     assert!(result.is_ok(), "Failed: {:?}", result);
     let results = result.unwrap();
@@ -302,23 +334,31 @@ async fn test_get_user_metadata_bulk_concurrent_processing() {
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
 
     let pairs: Vec<(Principal, Principal)> = (0..3)
-        .map(|_| (generate_unique_test_principal(), generate_unique_test_principal()))
+        .map(|_| {
+            (
+                generate_unique_test_principal(),
+                generate_unique_test_principal(),
+            )
+        })
         .collect();
 
     let can2prin_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key);
     for (canister, user) in &pairs {
-        mock.insert(&can2prin_key, &canister.to_text(), user.to_text().into_bytes())
-            .await;
+        mock.insert(
+            &can2prin_key,
+            &canister.to_text(),
+            user.to_text().into_bytes(),
+        )
+        .await;
     }
 
     let canisters = pairs.iter().map(|(c, _)| *c).collect();
     let req = CanisterToPrincipalReq { canisters };
     let result =
-        get_canister_to_principal_bulk_impl(&mock, &mock_2, req, &unique_key, TEST_KEY_PREFIX).await;
+        get_canister_to_principal_bulk_impl(&mock, req, &unique_key, TEST_KEY_PREFIX).await;
 
     assert!(result.is_ok(), "Failed: {:?}", result);
     let res = result.unwrap();
@@ -331,7 +371,6 @@ async fn test_get_canister_to_principal_bulk_impl() {
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_partial_results() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
 
     let canister1 = generate_unique_test_principal();
@@ -341,16 +380,24 @@ async fn test_get_canister_to_principal_bulk_impl_partial_results() {
     let user2 = generate_unique_test_principal();
 
     let can2prin_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key);
-    mock.insert(&can2prin_key, &canister1.to_text(), user1.to_text().into_bytes())
-        .await;
-    mock.insert(&can2prin_key, &canister2.to_text(), user2.to_text().into_bytes())
-        .await;
+    mock.insert(
+        &can2prin_key,
+        &canister1.to_text(),
+        user1.to_text().into_bytes(),
+    )
+    .await;
+    mock.insert(
+        &can2prin_key,
+        &canister2.to_text(),
+        user2.to_text().into_bytes(),
+    )
+    .await;
 
     let req = CanisterToPrincipalReq {
         canisters: vec![canister1, canister3, canister2],
     };
     let result =
-        get_canister_to_principal_bulk_impl(&mock, &mock_2, req, &unique_key, TEST_KEY_PREFIX).await;
+        get_canister_to_principal_bulk_impl(&mock, req, &unique_key, TEST_KEY_PREFIX).await;
 
     assert!(result.is_ok(), "Failed: {:?}", result);
     let res = result.unwrap();
@@ -363,11 +410,10 @@ async fn test_get_canister_to_principal_bulk_impl_partial_results() {
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_empty_request() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
     let req = CanisterToPrincipalReq { canisters: vec![] };
     let result =
-        get_canister_to_principal_bulk_impl(&mock, &mock_2, req, &unique_key, TEST_KEY_PREFIX).await;
+        get_canister_to_principal_bulk_impl(&mock, req, &unique_key, TEST_KEY_PREFIX).await;
     assert!(result.is_ok(), "Failed: {:?}", result);
     assert!(result.unwrap().mappings.is_empty());
 }
@@ -375,7 +421,6 @@ async fn test_get_canister_to_principal_bulk_impl_empty_request() {
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
     let canister_id = generate_unique_test_principal();
 
@@ -387,9 +432,11 @@ async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
     )
     .await;
 
-    let req = CanisterToPrincipalReq { canisters: vec![canister_id] };
+    let req = CanisterToPrincipalReq {
+        canisters: vec![canister_id],
+    };
     let result =
-        get_canister_to_principal_bulk_impl(&mock, &mock_2, req, &unique_key, TEST_KEY_PREFIX).await;
+        get_canister_to_principal_bulk_impl(&mock, req, &unique_key, TEST_KEY_PREFIX).await;
 
     assert!(result.is_ok(), "Failed: {:?}", result);
     assert!(result.unwrap().mappings.is_empty()); // invalid principal skipped
@@ -398,23 +445,31 @@ async fn test_get_canister_to_principal_bulk_impl_invalid_principal_in_redis() {
 #[tokio::test]
 async fn test_get_canister_to_principal_bulk_impl_large_batch() {
     let mock = MockMetadataKvStore::new();
-    let mock_2 = MockMetadataKvStore::new();
     let unique_key = generate_unique_test_key_prefix();
 
     let pairs: Vec<(Principal, Principal)> = (0..500)
-        .map(|_| (generate_unique_test_principal(), generate_unique_test_principal()))
+        .map(|_| {
+            (
+                generate_unique_test_principal(),
+                generate_unique_test_principal(),
+            )
+        })
         .collect();
 
     let can2prin_key = format_to_dragonfly_key(TEST_KEY_PREFIX, &unique_key);
     for (canister, user) in &pairs {
-        mock.insert(&can2prin_key, &canister.to_text(), user.to_text().into_bytes())
-            .await;
+        mock.insert(
+            &can2prin_key,
+            &canister.to_text(),
+            user.to_text().into_bytes(),
+        )
+        .await;
     }
 
     let canisters = pairs.iter().map(|(c, _)| *c).collect();
     let req = CanisterToPrincipalReq { canisters };
     let result =
-        get_canister_to_principal_bulk_impl(&mock, &mock_2, req, &unique_key, TEST_KEY_PREFIX).await;
+        get_canister_to_principal_bulk_impl(&mock, req, &unique_key, TEST_KEY_PREFIX).await;
 
     assert!(result.is_ok(), "Failed: {:?}", result);
     let res = result.unwrap();

@@ -214,7 +214,9 @@ async fn recover_notification_key<F: FcmService, M: UserMetadataStore>(
             });
         }
     }
-    store.save_user_metadata(key_prefix, user_id_text, user_metadata).await?;
+    store
+        .save_user_metadata(key_prefix, user_id_text, user_metadata)
+        .await?;
 
     Ok(fetched_key)
 }
@@ -299,7 +301,7 @@ pub async fn register_device(
 
     register_device_impl(
         &state.firebase,
-        &state.dragonfly_redis,
+        &state.dragonfly_redis_store,
         user_principal,
         Json(req),
         YRAL_METADATA_KEY_PREFIX,
@@ -334,11 +336,10 @@ pub async fn register_device_impl<
 
     let user_id_text = user_principal.to_text();
 
-    let mut user_metadata =
-        match store.fetch_user_metadata(key_prefix, &user_id_text).await {
-            Ok(metadata) => metadata,
-            Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
-        };
+    let mut user_metadata = match store.fetch_user_metadata(key_prefix, &user_id_text).await {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
+    };
 
     let original_key = user_metadata
         .notification_key
@@ -467,7 +468,9 @@ pub async fn register_device_impl<
     );
 
     // Save to Redis
-    store.save_user_metadata(key_prefix, &user_id_text, &user_metadata).await?;
+    store
+        .save_user_metadata(key_prefix, &user_id_text, &user_metadata)
+        .await?;
 
     log::info!("Device registered successfully for user: {}", user_id_text);
 
@@ -496,7 +499,7 @@ pub async fn unregister_device(
 ) -> Result<Json<ApiResult<UnregisterDeviceRes>>> {
     unregister_device_impl(
         &state.firebase,
-        &state.dragonfly_redis,
+        &state.dragonfly_redis_store,
         user_principal,
         Json(req),
         YRAL_METADATA_KEY_PREFIX,
@@ -523,11 +526,10 @@ pub async fn unregister_device_impl<
 
     let user_id_text = user_principal.to_text();
 
-    let mut user_metadata =
-        match store.fetch_user_metadata(key_prefix, &user_id_text).await {
-            Ok(metadata) => metadata,
-            Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
-        };
+    let mut user_metadata = match store.fetch_user_metadata(key_prefix, &user_id_text).await {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
+    };
 
     let notification_key_name =
         firebase_utils::get_notification_key_name_from_principal(&user_id_text);
@@ -579,7 +581,9 @@ pub async fn unregister_device_impl<
             .registration_tokens
             .retain(|token| token.token != registration_token_obj.token);
 
-        store.save_user_metadata(key_prefix, &user_id_text, &user_metadata).await?;
+        store
+            .save_user_metadata(key_prefix, &user_id_text, &user_metadata)
+            .await?;
 
         log::info!(
             "Device unregistered successfully for user: {}",
@@ -631,7 +635,7 @@ pub async fn send_notification(
     send_notification_impl(
         Some(&headers),
         &state.firebase,
-        &state.dragonfly_redis,
+        &state.dragonfly_redis_store,
         user_principal,
         Json(req),
         YRAL_METADATA_KEY_PREFIX,
@@ -688,11 +692,10 @@ pub async fn send_notification_impl<F: FcmService, M: UserMetadataStore, P: User
     }
 
     // Fetch user metadata
-    let mut user_metadata =
-        match store.fetch_user_metadata(key_prefix, &user_id_text).await {
-            Ok(metadata) => metadata,
-            Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
-        };
+    let mut user_metadata = match store.fetch_user_metadata(key_prefix, &user_id_text).await {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(Json(Err(ApiError::MetadataNotFound))),
+    };
 
     // Get notification key
     let Some(notification_key) = user_metadata.notification_key.clone() else {
@@ -718,8 +721,9 @@ pub async fn send_notification_impl<F: FcmService, M: UserMetadataStore, P: User
             );
             // Clear stale notification key so user can re-register
             user_metadata.notification_key = None;
-            if let Err(save_err) =
-                store.save_user_metadata(key_prefix, &user_id_text, &user_metadata).await
+            if let Err(save_err) = store
+                .save_user_metadata(key_prefix, &user_id_text, &user_metadata)
+                .await
             {
                 log::error!(
                     "Failed to clear stale notification_key for user {}: {:?}",
