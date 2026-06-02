@@ -2,6 +2,6 @@
 /config.toml
 .env
 /.direnv
-CLAUDE.md
 .DS_Store
 /certs
+.idea
