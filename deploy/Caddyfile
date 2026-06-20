@@ -4,7 +4,7 @@
 }
 
 # Main metadata domain
-metadata.yral.com {
+metadata.naitik.yral.com {
     # Reverse proxy to the yral-metadata service
     reverse_proxy yral-metadata:8080 {
         # Health checking
