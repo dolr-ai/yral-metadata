@@ -6,9 +6,9 @@ services:
     container_name: yral-metadata
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "7000:7000"
     environment:
-      - BIND_ADDRESS=0.0.0.0:8080 
+      - BIND_ADDRESS=0.0.0.0:7000 
       - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
       - YRAL_METADATA_USER_NOTIFICATION_API_KEY=${YRAL_METADATA_USER_NOTIFICATION_API_KEY}
       - CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY=${CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY}
@@ -24,27 +24,8 @@ services:
       - DRAGONFLY_REDIS_STORE_CLIENT_CERT=${DRAGONFLY_REDIS_STORE_CLIENT_CERT}
       - DRAGONFLY_REDIS_STORE_CLIENT_KEY=${DRAGONFLY_REDIS_STORE_CLIENT_KEY}
     networks:
-      - yral-net
-
-  caddy:
-      image: caddy:2-alpine
-      restart: unless-stopped
-      ports:
-        - "80:80"
-        - "443:443"
-      volumes:
-        - ./Caddyfile:/etc/caddy/Caddyfile:ro
-        - caddy_data:/data
-        - caddy_config:/config
-      networks:
-        - yral-net
-      depends_on:
-        - yral-metadata
+      - proxy
         
 networks:
-  yral-net:
-    driver: bridge
-
-volumes:
-  caddy_data:
-  caddy_config:
+  proxy:
+    external: true

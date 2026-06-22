@@ -141,7 +141,7 @@ jobs:
                 \"docker_registry_image_name\": \"${IMAGE}\",
                 \"docker_registry_image_tag\": \"${IMAGE_TAG}\",
                 \"domains\": \"https://${PREVIEW_DOMAIN}\",
-                \"ports_exposes\": \"3000\",
+                \"ports_exposes\": \"7000\",
                 \"is_static\": false
               }")
 
