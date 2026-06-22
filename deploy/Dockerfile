@@ -11,6 +11,6 @@ COPY ./config.toml .
 
 ENV RUST_LOG="debug"
 ENV BIND_ADDRESS="0.0.0.0:7000"
-EXPOSE 8080
+EXPOSE 7000
 
 CMD ["./yral-metadata-server"]
