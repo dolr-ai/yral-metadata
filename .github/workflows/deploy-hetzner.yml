@@ -206,7 +206,7 @@ jobs:
       
       - name: Verify deployment
         run: |
-          ssh root@${{ matrix.server.host }} "
+          ssh naitik@${{ matrix.server.host }} "
             cd yral-metadata
             echo '=== Container Status ==='
             docker compose ps
