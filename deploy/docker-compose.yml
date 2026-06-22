@@ -28,4 +28,4 @@ services:
         
 networks:
   proxy:
-  external: true
+    external: true

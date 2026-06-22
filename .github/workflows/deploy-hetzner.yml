@@ -85,29 +85,13 @@ jobs:
     strategy:
       matrix:
         server:
-          - name: yral-metadata-1
-            host: 138.201.32.116
-          - name: yral-metadata-2
-            host: 49.12.120.32
+          - name: naitik-1
+            host: 94.130.14.115
+          - name: naitik-3
+            host: 88.99.97.49
       max-parallel: 1
     
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.HETZNER_BARE_METAL_GITHUB_ACTIONS_SSH_PRIVATE_KEY }}
-
-      - name: Add server to known hosts
-        run: |
-          ssh-keyscan -H ${{matrix.server.host}} >> ~/.ssh/known_hosts
-
-      - name: Check server connectivity
-        run: |
-          ssh -o ConnectTimeout=10 root@${{matrix.server.host}} "echo 'Server connection successful'"
-
       - name: Import Secrets from Vault
         uses: hashicorp/vault-action@v3
         with:
@@ -130,23 +114,40 @@ jobs:
             secret/data/yral-metadata/DRAGONFLY_REDIS_STORE_CA_CERT value | DRAGONFLY_REDIS_STORE_CA_CERT ;
             secret/data/yral-metadata/DRAGONFLY_REDIS_STORE_CLIENT_CERT value | DRAGONFLY_REDIS_STORE_CLIENT_CERT ;
             secret/data/yral-metadata/DRAGONFLY_REDIS_STORE_CLIENT_KEY value | DRAGONFLY_REDIS_STORE_CLIENT_KEY ;
+            secret/data/yral-metadata/NAITIK_MACHINE_ACCESS_PRIVATE_KEY value | NAITIK_MACHINE_ACCESS_PRIVATE_KEY ;
+            
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ env.NAITIK_MACHINE_ACCESS_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{matrix.server.host}} >> ~/.ssh/known_hosts
+
+      - name: Check server connectivity
+        run: |
+          ssh -o ConnectTimeout=10 naitik@${{matrix.server.host}} "echo 'Server connection successful'"
             
       - name: Sync deployment files to server
         run: |
           rsync -avz --delete \
             ./deploy/ \
-            root@${{matrix.server.host}}:/home/yral-metadata/
+            naitik@${{matrix.server.host}}:/home/naitik/yral-metadata/
 
       - name: Log in to GitHub Container Registry on server
         run: |
-          ssh root@${{matrix.server.host}} "
+          ssh naitik@${{matrix.server.host}} "
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           "
 
       - name: Deploy to ${{ matrix.server.name }} with docker compose
         env:
           SERVER_HOST: ${{ matrix.server.host }}
-          SERVER_USER: root
+          SERVER_USER: naitik
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JWT_PUBLIC_KEY: ${{ env.JWT_PUBLIC_KEY }}
           YRAL_METADATA_USER_NOTIFICATION_API_KEY: ${{ env.YRAL_METADATA_USER_NOTIFICATION_API_KEY }}
@@ -164,10 +165,10 @@ jobs:
           DRAGONFLY_REDIS_STORE_CLIENT_KEY: ${{ env.DRAGONFLY_REDIS_STORE_CLIENT_KEY }}
         run: |
           # Create deployment directory if not exists
-          ssh $SERVER_USER@$SERVER_HOST "mkdir -p /home/yral-metadata"
+          ssh $SERVER_USER@$SERVER_HOST "mkdir -p yral-metadata"
           
           ssh $SERVER_USER@$SERVER_HOST "
-            cd /home/yral-metadata
+            cd yral-metadata
             
             echo 'Pulling latest images...'
             APP_IMAGE=ghcr.io/${{ github.repository }} \
@@ -180,7 +181,7 @@ jobs:
             echo 'Starting services...'
             APP_IMAGE=ghcr.io/${{ github.repository }} \
             IMAGE_TAG=${{ github.sha }} \
-            BIND_ADDRESS=0.0.0.0:8080 \
+            BIND_ADDRESS=0.0.0.0:7000 \
             JWT_PUBLIC_KEY='$JWT_PUBLIC_KEY' \
             YRAL_METADATA_USER_NOTIFICATION_API_KEY='$YRAL_METADATA_USER_NOTIFICATION_API_KEY' \
             CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY='$CLIENT_NOTIFICATIONS_GOOGLE_SERVICE_ACCOUNT_KEY' \
@@ -206,7 +207,7 @@ jobs:
       - name: Verify deployment
         run: |
           ssh root@${{ matrix.server.host }} "
-            cd /home/yral-metadata
+            cd yral-metadata
             echo '=== Container Status ==='
             docker compose ps
             echo ''
