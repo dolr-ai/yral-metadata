@@ -23,23 +23,6 @@ pub async fn get_subnet_orch_ids(agent: &Agent) -> Result<Vec<Principal>> {
     Ok(subnet_orch_ids)
 }
 
-pub async fn get_user_canisters_list_v2(agent: &Agent) -> Result<Vec<Principal>> {
-    let subnet_orch_ids = get_subnet_orch_ids(agent).await?;
-
-    let mut canister_ids_list = vec![];
-
-    for subnet_orch_id in subnet_orch_ids {
-        let subnet_orch = UserIndex(subnet_orch_id, agent);
-        let user_canister_ids = subnet_orch
-            .get_user_canister_list()
-            .await
-            .map_err(|e| Error::Unknown(format!("Failed to get user canister list: {}", e)))?;
-        canister_ids_list.extend(user_canister_ids);
-    }
-
-    Ok(canister_ids_list)
-}
-
 pub async fn get_user_principal_canister_list_v2(
     agent: &Agent,
 ) -> Result<Vec<(Principal, Principal)>> {

@@ -42,7 +42,6 @@ impl Modify for BearerAuth {
         crate::notifications::register_device,
         crate::notifications::unregister_device,
         crate::notifications::send_notification,
-        crate::session::update_session_as_registered,
         crate::session::update_session_as_registered_v2
     ),
     components(schemas(

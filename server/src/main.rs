@@ -111,10 +111,6 @@ async fn main_impl() -> Result<()> {
             "/v2/update_session_as_registered",
             post(session::update_session_as_registered_v2),
         )
-        .route(
-            "/update_session_as_registered/{canister_id}",
-            post(session::update_session_as_registered),
-        )
         // Signup routes
         .route("/email/{user_principal}", post(signup::set_user_email))
         .route(
