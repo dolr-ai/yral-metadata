@@ -1,106 +1,28 @@
-use ic_agent::{export::Principal, Agent};
-use redis::AsyncCommands;
-use yral_canisters_client::{
-    ic::PLATFORM_ORCHESTRATOR_ID, platform_orchestrator::PlatformOrchestrator,
-    user_index::UserIndex,
-};
+use ic_agent::Agent;
 
 use crate::{
-    dragonfly::{format_to_dragonfly_key, DragonflyPool, YRAL_METADATA_KEY_PREFIX},
-    utils::error::{Error, Result},
+    dragonfly::DragonflyPool,
+    utils::error::Result,
 };
 
 pub const CANISTER_TO_PRINCIPAL_KEY: &str = "canister2principal";
 
-pub async fn get_subnet_orch_ids(agent: &Agent) -> Result<Vec<Principal>> {
-    let pf_orch = PlatformOrchestrator(PLATFORM_ORCHESTRATOR_ID, agent);
-
-    let subnet_orch_ids = pf_orch
-        .get_all_subnet_orchestrators()
-        .await
-        .map_err(|e| Error::Unknown(format!("Failed to get subnet orchestrators: {}", e)))?;
-
-    Ok(subnet_orch_ids)
-}
-
+/// Subnet orchestrators (user_index canisters) have been decommissioned.
+/// This function now returns an empty list. Callers that need user canister
+/// mappings should use user_info_service instead.
 pub async fn get_user_principal_canister_list_v2(
-    agent: &Agent,
-) -> Result<Vec<(Principal, Principal)>> {
-    let subnet_orch_ids = get_subnet_orch_ids(agent).await?;
-
-    let mut user_principal_canister_list = vec![];
-
-    for subnet_orch_id in subnet_orch_ids {
-        let subnet_orch = UserIndex(subnet_orch_id, agent);
-        let user_principal_canister_ids = subnet_orch
-            .get_user_id_and_canister_list()
-            .await
-            .map_err(|e| {
-                Error::Unknown(format!("Failed to get user id and canister list: {}", e))
-            })?;
-        user_principal_canister_list.extend(user_principal_canister_ids);
-    }
-
-    Ok(user_principal_canister_list)
+    _agent: &Agent,
+) -> Result<Vec<(candid::Principal, candid::Principal)>> {
+    Ok(vec![])
 }
 
 /// Optimized with pipelines for batch writes to both Redis and Dragonfly
+///
+/// Subnet orchestrators have been decommissioned, so this is now a no-op that
+/// returns (0, 0). Kept for API compatibility with the admin endpoint.
 pub async fn populate_canister_to_principal_index(
-    agent: &Agent,
-    dragonfly_redis_store: &DragonflyPool,
+    _agent: &Agent,
+    _dragonfly_redis_store: &DragonflyPool,
 ) -> Result<(usize, usize)> {
-    let user_principal_canister_list = get_user_principal_canister_list_v2(agent).await?;
-
-    let total = user_principal_canister_list.len();
-    let mut processed = 0;
-    let mut failed = 0;
-
-    // Process in batches of 1000
-    let batch_size = 1000;
-
-    let formatted_key =
-        format_to_dragonfly_key(YRAL_METADATA_KEY_PREFIX, CANISTER_TO_PRINCIPAL_KEY);
-
-    for batch in user_principal_canister_list.chunks(batch_size) {
-        // Convert to format needed for Redis
-        let items: Vec<(String, String)> = batch
-            .iter()
-            .map(|(user_principal, canister_id)| (canister_id.to_text(), user_principal.to_text()))
-            .collect();
-
-        // Use pipeline for dragonfly bulk insertion with retry
-        let batch_result = dragonfly_redis_store
-            .execute_with_retry(|mut conn| {
-                let items = items.clone();
-                let formatted_key = formatted_key.clone();
-
-                async move {
-                    let mut dragonfly_pipe = redis::pipe();
-                    for (canister_id, user_principal) in &items {
-                        dragonfly_pipe.hset(&formatted_key, canister_id, user_principal);
-                    }
-                    dragonfly_pipe.query_async::<()>(&mut conn).await
-                }
-            })
-            .await;
-
-        match batch_result {
-            Ok(_) => {
-                processed += batch.len();
-            }
-            Err(e) => {
-                log::error!("Failed to insert batch to Redis: {}", e);
-                failed += batch.len();
-            }
-        }
-    }
-
-    log::info!(
-        "Canister to principal index population complete: {} processed, {} failed out of {} total",
-        processed,
-        failed,
-        total
-    );
-
-    Ok((processed, failed))
+    Ok((0, 0))
 }

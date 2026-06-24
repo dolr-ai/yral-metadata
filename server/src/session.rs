@@ -129,9 +129,10 @@ pub async fn update_session_as_registered_v2(
 // TODO: migrate to user_info_service/user_post_service
 // The old v1 endpoint relied on IndividualUserTemplate canister calls
 // (get_profile_details_v2, get_well_known_principal_value, update_session_type)
-// and UserIndex::issue_rewards_for_referral, none of which have equivalents
-// in user_info_service. Referral reward logic needs to be reimplemented
-// against the new canister architecture before this endpoint can be restored.
+// and the decommissioned user_index canister's issue_rewards_for_referral,
+// none of which have equivalents in user_info_service. Referral reward logic
+// needs to be reimplemented against the new canister architecture before this
+// endpoint can be restored.
 //
 // #[utoipa::path(
 //     post,
