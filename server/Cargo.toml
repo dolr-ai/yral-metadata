@@ -59,7 +59,7 @@ hyper-rustls = { version = "0.27.5", features = [
     "ring",
 ] }
 rustls = { version = "0.23.26" }
-yral-canisters-client = {git = "https://github.com/dolr-ai/yral-common.git", branch = "main", features = ["individual-user", "user-index", "user-info-service", "platform-orchestrator"]}
+yral-canisters-client = {git = "https://github.com/dolr-ai/yral-common.git", branch = "main", features = ["individual-user", "user-index", "user-info-service"]}
 yral-types = {git = "https://github.com/dolr-ai/yral-common.git", branch = "main"}
 ic-agent.workspace = true
 utoipa = { version = "5.3.1" }
