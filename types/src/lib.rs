@@ -234,11 +234,42 @@ pub struct FcmOptions {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
+pub struct ApsAlert {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
+pub struct Aps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alert: Option<ApsAlert>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub badge: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sound: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "content-available")]
+    pub content_available: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "mutable-content")]
+    pub mutable_content: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
+pub struct ApnsPayload {
+    pub aps: Aps,
+    #[serde(flatten)]
+    pub custom_data: HashMap<String, Value>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, ToSchema, Default)]
 pub struct ApnsConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub payload: Option<Value>,
+    pub payload: Option<ApnsPayload>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fcm_options: Option<ApnsFcmOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
